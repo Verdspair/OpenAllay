@@ -113,4 +113,47 @@ final class ExtensionSettingsProjectionTest {
         assertTrue(projection.community().getFirst().installable());
         assertTrue(projection.catalog().available());
     }
+
+    @Test
+    void incompatibleCommunityCardDoesNotExposeAnotherLoaderArtifact() {
+        ExtensionSettingsView base =
+                ExtensionSettingsView.from(new JavascriptDataModuleRegistry());
+        ExtensionSettingsView.Extension incompatible = new ExtensionSettingsView.Extension(
+                "community:neoforge",
+                "NeoForge package",
+                "1.0.0",
+                "Community",
+                "NeoForge-only Extension",
+                ExtensionSettingsView.State.INCOMPATIBLE,
+                List.of("neoforge"),
+                "[26.2,26.3)",
+                "[0.2,0.3)",
+                "community",
+                new ExtensionSettingsView.Contributions(
+                        List.of(), List.of(), List.of(), List.of(), List.of()),
+                "incompatible_loader",
+                ExtensionSettingsView.PackageInfo.catalogOnly("1.0.0"));
+        ExtensionSettingsView view = new ExtensionSettingsView(
+                base.roots(),
+                base.bundledModules(),
+                base.adapters(),
+                List.of(base.extensions().getFirst(), incompatible),
+                new ExtensionSettingsView.Catalog(
+                        true,
+                        true,
+                        Optional.of(Instant.parse("2026-07-25T00:00:00Z")),
+                        Optional.empty()));
+
+        ExtensionSettingsProjection.ExtensionCard card =
+                ExtensionSettingsProjection.from(
+                                view, CommandCapabilityConfig.defaults(), true)
+                        .find("community:neoforge")
+                        .orElseThrow();
+
+        assertTrue(card.catalogListed());
+        assertEquals("1.0.0", card.availableVersion());
+        assertEquals("", card.artifact());
+        assertEquals("", card.sha256());
+        assertFalse(card.installable());
+    }
 }

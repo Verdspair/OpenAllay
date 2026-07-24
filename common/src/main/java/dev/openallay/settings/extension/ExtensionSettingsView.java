@@ -185,12 +185,17 @@ public record ExtensionSettingsView(
                 throw new IllegalArgumentException(
                         "Local Extensions cannot expose catalog actions or artifacts");
             }
-            if (catalogListed
-                    && (availableVersion.isBlank()
-                            || artifact.isBlank()
-                            || sha256.isBlank())) {
+            if (catalogListed && availableVersion.isBlank()) {
                 throw new IllegalArgumentException(
-                        "Catalog Extensions require version, artifact, and checksum");
+                        "Catalog Extensions require an available version");
+            }
+            if (catalogListed && artifact.isBlank() != sha256.isBlank()) {
+                throw new IllegalArgumentException(
+                        "Catalog Extension artifact metadata must be complete");
+            }
+            if (catalogListed && installable && artifact.isBlank()) {
+                throw new IllegalArgumentException(
+                        "Installable catalog Extensions require an artifact");
             }
             if (updateAvailable && !installable) {
                 throw new IllegalArgumentException(
@@ -213,6 +218,10 @@ public record ExtensionSettingsView(
 
         public static PackageInfo local(String version, String sha256) {
             return new PackageInfo(false, version, "", sha256, false, false);
+        }
+
+        public static PackageInfo catalogOnly(String version) {
+            return new PackageInfo(true, version, "", "", false, false);
         }
     }
 

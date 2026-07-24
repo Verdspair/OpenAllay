@@ -337,16 +337,16 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
 
     private ExtensionSettingsView.PackageInfo packageInfo(
             ExtensionCatalogEntry entry, boolean updateAvailable, boolean installable) {
-        dev.openallay.extension.catalog.ExtensionCatalogArtifact artifact =
-                entry.artifactFor(registry.environment().loader())
-                        .orElseGet(() -> entry.artifacts().getFirst());
-        return new ExtensionSettingsView.PackageInfo(
-                true,
-                entry.version(),
-                artifact.artifact().toString(),
-                artifact.sha256(),
-                updateAvailable,
-                installable);
+        return entry.artifactFor(registry.environment().loader())
+                .map(artifact -> new ExtensionSettingsView.PackageInfo(
+                        true,
+                        entry.version(),
+                        artifact.artifact().toString(),
+                        artifact.sha256(),
+                        updateAvailable,
+                        installable))
+                .orElseGet(() ->
+                        ExtensionSettingsView.PackageInfo.catalogOnly(entry.version()));
     }
 
     private static ExtensionSettingsView.Contributions emptyContributions() {

@@ -114,6 +114,13 @@ final class ExtensionSettingsBackendTest {
         assertEquals(
                 ExtensionSettingsView.State.INCOMPATIBLE,
                 extension(backend.currentView(), "community:neoforge").state());
+        ExtensionSettingsView.PackageInfo incompatiblePackage =
+                extension(backend.currentView(), "community:neoforge").packageInfo();
+        assertTrue(incompatiblePackage.catalogListed());
+        assertEquals("1.0.0", incompatiblePackage.availableVersion());
+        assertEquals("", incompatiblePackage.artifact());
+        assertEquals("", incompatiblePackage.sha256());
+        assertTrue(!incompatiblePackage.installable());
         ToolResult.Failure<ExtensionSettingsView> failure =
                 assertInstanceOf(ToolResult.Failure.class, rejected);
         assertEquals("catalog_refresh_failed", failure.code());
