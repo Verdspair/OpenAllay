@@ -511,8 +511,7 @@ final class RhinoJavascriptRuntimeTest {
     }
 
     private static String bundledExample(String heading) {
-        String path = "assets/openallay/openallay_skills/analyze-game-data/"
-                + "references/examples.md";
+        String path = "dev/openallay/script/rhino-examples.md";
         try (var input = RhinoJavascriptRuntimeTest.class
                 .getClassLoader()
                 .getResourceAsStream(path)) {

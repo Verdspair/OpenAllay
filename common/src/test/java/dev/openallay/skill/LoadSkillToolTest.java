@@ -156,6 +156,82 @@ final class LoadSkillToolTest {
         assertEquals("skill_reference_not_found", wrongDocument.code());
     }
 
+    @Test
+    void completedDocumentReturnsACompactReceiptInsteadOfRepeatingContent() {
+        SkillRepository repository = repository("Follow evidence.");
+        LoadSkillTool tool = new LoadSkillTool(repository);
+        ToolInvocationContext request = ToolInvocationContext.developmentConsole("request-1");
+
+        LoadSkillTool.Output first = success(tool.invoke(
+                request, new LoadSkillTool.Input("guide")));
+        LoadSkillTool.Output duplicate = success(tool.invoke(
+                request, new LoadSkillTool.Input("guide")));
+
+        assertEquals(LoadSkillTool.LoadState.COMPLETE, first.state());
+        assertEquals("Follow evidence.", first.content());
+        assertEquals(LoadSkillTool.LoadState.ALREADY_LOADED, duplicate.state());
+        assertEquals("", duplicate.content());
+        assertEquals(true, duplicate.complete());
+    }
+
+    @Test
+    void explicitRehydrationAndRequestCloseAllowContentToBeReadAgain() {
+        SkillRepository repository = repository("Follow evidence.");
+        LoadSkillTool tool = new LoadSkillTool(repository);
+        ToolInvocationContext firstRequest =
+                ToolInvocationContext.developmentConsole("request-1");
+
+        success(tool.invoke(firstRequest, new LoadSkillTool.Input("guide")));
+        LoadSkillTool.Output rehydrated = success(tool.invoke(
+                firstRequest, new LoadSkillTool.Input("guide", null, null, true)));
+        assertEquals(LoadSkillTool.LoadState.REHYDRATED, rehydrated.state());
+        assertEquals("Follow evidence.", rehydrated.content());
+
+        tool.closeRequestScope("request-1");
+        LoadSkillTool.Output reopened = success(tool.invoke(
+                firstRequest, new LoadSkillTool.Input("guide")));
+        assertEquals(LoadSkillTool.LoadState.COMPLETE, reopened.state());
+        assertEquals("Follow evidence.", reopened.content());
+    }
+
+    @Test
+    void repeatingTheFirstChunkReturnsTheExpectedContinuationReceipt() {
+        SkillRepository repository = repository("paragraph\n\n".repeat(1_500));
+        LoadSkillTool tool = new LoadSkillTool(repository);
+        ToolInvocationContext request = ToolInvocationContext.developmentConsole("request-1");
+
+        LoadSkillTool.Output first = success(tool.invoke(
+                request, new LoadSkillTool.Input("guide")));
+        LoadSkillTool.Output duplicate = success(tool.invoke(
+                request, new LoadSkillTool.Input("guide")));
+
+        assertEquals(LoadSkillTool.LoadState.CONTENT, first.state());
+        assertEquals(LoadSkillTool.LoadState.ALREADY_LOADED, duplicate.state());
+        assertEquals("", duplicate.content());
+        assertEquals(false, duplicate.complete());
+        assertEquals(first.nextCursor(), duplicate.nextCursor());
+    }
+
+    private static SkillRepository repository(String body) {
+        SkillRepository repository = new SkillRepository(new SkillParser(), Set.of());
+        repository.reload(java.util.List.of(new SkillSource(
+                "pack",
+                "guide/SKILL.md",
+                Map.of("guide/SKILL.md", """
+                        ---
+                        name: guide
+                        description: Guide the player
+                        ---
+                        %s
+                        """.formatted(body)))), Set.of());
+        return repository;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static LoadSkillTool.Output success(ToolResult<LoadSkillTool.Output> result) {
+        return ((ToolResult.Success<LoadSkillTool.Output>) result).value();
+    }
+
     private static String readRemaining(LoadSkillTool tool, LoadSkillTool.Output current) {
         StringBuilder result = new StringBuilder();
         while (!current.complete()) {

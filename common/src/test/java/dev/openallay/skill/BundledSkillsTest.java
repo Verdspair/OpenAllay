@@ -25,12 +25,8 @@ final class BundledSkillsTest {
             assertFalse(repository.metadataPrompt().contains(document.instructions()));
         }
 
-        SkillDocument analysis = repository.find("analyze-game-data").orElseThrow();
-        assertEquals(Set.of(
-                "references/datasets.md",
-                "references/examples.md",
-                "references/pipelines.md"), analysis.references().keySet());
-        assertTrue(repository.metadataPrompt().contains("<name>analyze-game-data</name>"));
+        assertFalse(repository.find("analyze-game-data").isPresent());
+        assertFalse(repository.metadataPrompt().contains("<name>analyze-game-data</name>"));
         assertFalse(repository.metadataPrompt().contains("ordinary modern JavaScript"));
 
         SkillDocument fallback = repository.find("answer-modded-minecraft-question")

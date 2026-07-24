@@ -3,6 +3,7 @@ package dev.openallay.skill;
 import dev.openallay.context.ToolInvocationContext;
 import dev.openallay.agent.tool.ToolOptional;
 import dev.openallay.tool.ModelFacingToolOutput;
+import dev.openallay.tool.RequestScopeParticipant;
 import dev.openallay.tool.Tool;
 import dev.openallay.tool.ToolAccess;
 import dev.openallay.tool.ToolDescriptor;
@@ -12,26 +13,42 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-public final class LoadSkillTool implements Tool<LoadSkillTool.Input, LoadSkillTool.Output> {
+public final class LoadSkillTool
+        implements Tool<LoadSkillTool.Input, LoadSkillTool.Output>, RequestScopeParticipant {
     private static final int CHUNK_CHARACTERS = 8_192;
 
     public record Input(
             String name,
             @ToolOptional String reference,
-            @ToolOptional String cursor) {
+            @ToolOptional String cursor,
+            @ToolOptional Boolean rehydrate) {
         public Input(String name) {
-            this(name, null, null);
+            this(name, null, null, false);
         }
 
         public Input(String name, String reference) {
-            this(name, reference, null);
+            this(name, reference, null, false);
         }
+
+        public Input(String name, String reference, String cursor) {
+            this(name, reference, cursor, false);
+        }
+    }
+
+    public enum LoadState {
+        CONTENT,
+        COMPLETE,
+        ALREADY_LOADED,
+        REHYDRATED
     }
 
     public record Output(
             String name,
             String document,
+            LoadState state,
             String content,
             int offset,
             int nextOffset,
@@ -42,6 +59,7 @@ public final class LoadSkillTool implements Tool<LoadSkillTool.Input, LoadSkillT
             String provenance)
             implements ModelFacingToolOutput {
         public Output {
+            java.util.Objects.requireNonNull(state, "state");
             availableReferences = List.copyOf(availableReferences);
             allowedTools = List.copyOf(allowedTools);
         }
@@ -51,8 +69,19 @@ public final class LoadSkillTool implements Tool<LoadSkillTool.Input, LoadSkillT
             StringBuilder text = new StringBuilder()
                     .append("skill: ").append(name).append('\n')
                     .append("document: ").append(document).append('\n')
-                    .append("range: ").append(offset).append("..").append(nextOffset).append('\n')
+                    .append("state: ")
+                    .append(state.name().toLowerCase(java.util.Locale.ROOT))
+                    .append('\n')
                     .append("complete: ").append(complete).append('\n');
+            if (state == LoadState.ALREADY_LOADED) {
+                if (!complete) {
+                    text.append("next_cursor: ").append(nextCursor).append('\n');
+                }
+                return text.append(
+                                "note: this document range is already present in the current request context")
+                        .toString();
+            }
+            text.append("range: ").append(offset).append("..").append(nextOffset).append('\n');
             if (!availableReferences.isEmpty()) {
                 text.append("references: ")
                         .append(String.join(", ", availableReferences))
@@ -71,14 +100,16 @@ public final class LoadSkillTool implements Tool<LoadSkillTool.Input, LoadSkillT
             "openallay:load_skill",
             "Progressively load one available Skill's instructions, or one exact declared reference after the Skill is loaded. "
                     + "When complete is false, continue with the returned opaque cursor and the same name/reference. "
-                    + "This is mandatory before a matching workflow: collection-wide ranking, highest/lowest, "
-                    + "comparison, grouping, aggregation, joins, and batch recipe analysis require "
-                    + "analyze-game-data before run_javascript.",
+                    + "Use Skills for matching vertical workflows, not for core JavaScript host syntax. "
+                    + "Repeated reads in one request return compact receipts; set rehydrate=true only when "
+                    + "the exact document text must intentionally be emitted again.",
             Input.class,
             Output.class,
             ToolAccess.READ_ONLY);
 
     private final SkillCatalog catalog;
+    private final Map<String, Map<DocumentKey, Map<String, Output>>> requestLoads =
+            new ConcurrentHashMap<>();
 
     public LoadSkillTool(SkillCatalog catalog) {
         this.catalog = java.util.Objects.requireNonNull(catalog, "catalog");
@@ -111,6 +142,21 @@ public final class LoadSkillTool implements Tool<LoadSkillTool.Input, LoadSkillT
                     "Skill " + input.name() + " has no declared reference " + reference);
         }
         String fingerprint = fingerprint(contents);
+        String requestedCursor = normalizedCursor(input.cursor());
+        DocumentKey documentKey =
+                new DocumentKey(document.metadata().name(), documentName, fingerprint);
+        Map<DocumentKey, Map<String, Output>> requestDocuments =
+                requestLoads.computeIfAbsent(
+                        context.correlationId(), ignored -> new ConcurrentHashMap<>());
+        Map<String, Output> deliveredRanges =
+                requestDocuments.computeIfAbsent(
+                        documentKey, ignored -> new ConcurrentHashMap<>());
+        if (!Boolean.TRUE.equals(input.rehydrate())) {
+            Output delivered = deliveredRanges.get(requestedCursor);
+            if (delivered != null) {
+                return new ToolResult.Success<>(alreadyLoaded(delivered));
+            }
+        }
         int offset;
         try {
             offset = decodeCursor(
@@ -127,9 +173,13 @@ public final class LoadSkillTool implements Tool<LoadSkillTool.Input, LoadSkillT
                 ? ""
                 : encodeCursor(
                         document.metadata().name(), documentName, fingerprint, end);
-        return new ToolResult.Success<>(new Output(
+        LoadState state = Boolean.TRUE.equals(input.rehydrate())
+                ? LoadState.REHYDRATED
+                : complete ? LoadState.COMPLETE : LoadState.CONTENT;
+        Output output = new Output(
                 document.metadata().name(),
                 documentName,
+                state,
                 contents.substring(offset, end),
                 offset,
                 end,
@@ -137,7 +187,14 @@ public final class LoadSkillTool implements Tool<LoadSkillTool.Input, LoadSkillT
                 nextCursor,
                 availableReferences,
                 document.metadata().allowedTools().stream().sorted().toList(),
-                document.metadata().provenance()));
+                document.metadata().provenance());
+        deliveredRanges.put(requestedCursor, output);
+        return new ToolResult.Success<>(output);
+    }
+
+    @Override
+    public void closeRequestScope(String correlationId) {
+        requestLoads.remove(correlationId);
     }
 
     private static int chunkEnd(String contents, int offset) {
@@ -207,4 +264,25 @@ public final class LoadSkillTool implements Tool<LoadSkillTool.Input, LoadSkillT
             throw new IllegalStateException("SHA-256 is unavailable", impossible);
         }
     }
+
+    private static Output alreadyLoaded(Output delivered) {
+        return new Output(
+                delivered.name(),
+                delivered.document(),
+                LoadState.ALREADY_LOADED,
+                "",
+                delivered.offset(),
+                delivered.nextOffset(),
+                delivered.complete(),
+                delivered.nextCursor(),
+                delivered.availableReferences(),
+                delivered.allowedTools(),
+                delivered.provenance());
+    }
+
+    private static String normalizedCursor(String cursor) {
+        return cursor == null || cursor.isBlank() ? "" : cursor;
+    }
+
+    private record DocumentKey(String name, String document, String fingerprint) {}
 }

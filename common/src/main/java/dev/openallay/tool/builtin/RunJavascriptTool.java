@@ -85,10 +85,9 @@ public final class RunJavascriptTool
     private static final ToolDescriptor<Input, Output> DESCRIPTOR = new ToolDescriptor<>(
             "openallay:run_javascript",
             "Analyze the current detached Minecraft data with isolated JavaScript. Every source must end with an explicit return. "
-                    + "Before collection-wide ranking, highest/lowest, comparison, grouping, aggregation, joins, or batch recipes, "
-                    + "load the analyze-game-data Skill and its directly matching reference. "
-                    + "Use stable mc.items and mc.recipes arrays with one filter/map/reduce/sort/join program; do not rediscover roots. "
-                    + "Follow the Skill's KubeJS Rhino syntax guidance for nested collection lookups. "
+                    + "Use the core JavaScript contract in the system prompt and prefer one filter/map/reduce/sort/join "
+                    + "program over repeated calls; do not rediscover documented roots. "
+                    + "Load a Skill only when a matching domain-specific or optional workflow requires it. "
                     + "Large results stay in a request workspace "
                     + "and can be reopened by an opaque handle. This runtime cannot access Java, files, network, "
                     + "or live game objects. A default-off experimental setting may add the complete commands "

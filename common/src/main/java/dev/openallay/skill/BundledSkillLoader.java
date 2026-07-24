@@ -10,7 +10,6 @@ import java.util.Map;
 
 public final class BundledSkillLoader {
     public static final List<String> NAMES = List.of(
-            "analyze-game-data",
             "answer-modded-minecraft-question",
             "explain-machine-usage",
             "diagnose-missing-recipe",
@@ -19,10 +18,6 @@ public final class BundledSkillLoader {
             "search-guide-books",
             "run-game-commands");
     private static final Map<String, List<String>> SUPPORT_FILES = Map.of(
-            "analyze-game-data", List.of(
-                    "references/datasets.md",
-                    "references/examples.md",
-                    "references/pipelines.md"),
             "run-game-commands", List.of("references/commands.md"));
 
     public List<SkillSource> load() {
