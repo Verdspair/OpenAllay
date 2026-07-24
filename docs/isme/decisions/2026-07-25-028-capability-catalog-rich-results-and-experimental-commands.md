@@ -8,7 +8,7 @@
     command registry, including commands registered by mods, with no
     OpenAllay-specific command allowlist, argument restriction, or call limit.
 - Date: 2026-07-25
-- Commit: pending
+- Commit: b9f0d84
 - Scope: Rhino host graph, schema discovery, extension settings, result
   presentation, Skills, and experimental command execution
 - Patterns: B, C, E, F, G
