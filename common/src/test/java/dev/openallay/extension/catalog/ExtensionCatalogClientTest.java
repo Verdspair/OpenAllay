@@ -152,6 +152,13 @@ final class ExtensionCatalogClientTest {
                            ],"source":"https://example.test/sample"
                          }]}
                         """));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ExtensionCatalogArtifact(
+                        "other",
+                        "https://example.test/other.jar",
+                        "a".repeat(64),
+                        Set.of("sample")));
     }
 
     private static HttpTransport transport(int status, String body) {

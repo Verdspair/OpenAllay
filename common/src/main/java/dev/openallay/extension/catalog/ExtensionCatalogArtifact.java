@@ -19,6 +19,10 @@ public record ExtensionCatalogArtifact(
             throw new IllegalArgumentException("Extension artifact loader is required");
         }
         loader = loader.strip().toLowerCase(java.util.Locale.ROOT);
+        if (!Set.of("fabric", "neoforge").contains(loader)) {
+            throw new IllegalArgumentException(
+                    "Unsupported Extension artifact loader: " + loader);
+        }
         artifact = secureUri(artifact);
         if (sha256 == null || !SHA256.matcher(sha256).matches()) {
             throw new IllegalArgumentException(
