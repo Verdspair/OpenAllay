@@ -704,7 +704,11 @@ separate Fabric and NeoForge packages, verifies each embedded manifest and
 loader metadata, and records both SHA-256 values. OpenAllay `0.2.0` predates the
 public Extension SPI; `0.2.1` is the first release that publishes it. External
 projects must compile against `0.2.1` or a later compatible 0.2.x artifact and
-must not advertise `0.2.0` as an Extension dependency.
+must not advertise `0.2.0` as an OpenAllay product dependency. Product and
+Extension API versions are independent: OpenAllay `0.2.1` currently implements
+Extension API `0.2.0`, so a compatible manifest declares an API range such as
+`[0.2,0.3)` while Fabric/NeoForge metadata separately requires product
+`0.2.1` or newer.
 
 An experimental game-command capability also lives on that page and is
 disabled by default. Its strict state is stored in
