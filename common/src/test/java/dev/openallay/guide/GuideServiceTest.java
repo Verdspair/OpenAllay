@@ -113,7 +113,7 @@ final class GuideServiceTest {
     }
 
     @Test
-    void enhancedLocalTopologyAndCapabilityLossRemainExplicit() {
+    void enhancedLocalTopologyAndCapabilityLossAffectsOnlyFutureRequests() {
         FakeRemote remote = new FakeRemote(true);
         GuideService localService = service(new FakeLocal(), remote);
         UUID local = success(localService.ask("enhanced").join());
@@ -127,8 +127,13 @@ final class GuideServiceTest {
         remote.available = false;
         serverService.refreshCapabilities().join();
 
-        assertEquals(GuideRequestStatus.FAILED, request(serverService, "main", active).status());
-        assertEquals(GuideModelMode.SERVER, serverService.snapshot().modelMode());
+        assertEquals(
+                GuideRequestStatus.MODEL_WAIT,
+                request(serverService, "main", active).status());
+        assertEquals(GuideModelMode.CLIENT, serverService.snapshot().modelMode());
+        assertEquals(
+                GuideModelSelection.client("default"),
+                serverService.snapshot().modelSelection());
     }
 
     @Test
