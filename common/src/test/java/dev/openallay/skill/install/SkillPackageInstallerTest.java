@@ -147,6 +147,8 @@ final class SkillPackageInstallerTest {
                 ---
                 name: %s
                 description: Demo
+                metadata:
+                  openallay/version: "1.0.0"
                 allowed-tools: ""
                 ---
                 %s

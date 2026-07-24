@@ -1,5 +1,6 @@
 package dev.openallay.settings.skill;
 
+import dev.openallay.OpenAllayConstants;
 import dev.openallay.community.CommunityCatalogClient;
 import dev.openallay.community.CommunityCatalogManifest;
 import dev.openallay.model.CancellationSignal;
@@ -161,7 +162,8 @@ public final class SkillSettingsBackend implements ClientSettingsService.SkillAc
                 .flatMap(catalog -> catalog.packages().stream()
                         .filter(candidate -> candidate.id().equals(id))
                         .filter(candidate -> candidate.compatibility().minecraft().equals("26.2")
-                                && candidate.compatibility().openallayApi().equals("0.2"))
+                                && candidate.compatibility().openallayApi().equals(
+                                        OpenAllayConstants.SKILL_API_VERSION))
                         .max((left, right) -> compareVersions(
                                 left.version(), right.version())))
                 .orElse(null);
@@ -299,7 +301,8 @@ public final class SkillSettingsBackend implements ClientSettingsService.SkillAc
                             skill.metadata().attributes().get("openallay/version")));
             boolean installed = current.find(entry.id()).isPresent();
             boolean compatible = entry.compatibility().minecraft().equals("26.2")
-                    && entry.compatibility().openallayApi().equals("0.2");
+                    && entry.compatibility().openallayApi().equals(
+                            OpenAllayConstants.SKILL_API_VERSION);
             return SkillCommunityView.Package.from(
                     entry, installed, installedVersion, compatible);
         }).toList();

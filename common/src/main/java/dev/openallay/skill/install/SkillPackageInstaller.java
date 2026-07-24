@@ -1,5 +1,6 @@
 package dev.openallay.skill.install;
 
+import dev.openallay.OpenAllayConstants;
 import dev.openallay.community.CommunityCatalogManifest;
 import dev.openallay.model.CancellationSignal;
 import dev.openallay.net.HttpExchangeRequest;
@@ -51,7 +52,7 @@ public final class SkillPackageInstaller {
                 new JdkHttpTransport(new HttpTransportPolicy(
                         java.time.Duration.ofSeconds(15), "openallay-skill-package-http")),
                 "26.2",
-                "0.2",
+                OpenAllayConstants.SKILL_API_VERSION,
                 Set.of("openallay:run_javascript", "openallay:load_skill"),
                 installedMods);
     }

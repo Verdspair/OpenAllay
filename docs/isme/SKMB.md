@@ -246,6 +246,7 @@ graphical evidence review all passed. Phase 4 is closed.
 | T82 | catalog_refreshing | strict schema-2 Extension catalog validates | extension_catalog_v2_ready | Atomically publish one generation after rejecting duplicate identities and duplicate loader artifacts | SKMB-2026-07-25-030 |
 | T83 | extension_catalog_v2_ready | player installs/updates an Extension compatible with the current loader | extension_artifact_selected | Resolve the current loader before HTTP and bind checksum/mod-ID authority to that artifact only | SKMB-2026-07-25-030 |
 | T84 | extension_artifact_selected | selected JAR checksum, embedded identity, compatibility, mod IDs, and loader metadata validate | extension_restart_required | Atomically stage the selected loader JAR under its stable managed name | SKMB-2026-07-25-030 |
+| T85 | skill_published with unknown or older package version | player installs the compatible catalog package | package_staging then skill_published with catalog version | Validate and atomically publish the complete versioned Markdown package; retain the prior package/version on failure | SKMB-2026-07-25-029 |
 
 ## Invariants
 
@@ -353,6 +354,7 @@ graphical evidence review all passed. Phase 4 is closed.
 | I101 | One logical Extension ID/version contains at most one independently verified artifact per loader | SKMB-2026-07-25-030 |
 | I102 | Extension download and staging select the current loader before transport; Fabric and NeoForge never consume each other's artifact URL, checksum, or mod-ID authority | SKMB-2026-07-25-030 |
 | I103 | Local Extension import remains catalog-independent and is governed by its embedded package manifest and actual loader metadata | SKMB-2026-07-25-030 |
+| I104 | Community Skill update state compares catalog version with durable `metadata.openallay/version`; missing metadata is unknown and offers a tracked update rather than proving the package current | SKMB-2026-07-25-029 |
 
 ## Fail Semantics
 

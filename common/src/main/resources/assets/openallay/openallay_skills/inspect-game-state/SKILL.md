@@ -1,6 +1,8 @@
 ---
 name: inspect-game-state
 description: Use when troubleshooting requires correlating two or more Minecraft client, settings, HUD, or F3 areas.
+metadata:
+  openallay/version: "0.2.2"
 allowed-tools: "openallay:run_javascript"
 ---
 Use this Skill for multi-step diagnosis or correlation across Minecraft menus,

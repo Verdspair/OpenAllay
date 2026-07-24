@@ -1,6 +1,8 @@
 ---
 name: run-game-commands
 description: Use when a player explicitly asks to discover or execute a Minecraft command through the enabled experimental command capability.
+metadata:
+  openallay/version: "0.2.1"
 allowed-tools: "openallay:run_javascript"
 ---
 Use this Skill when the player explicitly asks OpenAllay to execute a Minecraft

@@ -790,6 +790,13 @@ validated. `allowed-tools` expresses a dependency only and never grants a
 permission. Scripts, URL references, root escape, unsafe symlinks, arbitrary
 paths, and unsupported files are rejected.
 
+Community packages store their package version as the string metadata key
+`openallay/version`. Settings compares that durable value with the catalog
+version. A legacy package without the key has an unknown installed version and
+is offered one update; a matching installed version is current. Skill API
+compatibility is a separate `0.2` contract and is not inferred from the
+OpenAllay product patch version.
+
 Bundled packages under the mod resources are immutable and use uppercase
 `SKILL.md`. Local packages live under `config/openallay/skills/`; a valid local
 package with the same name overrides its bundled package. The settings UI and

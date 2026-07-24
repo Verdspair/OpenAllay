@@ -1,6 +1,8 @@
 ---
 name: diagnose-missing-recipe
 description: Use when an expected crafting or processing recipe is absent in the active pack.
+metadata:
+  openallay/version: "0.2.1"
 allowed-tools: "openallay:run_javascript"
 ---
 Resolve the natural/localized name against registry IDs, aliases, and display

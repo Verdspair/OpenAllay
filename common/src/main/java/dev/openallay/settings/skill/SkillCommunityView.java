@@ -51,8 +51,9 @@ public record SkillCommunityView(
                     entry.id(),
                     entry.version(),
                     installed,
-                    installedVersion.isPresent()
-                            && !installedVersion.orElseThrow().equals(entry.version()),
+                    installed
+                            && (installedVersion.isEmpty()
+                                    || !installedVersion.orElseThrow().equals(entry.version())),
                     compatible,
                     entry.source().toString(),
                     entry.archive().toString(),

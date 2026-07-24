@@ -20,6 +20,7 @@ final class BundledSkillsTest {
         for (SkillMetadata metadata : repository.metadata()) {
             SkillDocument document = repository.find(metadata.name()).orElseThrow();
             assertFalse(document.instructions().isBlank());
+            assertTrue(metadata.attributes().get("openallay/version").matches("0\\.2\\.\\d+"));
             assertTrue(metadata.name().equals("analyze-game-data")
                     || metadata.description().startsWith("Use when "));
             assertTrue(metadata.allowedTools().stream()
