@@ -1,5 +1,8 @@
 package dev.openallay.client.gui.nativeview;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import dev.openallay.guide.semantic.RichComponent;
 import dev.openallay.guide.ui.GuideRecipeCard;
 import dev.openallay.guide.ui.GuideRecipePresenter;
@@ -23,8 +26,8 @@ public final class NativeDomainViewBindings {
                 .map(GuideUiRow.Tool.class::cast)
                 .filter(tool -> tool.requestId().equals(assistant.requestId()))
                 .filter(tool -> tool.activity().invocationId().equals(component.originInvocationId()))
-                .flatMap(tool -> GuideRecipePresenter.cards(
-                        tool.activity().toolId(), tool.activity().normalized()).stream())
+                .filter(tool -> "run_javascript".equals(toolName(tool.activity().toolId())))
+                .flatMap(tool -> recipeCards(tool.activity().normalized()).stream())
                 .filter(card -> card.references().contains(component.recipe()))
                 .findFirst()
                 .map(card -> new NativeDomainViewBinding.Recipe(
@@ -32,5 +35,37 @@ public final class NativeDomainViewBindings {
                                 + ":component:" + component.nodeId(),
                         component,
                         card));
+    }
+
+    private static java.util.List<GuideRecipeCard> recipeCards(JsonObject normalized) {
+        if (normalized == null
+                || !"success".equals(string(normalized, "status"))
+                || !normalized.has("value")
+                || !normalized.get("value").isJsonObject()) {
+            return java.util.List.of();
+        }
+        JsonObject value = normalized.getAsJsonObject("value");
+        if (!"RECIPE".equals(string(value, "viewKind"))) {
+            return java.util.List.of();
+        }
+        JsonElement preview = value.get("preview");
+        JsonArray recipes = new JsonArray();
+        if (preview != null && preview.isJsonArray()) {
+            preview.getAsJsonArray().forEach(recipes::add);
+        } else if (preview != null && preview.isJsonObject()) {
+            recipes.add(preview);
+        }
+        return GuideRecipePresenter.cards(recipes);
+    }
+
+    private static String string(JsonObject object, String field) {
+        return object.has(field) && object.get(field).isJsonPrimitive()
+                ? object.get(field).getAsString()
+                : "";
+    }
+
+    private static String toolName(String toolId) {
+        int separator = toolId.indexOf(':');
+        return separator < 0 ? toolId : toolId.substring(separator + 1);
     }
 }

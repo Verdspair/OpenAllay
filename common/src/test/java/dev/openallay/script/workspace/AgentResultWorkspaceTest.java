@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonParser;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -28,25 +29,47 @@ final class AgentResultWorkspaceTest {
     }
 
     @Test
-    void presentsLargeArraysWithoutCopyingEveryRowToModelText() {
+    void presentsEverySmallArrayRowWithoutAnArbitraryRowCap() {
         var value = JsonParser.parseString("""
                 [
                   {"id":"a","damage":1},{"id":"b","damage":2},{"id":"c","damage":3},
                   {"id":"d","damage":4},{"id":"e","damage":5},{"id":"f","damage":6},
-                  {"id":"g","damage":7},{"id":"h","damage":8}
+                  {"id":"g","damage":7},{"id":"h","damage":8},{"id":"i","damage":9},
+                  {"id":"j","damage":10},{"id":"k","damage":11},{"id":"l","damage":12},
+                  {"id":"m","damage":13},{"id":"n","damage":14},{"id":"o","damage":15}
                 ]
                 """);
 
         var result = new JavascriptResultPresenter().present("r_test", value);
 
-        assertEquals(8, result.cardinality());
-        assertEquals(2, result.omittedRows());
-        assertEquals(6, result.preview().getAsJsonArray().size());
-        assertTrue(result.modelText().contains("workspace.open(\"r_test\")"));
-        assertTrue(result.modelText().contains("scope: preview"));
+        assertEquals(15, result.cardinality());
+        assertEquals(0, result.omittedRows());
+        assertEquals(15, result.preview().getAsJsonArray().size());
+        assertTrue(result.complete());
+        assertTrue(result.modelText().contains("scope: complete"));
         assertTrue(result.modelText().contains("id: a"));
+        assertTrue(result.modelText().contains("id: o"));
         assertTrue(!result.modelText().contains("{\"id\""));
-        assertTrue(result.modelText().length() < value.toString().length() + 200);
+    }
+
+    @Test
+    void limitsTheWholeModelProjectionByTokenEstimateAndKeepsTheCanonicalHandle() {
+        com.google.gson.JsonArray value = new com.google.gson.JsonArray();
+        for (int index = 0; index < 500; index++) {
+            com.google.gson.JsonObject row = new com.google.gson.JsonObject();
+            row.addProperty("id", "example:item_" + index);
+            row.addProperty("description", "配方分析结果".repeat(8));
+            value.add(row);
+        }
+
+        var result = new JavascriptResultPresenter().present("r_large_rows", value);
+
+        assertTrue(!result.complete());
+        assertTrue(result.preview().getAsJsonArray().size() > 12);
+        assertTrue(result.omittedRows() > 0);
+        assertTrue(result.modelText().contains("workspace.open(\"r_large_rows\")"));
+        assertTrue(result.modelText().getBytes(StandardCharsets.UTF_8).length
+                <= JavascriptResultPresenter.MODEL_TEXT_TOKEN_BUDGET);
     }
 
     @Test
@@ -62,8 +85,9 @@ final class AgentResultWorkspaceTest {
         assertTrue(result.preview().getAsJsonObject().size() <= 16);
         assertTrue(result.omittedFields() >= 84);
         result.preview().getAsJsonObject().entrySet().forEach(entry ->
-                assertTrue(entry.getValue().getAsString().length() <= 241));
-        assertTrue(result.modelText().length() < 1_900);
+                assertTrue(!entry.getValue().getAsString().isBlank()));
+        assertTrue(result.modelText().getBytes(StandardCharsets.UTF_8).length
+                <= JavascriptResultPresenter.MODEL_TEXT_TOKEN_BUDGET);
     }
 
     @Test

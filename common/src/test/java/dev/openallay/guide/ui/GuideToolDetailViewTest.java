@@ -20,9 +20,9 @@ final class GuideToolDetailViewTest {
         List<GuideItemView> items = new ArrayList<>(List.of(
                 new GuideItemView("minecraft:iron_ingot", "Iron Ingot", 4)));
         List<GuideDetailCard> cards = new ArrayList<>(List.of(
-                new GuideDetailCard.ItemGrid("screen.openallay.detail.inventory", items)));
+                new GuideDetailCard.ItemGrid("screen.openallay.detail.analysis.items", items)));
         GuideToolMessage inventoryItem = GuideToolMessage.of(
-                GuideToolMessage.Key.INVENTORY_ITEM,
+                GuideToolMessage.Key.RESULT_COMPLETED,
                 "minecraft:iron_ingot",
                 "4");
         List<GuideToolMessage> narration = new ArrayList<>(List.of(inventoryItem));
@@ -69,7 +69,7 @@ final class GuideToolDetailViewTest {
         assertThrows(IllegalArgumentException.class, () ->
                 new GuideItemView("minecraft:iron_ingot", "Iron Ingot", -1));
         assertThrows(IllegalArgumentException.class, () ->
-                new GuideDetailCard.ItemGrid("screen.openallay.detail.inventory", List.of()));
+                new GuideDetailCard.ItemGrid("screen.openallay.detail.analysis.items", List.of()));
         assertThrows(IllegalArgumentException.class, () ->
                 new GuideDetailCard.Requirement("iron", 4, 5, 0, List.of(), List.of()));
     }

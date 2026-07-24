@@ -9,12 +9,15 @@ fi
 
 fixture_port="${OPENALLAY_E2E_FIXTURE_PORT:-18765}"
 model_mode="${OPENALLAY_E2E_MODEL_MODE:-client}"
+use_existing_profile="${OPENALLAY_E2E_USE_EXISTING_PROFILE:-false}"
+profile_source="${OPENALLAY_E2E_PROFILE_SOURCE:-}"
 if [[ "$model_mode" != "client" && "$model_mode" != "server" ]]; then
   echo "OPENALLAY_E2E_MODEL_MODE must be client or server" >&2
   exit 2
 fi
 run_dir="$loader/runs/client"
 report="${OPENALLAY_E2E_REPORT:-$PWD/build/e2e/$loader-real-client.json}"
+trace="${OPENALLAY_E2E_TRACE:-$report.trace.json}"
 mkdir -p "$run_dir/config/openallay" "$(dirname "$report")"
 model_config="$run_dir/config/openallay/models.json"
 server_model_config="$run_dir/config/openallay/server-model.json"
@@ -62,7 +65,28 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-python3 - "$model_config" "$fixture_port" <<'PY'
+if [[ "$use_existing_profile" == "true" ]]; then
+  if [[ "$model_mode" != "client" ]]; then
+    echo "existing-profile E2E currently supports client model mode only" >&2
+    exit 2
+  fi
+  if [[ -n "$profile_source" ]]; then
+    if [[ ! -f "$profile_source/models.json" ]]; then
+      echo "OPENALLAY_E2E_PROFILE_SOURCE must contain models.json" >&2
+      exit 2
+    fi
+    cp "$profile_source/models.json" "$model_config"
+    for credential_file in credentials.sqlite3 credentials.sqlite3-wal credentials.sqlite3-shm; do
+      if [[ -f "$profile_source/$credential_file" ]]; then
+        cp "$profile_source/$credential_file" "$run_dir/config/openallay/$credential_file"
+      fi
+    done
+  elif [[ ! -f "$model_config" ]]; then
+    echo "existing-profile E2E requires a configured models.json" >&2
+    exit 2
+  fi
+else
+  python3 - "$model_config" "$fixture_port" <<'PY'
 import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
 path.write_text(json.dumps({
@@ -83,8 +107,8 @@ path.write_text(json.dumps({
     }],
 }), encoding="utf-8")
 PY
-if [[ "$model_mode" == "server" ]]; then
-  python3 - "$server_model_config" "$fixture_port" <<'PY'
+  if [[ "$model_mode" == "server" ]]; then
+    python3 - "$server_model_config" "$fixture_port" <<'PY'
 import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
 path.write_text(json.dumps({
@@ -99,11 +123,12 @@ path.write_text(json.dumps({
     "requestTimeoutSeconds": 120,
 }), encoding="utf-8")
 PY
-fi
-export OPENALLAY_E2E_FIXTURE_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
+  fi
+  export OPENALLAY_E2E_FIXTURE_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
 
-python3 scripts/e2e-model-fixture.py --port "$fixture_port" &
-fixture_pid=$!
+  python3 scripts/e2e-model-fixture.py --port "$fixture_port" &
+  fixture_pid=$!
+fi
 
 echo "The harness is opt-in and will open a graphical Minecraft client."
 echo "Connect it to a test world/server; the probe starts after a player exists."
@@ -123,7 +148,9 @@ gradle_command+=(
   -Dopenallay.e2e.enabled=true \
   -Dopenallay.e2e.question="${OPENALLAY_E2E_QUESTION:-请查询铁块的配方，精确读取后检查库存并计算是否可制作，最后列出当前知识来源。}" \
   -Dopenallay.e2e.report="$report" \
+  -Dopenallay.e2e.trace="$trace" \
   -Dopenallay.e2e.scenario="${OPENALLAY_E2E_SCENARIO:-phase-4-semantic-history}" \
+  -Dopenallay.e2e.session="${OPENALLAY_E2E_SESSION:-e2e}" \
   -Dopenallay.e2e.modelMode="$model_mode" \
   -Dopenallay.e2e.historySeedRequests="${OPENALLAY_E2E_HISTORY_SEED_REQUESTS:-0}" \
   -Dopenallay.e2e.screenshotRoot="${OPENALLAY_E2E_SCREENSHOT_ROOT:-}" \
@@ -133,7 +160,10 @@ gradle_command+=(
 "${gradle_command[@]}"
 
 test -s "$report"
-python3 - "$report" <<'PY'
+if [[ "$use_existing_profile" == "true" ]]; then
+  test -s "$trace"
+fi
+python3 - "$report" "$trace" "$use_existing_profile" <<'PY'
 import json, pathlib, sys
 report = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 if report.get("outcome") != "COMPLETED":
@@ -144,6 +174,50 @@ if report.get("outcome") != "COMPLETED":
     }, ensure_ascii=False))
 metrics = report.get("semanticMetrics", {})
 scenario = report.get("scenario")
+if sys.argv[3] == "true":
+    trace = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+    if trace.get("requestId") != report.get("requestId"):
+        raise SystemExit("E2E trace request does not match the report")
+    if trace.get("finalState") != report.get("outcome"):
+        raise SystemExit("E2E trace terminal state does not match the report")
+    event_types = [event.get("type") for event in trace.get("events", [])]
+    required = {"request", "state", "model_request", "model_turn", "tool_call", "tool_result"}
+    if not required.issubset(event_types):
+        raise SystemExit("E2E trace is incomplete: " + repr(sorted(required - set(event_types))))
+    if "[REDACTED]" not in pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"):
+        # Stored credentials normally never enter a trace, so redaction markers are optional.
+        pass
+if scenario.startswith("live-rhino-"):
+    tools = report.get("toolIds", [])
+    if "openallay:run_javascript" not in tools:
+        raise SystemExit("Live Rhino E2E did not execute run_javascript")
+    if "openallay:calculate_craftability" in tools:
+        raise SystemExit("Live Rhino E2E exposed the retired craftability Tool")
+    maximum = int(__import__("os").environ.get(
+        "OPENALLAY_E2E_MAX_JAVASCRIPT_CALLS", "0"))
+    javascript_calls = sum(
+        1 for tool_id in tools if tool_id == "openallay:run_javascript")
+    if maximum and javascript_calls > maximum:
+        raise SystemExit(
+            f"Live Rhino E2E used {javascript_calls} JavaScript calls; maximum is {maximum}")
+    required_module = __import__("os").environ.get(
+        "OPENALLAY_E2E_REQUIRED_MODULE", "")
+    if required_module:
+        modules = {
+            module
+            for event in trace.get("events", [])
+            if event.get("type") == "tool_result"
+            for module in (
+                event.get("payload", {})
+                .get("result", {})
+                .get("value", {})
+                .get("modules", [])
+            )
+        }
+        if required_module not in modules:
+            raise SystemExit(
+                "Live Rhino E2E did not load required module: " + required_module)
+    raise SystemExit(0)
 if scenario == "phase-4-game-state":
     tool_ids = report.get("toolIds", [])
     expected_sections = [
@@ -224,3 +298,6 @@ if __import__("os").environ.get("OPENALLAY_E2E_REQUIRE_PAGED_HISTORY") == "true"
         raise SystemExit("E2E history window does not expose earlier requests")
 PY
 echo "E2E report: $report"
+if [[ "$use_existing_profile" == "true" ]]; then
+  echo "E2E trace: $trace"
+fi

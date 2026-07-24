@@ -126,7 +126,7 @@ final class GuideStateReducerTest {
                 "openallay:get_recipe",
                 GuideToolStatus.SUCCEEDED,
                 groundedResult(),
-                List.of(GuideToolMessage.of(GuideToolMessage.Key.RECIPE_UNAVAILABLE)),
+                List.of(GuideToolMessage.of(GuideToolMessage.Key.RESULT_COMPLETED)),
                 List.of());
         GuideRequestSnapshot request = new GuideRequestSnapshot(
                 requestId,
@@ -167,8 +167,10 @@ final class GuideStateReducerTest {
         request = reducer.apply(request, text("I will inspect the recipe."), at(2));
         request = reducer.apply(request, new AgentEvent.ModelProgress(
                 new ModelEvent.ReasoningDelta("secret")), at(3));
+        JsonObject invocationArguments = new JsonObject();
+        invocationArguments.addProperty("source", "return mc.recipes;");
         request = reducer.apply(request, new AgentEvent.ToolStarted(
-                "call-1", "openallay:get_recipe"), at(4));
+                "call-1", "openallay:get_recipe", invocationArguments, List.of()), at(4));
         request = reducer.apply(request, new AgentEvent.ToolCompleted(
                 "call-1", "openallay:get_recipe", false, groundedResult()), at(5));
         request = reducer.apply(request, text("Now I will inspect inventory."), at(6));
@@ -200,7 +202,10 @@ final class GuideStateReducerTest {
         assertEquals("You are missing five ingots.", request.assistantText());
         assertEquals(GuideRequestStatus.COMPLETED, request.status());
         assertEquals(GuideToolStatus.SUCCEEDED, request.tools().getFirst().status());
-        assertEquals(List.of(GuideToolMessage.of(GuideToolMessage.Key.RECIPE_UNAVAILABLE)),
+        assertEquals(
+                "return mc.recipes;",
+                request.tools().getFirst().invocationArguments().get("source").getAsString());
+        assertEquals(List.of(GuideToolMessage.of(GuideToolMessage.Key.RESULT_COMPLETED)),
                 request.tools().getFirst().presentationMessages());
         assertEquals(List.of("call-1", "call-2"), request.tools().stream()
                 .map(GuideToolActivity::invocationId)

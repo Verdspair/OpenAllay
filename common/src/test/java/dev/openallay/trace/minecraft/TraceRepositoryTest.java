@@ -6,8 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import dev.openallay.tool.ToolResult;
 import dev.openallay.trace.json.TraceParser;
 import java.io.StringReader;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -36,27 +34,6 @@ final class TraceRepositoryTest {
         ToolResult.Failure<TraceRepository.LoadedTraces> invalid = failure(repository.load(
                 List.of(source("openallay:agent_traces/broken.json", "{}"))));
         assertEquals("invalid_trace", invalid.code());
-    }
-
-    @Test
-    void bundledTracesAreStrictlyValidAndDiscoverable() {
-        List<String> ids = List.of(
-                "find-recipes-compatibility",
-                "iron-block-craftability",
-                "iron-ingot-recipe",
-                "platform-info",
-                "player-context");
-        List<TraceRepository.TraceSource> sources = ids.stream()
-                .map(id -> new TraceRepository.TraceSource(
-                        "openallay:agent_traces/" + id + ".json",
-                        () -> new InputStreamReader(
-                                java.util.Objects.requireNonNull(getClass()
-                                        .getResourceAsStream(
-                                                "/data/openallay/agent_traces/" + id + ".json")),
-                                StandardCharsets.UTF_8)))
-                .toList();
-
-        assertEquals(ids, success(repository.load(sources)).value().ids());
     }
 
     private static TraceRepository.TraceSource source(String name, String json) {

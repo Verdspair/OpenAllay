@@ -104,6 +104,8 @@ public final class GuideStateReducer {
                         running.activity().index(),
                         completed.toolId(),
                         completed.failure() ? GuideToolStatus.FAILED : GuideToolStatus.SUCCEEDED,
+                        running.activity().invocationArguments(),
+                        running.activity().invocation().withNormalized(completed.normalized()),
                         completed.normalized(),
                         mergePresentationMessages(
                                 running.activity().presentationMessages(),
@@ -297,6 +299,7 @@ public final class GuideStateReducer {
                 toolIndex,
                 started.toolId(),
                 GuideToolStatus.RUNNING,
+                started.arguments(),
                 null,
                 started.presentationMessages(),
                 List.of())));

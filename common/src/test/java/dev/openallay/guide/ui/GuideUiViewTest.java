@@ -207,7 +207,7 @@ final class GuideUiViewTest {
                         {"status":"success","value":{"counts":{"minecraft:apple":3}}}
                         """).getAsJsonObject(),
                 List.of(GuideToolMessage.of(
-                        GuideToolMessage.Key.INVENTORY_ITEM,
+                        GuideToolMessage.Key.RESULT_COMPLETED,
                         "minecraft:apple",
                         "3")),
                 List.of());
@@ -255,10 +255,10 @@ final class GuideUiViewTest {
                         GuidePersistenceSnapshot.State.SAVING, 2, 1, null)));
         assertEquals(
                 List.of(
-                        GuideUiRow.Persistence.class,
                         GuideUiRow.User.class,
                         GuideUiRow.Assistant.class),
                 saving.rows().stream().map(Object::getClass).toList());
+        assertTrue(saving.canSend());
 
         GuideUiView unavailable = GuideUiView.from(snapshot(
                 completed,
@@ -273,6 +273,7 @@ final class GuideUiViewTest {
 
         GuideUiView available = GuideUiView.from(snapshot(
                 completed, GuidePersistenceSnapshot.available(2)));
+        assertEquals(available.rows(), saving.rows());
         assertFalse(available.rows().stream().anyMatch(GuideUiRow.Persistence.class::isInstance));
     }
 

@@ -217,53 +217,19 @@ remain untouched and produce a redacted settings notice. The screen receives
 only credential presence and transient password-input state; it cannot read or
 render a stored value.
 
-Every knowledge or recipe source belongs to exactly one logical Tool. Strict,
-independently versioned files live at
-`config/openallay/tools/<tool-family-id>.json`. The common envelope is:
+The 0.2 runtime has no Tool-family settings, per-Tool enablement files, or
+user-editable Tool source envelopes. JavaScript is the primary model-facing
+game-data capability. The Extensions page describes `openallay:run_javascript`,
+its request-scoped `mc` roots, bundled helper modules, registered data adapters,
+and the default-off game-command bridge. Skills remain a separate document
+surface.
 
-```json
-{
-  "schemaVersion": 1,
-  "toolId": "openallay:guides",
-  "enabled": true,
-  "sources": [
-    {
-      "sourceId": "user:minecraft-notes",
-      "sourceKind": "local_markdown",
-      "displayName": "Minecraft Notes",
-      "enabled": true,
-      "config": {
-        "directory": "minecraft-notes",
-        "locale": "zh_cn"
-      }
-    }
-  ]
-}
-```
-
-The common envelope accepts no arbitrary source-kind fields. A trusted
-`ToolSourceKind` registry supplies the strict config codec, localized controls,
-lifecycle capabilities, capture/refresh implementation, evidence contract, and
-optional credential-reference support for each owning Tool and `sourceKind`.
-Built-in/discovered sources can be inspected, enabled/disabled, refreshed where
-meaningful, and restored, but cannot be deleted or have their identity/kind
-edited. Registered user-source kinds may support add, edit, delete, test, and
-refresh. The initial user-creatable Guides kind is `local_markdown`, confined
-below OpenAllay's managed configuration root. It does not grant arbitrary path or
-network authority.
-
-Recipes owns recipe search, exact lookup, item usage, all-known/unlocked
-visibility, recipe sources, and preferred viewer selection. Inventory and
-Craftability remain separate Tools. Guides owns knowledge search, exact
-document loading, and Patchouli/FTB/local-document sources. JEI and REI adapters
-are available where compatible; EMI is not fabricated when no verified 26.2
-adapter exists. Web Fetch is a future Tool, not a source.
-
-The Recipes family envelope at `tools/recipes.json` owns Tool enablement and
-source enablement. Its typed behavior options (all-known/unlocked visibility and
-preferred viewer) remain independently strict at
-`tools/recipes-options.json`; both files belong only to the Recipes detail page
-and neither creates a top-level settings domain.
+Recipe capture and knowledge integrations continue to publish their current
+runtime data into the JavaScript host graph. Their availability is determined
+by the installed game/mod environment rather than a second Tool configuration
+layer. Existing recipe behavior options remain in
+`config/openallay/tools/recipes-options.json`; they are runtime capture
+configuration, not a model-facing Tool catalog.
 
 Player-facing tool details are controlled separately by
 `config/openallay/display.json` on both loaders. A missing file uses the safe
@@ -534,7 +500,6 @@ details. The general model-facing analysis operation is:
 
 ```text
 openallay:run_javascript
-openallay:calculate_craftability
 ```
 
 OpenAllay embeds the KubeJS-Mods Rhino fork directly; KubeJS itself is not a
@@ -552,27 +517,37 @@ arrays use the standard Array prototype but are not writable. Non-mutating
 transforms create ordinary JavaScript arrays; call `filter`, `map`, `flatMap`,
 or `slice` before `sort`, `reverse`, `splice`, or other mutation.
 
+The runtime embeds the KubeJS Rhino fork. Tested top-level collection pipelines
+behave normally. For nested lookups inside a repeated callback, use an indexed
+`for (var index = 0; ...)` loop instead of an inner `find`/`map` callback that
+declares block-scoped locals; Rhino 2101 otherwise reports a redeclaration
+failure. Bundled Skills and examples use the tested form.
+
 `run_javascript` accepts `roots`; normal analysis should select only the
 required host views, for example `["items"]` or `["items", "recipes"]`.
-Registry and recipe rows are exposed once in those JavaScript-native views,
-while `mc.registries` and `mc.recipeCatalog` carry catalog metadata.
+Registry and recipe rows are exposed once in those JavaScript-native views.
+`mc.registryEntries` is the unified cross-kind registry array, while
+`mc.registries` and `mc.recipeCatalog` carry catalog metadata.
 
 The graph exposes captured capabilities such as:
 
 ```text
 mc.capabilities
 mc.items / blocks / fluids / effects / enchantments / entities
-mc.registries
+mc.registryEntries / registries
 mc.recipes / recipeCatalog
 mc.player
 mc.game
-mc.knowledge
-mc.extensions
+mc.knowledge / knowledgeCatalog
+mc.extensions / extensionCatalog / extensionDiagnostics
 ```
 
-Registry `properties` and extension objects are open-ended. Runtime code should
-inspect `Object.keys` or `helpers.schema` rather than relying on a core whitelist
-for fields such as damage, nutrition, effect duration, or mod-added metadata.
+Every root is declared by the same KubeJS-Rhino `TypeInfo`-derived catalog used
+by the closed host adapter. `schema.list()` reports roots and availability
+without resolving values; `schema.describe("game.mods.installed")` walks one
+stable declared path. Registry `properties`, recipe `extensions`, and extension
+objects remain open-ended. Use one focused `helpers.schema` sample only for
+those genuinely dynamic values, rather than rediscovering stable core records.
 All capture still occurs on the Minecraft-owned thread and detaches immediately
 before Rhino runs on a virtual worker.
 
@@ -592,11 +567,11 @@ estimated content; one execution may reopen at most four handles totaling
 debug UI renders bounded metadata rather than raw normalized JSON. Provider
 input is re-estimated before every continuation turn.
 
-The Rhino scope exposes no Java packages, arbitrary host wrappers, reflection,
-class loading, network, process, real filesystem, command execution, live game
-object, or mutation. Instruction observation enforces cancellation and a
-monotonic deadline. Functions, promises, cycles, unsupported wrappers, excessive
-nesting, and non-finite results fail with stable `javascript_*` codes.
+The normal Rhino scope exposes no Java packages, arbitrary host wrappers,
+reflection, class loading, network, process, real filesystem, live game object,
+or mutation. Instruction observation enforces cancellation and a monotonic
+deadline. Functions, promises, cycles, unsupported wrappers, excessive nesting,
+and non-finite results fail with stable `javascript_*` codes.
 
 Trusted optional integrations first capture and detach public mod API state on
 the owning Minecraft thread. Java-side `JavascriptDataModule` implementations
@@ -608,14 +583,54 @@ remain isolated to the property that attempts to read them. Ordinary model
 JavaScript receives component values, never Java methods, `Class`, generic
 wrappers, or reflection authority.
 
-`calculate_craftability` uses deterministic global capacity allocation, so
-overlapping item/tag alternatives are not assigned greedily. It reports the
-observed allocation, missing requirements, maximum crafts, and whether the
-evidence is conclusive. It does not recursively craft intermediate items.
-Incomplete recipe or inventory evidence may show an observed positive result,
-but `conclusive` remains false. Legacy domain retrieval implementations remain
-only for compatibility tests and internal projections; bootstrap does not
-advertise them to the model.
+Reviewed JavaScript modules are the reusable domain layer—the equivalent of
+prebuilt, composable operations rather than additional one-purpose Tools.
+`require("openallay:crafting")` exposes recipe-cost and deterministic global
+capacity-allocation operations inside the same `run_javascript` batch. The
+module reports observed allocation, missing requirements, maximum crafts, and
+whether evidence is conclusive; it does not recursively craft intermediate
+items. Its behavior is compared with the Java allocation oracle in contract
+tests. Exact module IDs resolve only from bundled resources, are cached within
+one execution, and do not grant filesystem, network, Java, or Tool authority.
+The 0.2.0 line removes the legacy domain retrieval and craftability Tool
+implementations. Runtime model Tools are `openallay:run_javascript` plus the
+Skill-loading surface; recipes, guides, inventory, game context, and extension
+data are mounted below the JavaScript host graph instead of represented by
+parallel Tool families.
+
+The player-facing Settings section named **Extensions** lists the declared
+Rhino roots and schemas, bundled JavaScript modules, and registered detached
+data adapters from descriptor-only catalogs. Opening Settings does not capture
+game state or invoke an adapter.
+
+An experimental game-command capability also lives on that page and is
+disabled by default. Its strict state is stored in
+`config/openallay/experimental-commands.json`. Enabling it affects future
+requests only and adds:
+
+```javascript
+commands.list()
+commands.describe(path)
+commands.run(command)
+```
+
+Use `roots: ["commands"]` for command-only JavaScript. `commands` is a
+top-level binding rather than an `mc` dataset root, and selecting it while the
+experimental capability is disabled fails explicitly.
+
+The detached catalog recursively mirrors the complete Brigadier dispatcher
+visible to the requesting player, including vanilla, server, loader, and
+mod-registered commands. Execution removes at most one leading slash and then
+uses the normal player command route on the Minecraft client thread. OpenAllay
+adds no command allowlist, argument restriction, or call-count cap; Minecraft's
+parser, connection, player identity, and permissions remain authoritative.
+Calls are ordered and serialized per player. `commands.run` waits on the Rhino
+worker for the associated non-overlay Minecraft feedback window and returns
+`state`, ordered `messages`, and `durationMillis`; it does not block the render
+thread. `state` is `feedback` or `no_feedback`, not a fabricated universal
+success bit. A command already submitted is not rolled back if a later
+statement fails or the request is cancelled. When the setting is off, the
+`commands` object and matching Skill are absent from the request.
 
 ## Knowledge and Skills
 
@@ -628,9 +643,9 @@ Each successful knowledge reload builds one immutable, in-memory index and
 publishes it atomically with the matching snapshot evidence. Search first
 protects exact document and linked item/recipe identities, then weights stable
 path aliases, source metadata, titles and Markdown headings before applying a
-Unicode-aware BM25-style score to section text. A result retains the exact
-`sourceId`/`documentId` pair used by `get_knowledge_document` and adds a stable
-heading-derived `sectionId` plus an evidenced excerpt. Documents without
+Unicode-aware BM25-style score to section text. Each indexed result retains an
+exact `sourceId`/`documentId` pair for later document projection and adds a
+stable heading-derived `sectionId` plus an evidenced excerpt. Documents without
 headings use the stable `document` section.
 
 This index deliberately remains pure Java. Knowledge generations already live
@@ -744,18 +759,13 @@ The following commands require game-master permission:
 
 ```text
 /openallay dev tools
-/openallay dev invoke openallay:inspect_game_state {"section":"OVERVIEW","query":"summary"}
-/openallay dev replay platform-info
-/openallay dev replay iron-ingot-recipe
-/openallay dev replay iron-block-craftability
-/openallay dev replay find-recipes-compatibility
-/openallay dev replay player-context
 ```
 
-The initial development tool surface is intentionally read-only. It does not
-provide shell execution, arbitrary code execution, server-command execution,
-file-system access, unrestricted reflection, arbitrary command parsing, world
-or settings mutation, spatial scans, or external-container inspection.
+The model-facing catalog contains `openallay:run_javascript` plus the Skill
+loading and management Tools available to the current runtime. Recipe, guide,
+inventory, game-state, resource-search, and craftability domain Tools were
+removed for 0.2.0; their detached data is available through the JavaScript host
+graph and bundled Skills instead.
 
 ## Deterministic Agent trace replay
 
@@ -792,29 +802,9 @@ Phase 2 keeps the model transport in the Minecraft JVM and uses only JDK HTTP;
 there is no Node/Python sidecar, MCP bridge, LangChain-style framework, shell
 tool, or sandbox.
 
-### Headless replay smoke test
-
-After accepting the Minecraft EULA in each ignored server run directory, start
-dedicated servers only:
-
-```bash
-./gradlew-curl :fabric:runServer --args nogui
-./gradlew-curl :neoforge:runServer
-```
-
-At each server console, run:
-
-```text
-openallay dev replay platform-info
-openallay dev replay iron-ingot-recipe
-openallay dev replay player-context
-stop
-```
-
-`platform-info`, `iron-ingot-recipe`, and `find-recipes-compatibility` can run
-from the dedicated-server console. `iron-block-craftability` and
-`player-context` fail explicitly with `player_required` there because no player
-owns the invocation.
+The trace parser and replay engine remain available for extension-owned
+deterministic fixtures. OpenAllay no longer bundles replay documents that call
+the removed domain Tools.
 
 ## Phase 3A verification baseline
 

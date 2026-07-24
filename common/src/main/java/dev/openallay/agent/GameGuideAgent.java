@@ -220,6 +220,7 @@ public final class GameGuideAgent {
                 tools.definitions(),
                 request.stream(),
                 request.sessionKey().schedulingKey());
+        trace.modelRequest(modelRequest);
         return model.complete(
                         modelRequest,
                         event -> {
@@ -316,6 +317,7 @@ public final class GameGuideAgent {
             events.accept(new AgentEvent.ToolStarted(
                     call.id(),
                     exposedId,
+                    call.input(),
                     GuideToolInvocationPresentation.messages(exposedId, call.input())));
             CompletableFuture<AgentToolResult> execution = tools
                     .execute(call.name(), call.input(), request.context(), lease.cancellation())

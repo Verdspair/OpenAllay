@@ -15,6 +15,7 @@ import dev.openallay.recipe.config.RecipeClientRuntime;
 import dev.openallay.recipe.RecipeProviderReadiness;
 import dev.openallay.recipe.RecipeProviderReadinessGate;
 import dev.openallay.tool.ToolResult;
+import dev.openallay.script.command.MinecraftCommandCapture;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -61,8 +62,12 @@ public final class MinecraftGuideContextProvider implements GuideContextProvider
             if (refreshed instanceof ToolResult.Failure<Integer> failure) {
                 return new ToolResult.Failure<>(failure.code(), failure.message());
             }
-            return new ToolResult.Success<>(new ClientContextCapture(gson, runtime.platform(), recipeClient)
-                    .capture(client, capabilities, correlationId));
+            ToolInvocationContext context =
+                    new ClientContextCapture(gson, runtime.platform(), recipeClient)
+                            .capture(client, capabilities, correlationId);
+            MinecraftCommandCapture.capture(
+                    client, runtime.commands(), correlationId, context.capturedAt());
+            return new ToolResult.Success<>(context);
         } catch (RuntimeException failure) {
             return new ToolResult.Failure<>(
                     "context_capture_failed",

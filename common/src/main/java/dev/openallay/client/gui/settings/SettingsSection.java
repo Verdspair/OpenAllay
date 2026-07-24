@@ -6,7 +6,7 @@ import java.util.List;
 public enum SettingsSection {
     GENERAL("screen.openallay.settings.general"),
     MODELS("screen.openallay.settings.models"),
-    TOOLS("screen.openallay.settings.tools"),
+    EXTENSIONS("screen.openallay.settings.extensions"),
     SKILLS("screen.openallay.settings.skills"),
     HISTORY("screen.openallay.settings.history"),
     DIAGNOSTICS("screen.openallay.settings.diagnostics"),

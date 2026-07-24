@@ -5,9 +5,10 @@ import dev.openallay.settings.model.ModelProfileSettingsView;
 import dev.openallay.settings.capability.CapabilitySettingsView;
 import dev.openallay.settings.capability.RecipeSettingsView;
 import dev.openallay.settings.diagnostics.SettingsDiagnosticsSnapshot;
+import dev.openallay.settings.extension.ExtensionSettingsView;
 import dev.openallay.settings.history.HistorySettingsView;
 import dev.openallay.settings.skill.SkillSettingsView;
-import dev.openallay.settings.tool.ToolSettingsView;
+import dev.openallay.script.command.CommandCapabilityConfig;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -19,8 +20,9 @@ public record ClientSettingsSnapshot(
         ModelProfileSettingsView models,
         CapabilitySettingsView capabilities,
         RecipeSettingsView recipes,
-        ToolSettingsView tools,
         SkillSettingsView skills,
+        ExtensionSettingsView extensions,
+        CommandCapabilityConfig experimentalCommands,
         HistorySettingsView history,
         SettingsDiagnosticsSnapshot diagnostics,
         SettingsOperation operation,
@@ -33,8 +35,9 @@ public record ClientSettingsSnapshot(
         Objects.requireNonNull(models, "models");
         Objects.requireNonNull(capabilities, "capabilities");
         Objects.requireNonNull(recipes, "recipes");
-        Objects.requireNonNull(tools, "tools");
         Objects.requireNonNull(skills, "skills");
+        Objects.requireNonNull(extensions, "extensions");
+        Objects.requireNonNull(experimentalCommands, "experimentalCommands");
         Objects.requireNonNull(history, "history");
         Objects.requireNonNull(diagnostics, "diagnostics");
         Objects.requireNonNull(operation, "operation");
@@ -54,8 +57,9 @@ public record ClientSettingsSnapshot(
                 models,
                 capabilities,
                 recipes,
-                ToolSettingsView.empty(),
                 SkillSettingsView.empty(),
+                ExtensionSettingsView.defaults(),
+                CommandCapabilityConfig.defaults(),
                 HistorySettingsView.disconnected(),
                 new SettingsDiagnosticsSnapshot(List.of(), Optional.empty()),
                 operation,
@@ -74,8 +78,9 @@ public record ClientSettingsSnapshot(
                 models,
                 CapabilitySettingsView.defaults(),
                 RecipeSettingsView.defaults(),
-                ToolSettingsView.empty(),
                 SkillSettingsView.empty(),
+                ExtensionSettingsView.defaults(),
+                CommandCapabilityConfig.defaults(),
                 HistorySettingsView.disconnected(),
                 new SettingsDiagnosticsSnapshot(List.of(), Optional.empty()),
                 operation,

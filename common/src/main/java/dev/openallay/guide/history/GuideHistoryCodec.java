@@ -13,6 +13,7 @@ import dev.openallay.guide.GuideSource;
 import dev.openallay.guide.GuideModelSelection;
 import dev.openallay.guide.GuideTimelineEntry;
 import dev.openallay.guide.GuideToolActivity;
+import dev.openallay.guide.GuideToolInvocationView;
 import dev.openallay.guide.GuideToolMessageCodec;
 import dev.openallay.guide.GuideToolStatus;
 import dev.openallay.guide.semantic.SemanticDocumentCodec;
@@ -31,7 +32,9 @@ public final class GuideHistoryCodec {
             Set.of("type", "ordinal", "text", "semantic", "streaming", "sources");
     private static final Set<String> TOOL_FIELDS = Set.of(
             "type", "ordinal", "invocationId", "index", "toolId", "status",
-            "presentationMessages", "sources");
+            "invocation", "presentationMessages", "sources");
+    private static final Set<String> TOOL_INVOCATION_FIELDS =
+            Set.of("roots", "handles", "modules");
     private static final Set<String> SOURCE_FIELDS = Set.of("toolId", "evidence");
     private static final Set<String> EVIDENCE_FIELDS = Set.of(
             "authority", "completeness", "capturedAt", "sourceId", "provenance",
@@ -144,6 +147,7 @@ public final class GuideHistoryCodec {
         object.addProperty("index", activity.index());
         object.addProperty("toolId", activity.toolId());
         object.addProperty("status", activity.status().name());
+        object.add("invocation", encodeInvocation(activity.invocation()));
         object.add("presentationMessages", GuideToolMessageCodec.encode(
                 activity.presentationMessages()));
         object.add("sources", encodeSourcesArray(activity.sources()));
@@ -168,9 +172,45 @@ public final class GuideHistoryCodec {
                 string(object, "toolId"),
                 enumValue(GuideToolStatus.class, string(object, "status"), "tool status"),
                 null,
+                decodeInvocation(object(object.get("invocation"), "tool invocation")),
+                null,
                 GuideToolMessageCodec.decode(object.get("presentationMessages")),
                 decodeSourcesArray(array(object, "sources")));
         return new GuideTimelineEntry.Tool(integer(object, "ordinal"), activity);
+    }
+
+    private static JsonObject encodeInvocation(GuideToolInvocationView invocation) {
+        JsonObject object = new JsonObject();
+        object.add("roots", encodeStrings(invocation.roots()));
+        object.add("handles", encodeStrings(invocation.handles()));
+        object.add("modules", encodeStrings(invocation.modules()));
+        return object;
+    }
+
+    private static GuideToolInvocationView decodeInvocation(JsonObject object) {
+        requireFields(object, TOOL_INVOCATION_FIELDS, "tool invocation");
+        return new GuideToolInvocationView(
+                decodeStrings(array(object, "roots")),
+                decodeStrings(array(object, "handles")),
+                decodeStrings(array(object, "modules")),
+                false);
+    }
+
+    private static JsonArray encodeStrings(List<String> values) {
+        JsonArray encoded = new JsonArray();
+        values.forEach(encoded::add);
+        return encoded;
+    }
+
+    private static List<String> decodeStrings(JsonArray values) {
+        ArrayList<String> decoded = new ArrayList<>();
+        for (JsonElement value : values) {
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+                throw new IllegalArgumentException("tool invocation value must be text");
+            }
+            decoded.add(value.getAsString());
+        }
+        return List.copyOf(decoded);
     }
 
     public String encodeSources(List<GuideSource> sources) {

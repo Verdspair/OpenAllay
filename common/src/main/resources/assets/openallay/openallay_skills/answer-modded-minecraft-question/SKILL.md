@@ -1,7 +1,7 @@
 ---
 name: answer-modded-minecraft-question
 description: Fallback multi-step workflow that correlates captured game data and indexed knowledge when no narrower recipe, guide, machine, progression, or diagnostic Skill matches.
-allowed-tools: "openallay:run_javascript openallay:calculate_craftability"
+allowed-tools: "openallay:run_javascript"
 ---
 Use this Skill only for a multi-step fallback that must coordinate more than
 one data area and no narrower Skill matches. Never load it after a more specific
@@ -22,8 +22,11 @@ slots, coordinates, textures, GUI classes, or layouts.
 3. Crafting and processing recipes live in `mc.recipes`; join them to registry
    rows by exact IDs.
 4. Mechanics and progression documents live in `mc.knowledge`.
-5. Use `calculate_craftability` only for deterministic overlapping inventory
-   allocation after selecting an exact recipe.
+5. For recipe cost or inventory allocation, load
+   `require("openallay:crafting")` inside the same `run_javascript` program.
+   Use `recipeCost(recipe)` for ranking and
+   `allocate(recipe, mc.player.inventory, crafts)` for deterministic
+   non-recursive overlapping alternatives.
 6. Respect source completeness and evidence. Never invent an unavailable recipe
    or guide entry.
 7. Stop after one materially corrected empty or partial result.

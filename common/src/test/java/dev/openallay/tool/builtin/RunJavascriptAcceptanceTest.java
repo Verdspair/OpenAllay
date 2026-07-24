@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.openallay.context.ToolInvocationContext;
 import dev.openallay.model.CancellationSignal;
 import dev.openallay.script.RhinoJavascriptRuntime;
+import dev.openallay.script.command.CommandCapabilityConfig;
+import dev.openallay.script.command.CommandCapabilityRuntime;
+import dev.openallay.script.command.CommandCatalogSnapshot;
 import dev.openallay.script.data.MinecraftAgentHostGraph;
 import dev.openallay.script.extension.JavascriptDataModule;
 import dev.openallay.script.extension.JavascriptDataModuleRegistry;
@@ -14,7 +17,9 @@ import dev.openallay.script.workspace.AgentResultWorkspaceRegistry;
 import dev.openallay.script.workspace.JavascriptResultPresenter;
 import dev.openallay.testing.JavascriptAgentTestFixtures;
 import dev.openallay.tool.ToolResult;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -123,6 +128,11 @@ final class RunJavascriptAcceptanceTest {
             }
 
             @Override
+            public java.lang.reflect.Type valueType() {
+                return DirectModule.class;
+            }
+
+            @Override
             public Snapshot capture(ToolInvocationContext ignored) {
                 captures.incrementAndGet();
                 return new Snapshot(
@@ -173,7 +183,7 @@ final class RunJavascriptAcceptanceTest {
     }
 
     @Test
-    void unsupportedExtensionValueDoesNotHideIndependentDirectRecordModule() {
+    void unsupportedExtensionDeclarationIsIsolatedFromIndependentDirectRecordModule() {
         JavascriptDataModuleRegistry extensions = new JavascriptDataModuleRegistry();
         extensions.register("test", List.of(
                 module("test:good", new DirectModule(7)),
@@ -199,17 +209,24 @@ final class RunJavascriptAcceptanceTest {
                         .join());
         assertEquals(7, success.value().preview().getAsInt());
 
-        ToolResult.Failure<RunJavascriptTool.Output> unsupported = assertInstanceOf(
-                ToolResult.Failure.class,
+        ToolResult.Success<RunJavascriptTool.Output> diagnostics = assertInstanceOf(
+                ToolResult.Success.class,
                 isolated.invokeAsync(
                                 context,
                                 new RunJavascriptTool.Input(
-                                        "return mc.extensions['test:unsupported'];",
+                                        "return mc.extensionDiagnostics;",
                                         List.of(),
-                                        List.of("extensions")),
+                                        List.of("extensionDiagnostics")),
                                 new CancellationSignal())
                         .join());
-        assertEquals("javascript_host_type_unsupported", unsupported.code());
+        assertEquals(
+                "javascript_host_type_unsupported",
+                diagnostics.value().preview()
+                        .getAsJsonArray()
+                        .get(0)
+                        .getAsJsonObject()
+                        .get("code")
+                        .getAsString());
     }
 
     @Test
@@ -233,6 +250,65 @@ final class RunJavascriptAcceptanceTest {
         assertEquals("undefined", canonical.get("recipes").getAsString());
     }
 
+    @Test
+    void acceptsCommandsAsAnExplicitScriptBindingRatherThanAnMcRoot() {
+        CommandCapabilityRuntime commands = new CommandCapabilityRuntime();
+        commands.replace(new CommandCapabilityConfig(
+                CommandCapabilityConfig.SCHEMA_VERSION, true));
+        UUID actor = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        commands.capture(
+                context.correlationId(),
+                actor,
+                new CommandCatalogSnapshot(Instant.EPOCH, List.of()),
+                (expectedActor, command, cancellation) -> {
+                    commands.acceptFeedback(expectedActor, "command result: " + command);
+                    return java.util.concurrent.CompletableFuture.completedFuture(null);
+                });
+        RunJavascriptTool commandTool = new RunJavascriptTool(
+                new RhinoJavascriptRuntime(),
+                MinecraftAgentHostGraph::new,
+                new AgentResultWorkspaceRegistry(),
+                new JavascriptResultPresenter(),
+                commands);
+
+        ToolResult.Success<RunJavascriptTool.Output> success = assertInstanceOf(
+                ToolResult.Success.class,
+                commandTool.invokeAsync(
+                                context,
+                                new RunJavascriptTool.Input(
+                                        "return commands.run('/version');",
+                                        List.of(),
+                                        List.of("commands")),
+                                new CancellationSignal())
+                        .join());
+
+        assertEquals(
+                "feedback",
+                success.value().preview().getAsJsonObject().get("state").getAsString());
+        assertEquals(
+                "command result: version",
+                success.value().preview().getAsJsonObject()
+                        .getAsJsonArray("messages")
+                        .get(0)
+                        .getAsString());
+    }
+
+    @Test
+    void rejectsAnExplicitCommandsBindingWhenTheRequestCapabilityIsDisabled() {
+        ToolResult.Failure<RunJavascriptTool.Output> failure = assertInstanceOf(
+                ToolResult.Failure.class,
+                tool.invokeAsync(
+                                context,
+                                new RunJavascriptTool.Input(
+                                        "return commands.list();",
+                                        List.of(),
+                                        List.of("commands")),
+                                new CancellationSignal())
+                        .join());
+
+        assertEquals("javascript_root_unavailable", failure.code());
+    }
+
     private com.google.gson.JsonElement invoke(String source) {
         ToolResult<RunJavascriptTool.Output> raw = tool.invokeAsync(
                         context,
@@ -248,6 +324,8 @@ final class RunJavascriptAcceptanceTest {
     private static JavascriptDataModule module(String id, Object value) {
         return new JavascriptDataModule() {
             @Override public String id() { return id; }
+
+            @Override public java.lang.reflect.Type valueType() { return value.getClass(); }
 
             @Override
             public Snapshot capture(ToolInvocationContext ignored) {

@@ -5,7 +5,7 @@ import dev.openallay.guide.GuideToolMessage;
 import dev.openallay.guide.GuideToolPresentation;
 import java.util.List;
 
-/** First-class concise views for grounded tools, with deterministic JSON fallback. */
+/** Concise messages for the JavaScript runtime, Skills, and generic Tool fallback. */
 public final class GuideToolPresenter {
     private GuideToolPresenter() {}
 

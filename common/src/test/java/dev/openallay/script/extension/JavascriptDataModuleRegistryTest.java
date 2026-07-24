@@ -1,12 +1,15 @@
 package dev.openallay.script.extension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonParser;
 import dev.openallay.testing.GroundedTestFixtures;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 final class JavascriptDataModuleRegistryTest {
@@ -21,6 +24,11 @@ final class JavascriptDataModuleRegistryTest {
                     }
 
                     @Override
+                    public java.lang.reflect.Type valueType() {
+                        return com.google.gson.JsonElement.class;
+                    }
+
+                    @Override
                     public Snapshot capture(dev.openallay.context.ToolInvocationContext context) {
                         return new Snapshot(
                                 JsonParser.parseString("[{\"id\":\"example:crusher\"}]"),
@@ -31,6 +39,11 @@ final class JavascriptDataModuleRegistryTest {
                     @Override
                     public String id() {
                         return "example:optional";
+                    }
+
+                    @Override
+                    public java.lang.reflect.Type valueType() {
+                        return com.google.gson.JsonElement.class;
                     }
 
                     @Override
@@ -77,11 +90,70 @@ final class JavascriptDataModuleRegistryTest {
         assertTrue(failure.getMessage().contains("second-provider"));
     }
 
+    @Test
+    void descriptorsExposeProviderAndSchemaWithoutCapturingValues() {
+        AtomicInteger captures = new AtomicInteger();
+        JavascriptDataModuleRegistry registry = new JavascriptDataModuleRegistry();
+        registry.register("example-provider", List.of(new JavascriptDataModule() {
+            @Override public String id() { return "example:declared"; }
+
+            @Override public java.lang.reflect.Type valueType() { return Declared.class; }
+
+            @Override public String summary() { return "Declared extension"; }
+
+            @Override
+            public Snapshot capture(dev.openallay.context.ToolInvocationContext context) {
+                captures.incrementAndGet();
+                return new Snapshot(
+                        new Declared("value"),
+                        List.of(GroundedTestFixtures.serverEvidence()));
+            }
+        }));
+
+        JavascriptDataModuleRegistry.Descriptor descriptor = registry.descriptors().getFirst();
+
+        assertEquals("example-provider", descriptor.provider());
+        assertEquals("Declared extension", descriptor.summary());
+        assertTrue(descriptor.available());
+        assertInstanceOf(
+                dev.openallay.script.schema.HostSchema.RecordValue.class,
+                descriptor.schema());
+        assertEquals(0, captures.get());
+    }
+
+    @Test
+    void unsupportedDeclaredTypeBecomesOneIsolatedDiagnostic() {
+        JavascriptDataModuleRegistry registry = new JavascriptDataModuleRegistry();
+        registry.register("example-provider", List.of(new JavascriptDataModule() {
+            @Override public String id() { return "example:unsupported"; }
+
+            @Override public java.lang.reflect.Type valueType() { return Object.class; }
+
+            @Override
+            public Snapshot capture(dev.openallay.context.ToolInvocationContext context) {
+                throw new AssertionError("unsupported descriptor must not capture");
+            }
+        }));
+
+        var descriptor = registry.descriptors().getFirst();
+        var snapshot = registry.capture(GroundedTestFixtures.fullContext());
+
+        assertFalse(descriptor.available());
+        assertEquals("javascript_host_type_unsupported", descriptor.diagnostic());
+        assertEquals("javascript_host_type_unsupported", snapshot.diagnostics().getFirst().code());
+        assertTrue(snapshot.values().isEmpty());
+    }
+
     private static JavascriptDataModule module(String id) {
         return new JavascriptDataModule() {
             @Override
             public String id() {
                 return id;
+            }
+
+            @Override
+            public java.lang.reflect.Type valueType() {
+                return com.google.gson.JsonElement.class;
             }
 
             @Override
@@ -92,4 +164,6 @@ final class JavascriptDataModuleRegistryTest {
             }
         };
     }
+
+    private record Declared(String value) {}
 }

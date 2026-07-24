@@ -131,7 +131,9 @@ public final class ServerAgentService {
                             sender,
                             payload.sessionId(),
                             payload.question(),
-                            systemPrompt,
+                            runtime.systemPrompt() == null
+                                    ? systemPrompt
+                                    : runtime.systemPrompt(),
                             context,
                             payload.stream());
                     List<ModelMessage> restored = payload.history().stream()
@@ -216,11 +218,19 @@ public final class ServerAgentService {
     public record Accepted(UUID requestId, String sessionId) {}
 
     public record RequestRuntime(
-            GameGuideAgent agent, AgentToolExecutor tools, Runnable close) {
+            GameGuideAgent agent,
+            AgentToolExecutor tools,
+            String systemPrompt,
+            Runnable close) {
         public RequestRuntime {
             java.util.Objects.requireNonNull(agent, "agent");
             java.util.Objects.requireNonNull(tools, "tools");
             java.util.Objects.requireNonNull(close, "close");
+        }
+
+        public RequestRuntime(
+                GameGuideAgent agent, AgentToolExecutor tools, Runnable close) {
+            this(agent, tools, null, close);
         }
     }
 

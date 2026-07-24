@@ -2,6 +2,9 @@ package dev.openallay.script.extension;
 
 import dev.openallay.context.EvidenceMetadata;
 import dev.openallay.context.ToolInvocationContext;
+import dev.openallay.script.host.HostAccessException;
+import dev.openallay.script.schema.HostSchema;
+import dev.openallay.script.schema.RhinoTypeSchema;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -45,8 +48,32 @@ public final class JavascriptDataModuleRegistry {
                                 + " and " + normalizedProvider);
             }
         }
-        candidates.forEach(module ->
-                modules.put(module.id(), new RegisteredModule(normalizedProvider, module)));
+        candidates.forEach(module -> {
+            HostSchema schema = null;
+            String schemaDiagnostic = null;
+            try {
+                schema = RhinoTypeSchema.require(module.valueType());
+            } catch (HostAccessException failure) {
+                schemaDiagnostic = failure.code();
+            }
+            modules.put(
+                    module.id(),
+                    new RegisteredModule(
+                            normalizedProvider, module, schema, schemaDiagnostic));
+        });
+    }
+
+    /** Returns immutable declarations without capturing any request value. */
+    public synchronized List<Descriptor> descriptors() {
+        return modules.values().stream()
+                .map(registered -> new Descriptor(
+                        registered.module().id(),
+                        registered.providerId(),
+                        registered.module().summary(),
+                        registered.schema() != null,
+                        registered.schema(),
+                        registered.schemaDiagnostic()))
+                .toList();
     }
 
     public Snapshot capture(ToolInvocationContext context) {
@@ -59,13 +86,25 @@ public final class JavascriptDataModuleRegistry {
         List<EvidenceMetadata> evidence = new ArrayList<>();
         for (RegisteredModule registered : captured) {
             JavascriptDataModule module = registered.module();
+            if (registered.schema() == null) {
+                diagnostics.add(new Diagnostic(
+                        module.id(),
+                        registered.providerId(),
+                        registered.schemaDiagnostic()));
+                continue;
+            }
             try {
                 JavascriptDataModule.Snapshot snapshot = module.capture(context);
+                RhinoTypeSchema.validateValue(module.valueType(), snapshot.value());
                 values.put(module.id(), snapshot.value());
                 evidence.addAll(snapshot.evidence());
             } catch (RuntimeException failure) {
                 diagnostics.add(new Diagnostic(
-                        module.id(), registered.providerId(), "module_capture_failed"));
+                        module.id(),
+                        registered.providerId(),
+                        failure instanceof HostAccessException hostFailure
+                                ? hostFailure.code()
+                                : "module_capture_failed"));
             }
         }
         return new Snapshot(
@@ -75,6 +114,14 @@ public final class JavascriptDataModuleRegistry {
     }
 
     public record Diagnostic(String module, String provider, String code) {}
+
+    public record Descriptor(
+            String module,
+            String provider,
+            String summary,
+            boolean available,
+            HostSchema schema,
+            String diagnostic) {}
 
     public record Snapshot(
             Map<String, Object> values,
@@ -87,5 +134,9 @@ public final class JavascriptDataModuleRegistry {
         }
     }
 
-    private record RegisteredModule(String providerId, JavascriptDataModule module) {}
+    private record RegisteredModule(
+            String providerId,
+            JavascriptDataModule module,
+            HostSchema schema,
+            String schemaDiagnostic) {}
 }

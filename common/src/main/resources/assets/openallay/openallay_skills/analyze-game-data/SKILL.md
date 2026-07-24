@@ -31,6 +31,11 @@ under a mod namespace, or recipes for several targets.
    handle. Pass that handle in the next `run_javascript` call's `handles`
    argument and use `workspace.open(handle)` to continue filtering.
 8. Never call once per candidate. Arrays and maps are the batch interface.
+9. This runtime uses the KubeJS Rhino fork. Top-level `filter`/`map`/`flatMap`
+   pipelines are supported, but do not place an inner `find`/`map` callback
+   containing `let` or `const` declarations inside an outer repeated callback.
+   Use a small indexed `for (var index = 0; ...)` loop for the inner lookup, as
+   shown in `references/examples.md`.
 
 One familiar set-level question should normally be one `run_javascript` call.
 One unfamiliar question should normally be one schema/sample call followed by

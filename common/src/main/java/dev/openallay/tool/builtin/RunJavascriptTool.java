@@ -13,6 +13,8 @@ import dev.openallay.script.JavascriptExecution;
 import dev.openallay.script.JavascriptExecutionException;
 import dev.openallay.script.RhinoJavascriptRuntime;
 import dev.openallay.script.data.MinecraftAgentHostGraph;
+import dev.openallay.script.command.CommandCapabilityRuntime;
+import dev.openallay.script.result.JavascriptSemanticKind;
 import dev.openallay.script.workspace.AgentResultWorkspace;
 import dev.openallay.script.workspace.AgentResultWorkspaceRegistry;
 import dev.openallay.script.workspace.JavascriptResultPresenter;
@@ -38,8 +40,8 @@ public final class RunJavascriptTool
             @ToolDescription("Opaque result handles this script needs to reopen.")
                     @ToolOptional List<String> handles,
             @ToolDescription(
-                            "Top-level Minecraft data roots required by this program, for example items or recipes. "
-                                    + "Omit only for schema discovery.")
+                            "Top-level bindings required by this program, for example items, recipes, or the "
+                                    + "enabled experimental commands binding. Omit only for schema discovery.")
                     @ToolOptional List<String> roots) {
         public Input(String source, List<String> handles) {
             this(source, handles, List.of());
@@ -58,15 +60,19 @@ public final class RunJavascriptTool
             List<String> fields,
             JsonElement preview,
             String modelText,
+            JavascriptSemanticKind viewKind,
             boolean complete,
             int omittedRows,
             int omittedFields,
             long elapsedMillis,
+            List<String> modules,
             List<EvidenceMetadata> evidence)
             implements EvidenceBearing, ModelFacingToolOutput {
         public Output {
             fields = List.copyOf(fields);
             preview = preview.deepCopy();
+            java.util.Objects.requireNonNull(viewKind, "viewKind");
+            modules = List.copyOf(modules);
             evidence = List.copyOf(evidence);
         }
 
@@ -82,22 +88,26 @@ public final class RunJavascriptTool
                     + "Before collection-wide ranking, highest/lowest, comparison, grouping, aggregation, joins, or batch recipes, "
                     + "load the analyze-game-data Skill and its directly matching reference. "
                     + "Use stable mc.items and mc.recipes arrays with one filter/map/reduce/sort/join program; do not rediscover roots. "
+                    + "Follow the Skill's KubeJS Rhino syntax guidance for nested collection lookups. "
                     + "Large results stay in a request workspace "
                     + "and can be reopened by an opaque handle. This runtime cannot access Java, files, network, "
-                    + "commands, live game objects, or perform writes.",
+                    + "or live game objects. A default-off experimental setting may add the complete commands "
+                    + "object for the current player; when absent, command execution is unavailable.",
             Input.class,
             Output.class,
-            ToolAccess.READ_ONLY,
+            ToolAccess.EXPERIMENTAL_ACTION,
             Set.of(
                     ContextCapability.REGISTRIES,
                     ContextCapability.RECIPES,
                     ContextCapability.PLAYER,
                     ContextCapability.OBSERVABLE_GAME_STATE));
+    private static final String COMMANDS_BINDING = "commands";
 
     private final RhinoJavascriptRuntime runtime;
     private final Function<ToolInvocationContext, MinecraftAgentHostGraph> graphFactory;
     private final AgentResultWorkspaceRegistry workspaces;
     private final JavascriptResultPresenter presenter;
+    private final CommandCapabilityRuntime commands;
     private final ConcurrentMap<String, MinecraftAgentHostGraph> graphs =
             new ConcurrentHashMap<>();
 
@@ -106,15 +116,34 @@ public final class RunJavascriptTool
             Function<ToolInvocationContext, MinecraftAgentHostGraph> graphFactory,
             AgentResultWorkspaceRegistry workspaces,
             JavascriptResultPresenter presenter) {
+        this(
+                runtime,
+                graphFactory,
+                workspaces,
+                presenter,
+                new CommandCapabilityRuntime());
+    }
+
+    public RunJavascriptTool(
+            RhinoJavascriptRuntime runtime,
+            Function<ToolInvocationContext, MinecraftAgentHostGraph> graphFactory,
+            AgentResultWorkspaceRegistry workspaces,
+            JavascriptResultPresenter presenter,
+            CommandCapabilityRuntime commands) {
         this.runtime = runtime;
         this.graphFactory = graphFactory;
         this.workspaces = workspaces;
         this.presenter = presenter;
+        this.commands = java.util.Objects.requireNonNull(commands, "commands");
     }
 
     @Override
     public ToolDescriptor<Input, Output> descriptor() {
         return DESCRIPTOR;
+    }
+
+    public boolean freezeCommandCapability(String correlationId) {
+        return commands.freezeRequest(correlationId);
     }
 
     @Override
@@ -146,7 +175,17 @@ public final class RunJavascriptTool
             cancellation.throwIfCancelled();
             MinecraftAgentHostGraph graph = graphs.computeIfAbsent(
                     context.correlationId(), ignored -> graphFactory.apply(context));
-            var selectedRoots = graph.select(input.roots());
+            var commandBridge = commands.bridge(context.correlationId(), cancellation);
+            boolean commandsRequested = input.roots().contains(COMMANDS_BINDING);
+            if (commandsRequested && commandBridge.isEmpty()) {
+                throw new JavascriptExecutionException(
+                        "javascript_root_unavailable",
+                        "Requested JavaScript binding is unavailable: commands");
+            }
+            List<String> minecraftRoots = input.roots().stream()
+                    .filter(root -> !COMMANDS_BINDING.equals(root))
+                    .toList();
+            var selectedRoots = graph.select(minecraftRoots);
             if (graph.evidence().isEmpty()) {
                 future.complete(new ToolResult.Failure<>(
                         "context_evidence_unavailable",
@@ -158,13 +197,15 @@ public final class RunJavascriptTool
                     input.source(),
                     selectedRoots,
                     workspace.select(input.handles()),
-                    cancellation);
+                    workspace.selectShapes(input.handles()),
+                    cancellation,
+                    commandBridge.orElse(null));
             JsonElement canonical = execution.value();
-            String handle = workspace.store(canonical);
-            var presentation = presenter.present(handle, canonical);
+            String handle = workspace.store(canonical, execution.shape());
             List<EvidenceMetadata> evidence = graph.evidence();
-            String modelText = presentation.modelText()
-                    + evidenceSummary(evidence);
+            var presentation = presenter.present(
+                    handle, canonical, execution.shape(), evidenceSummary(evidence));
+            String modelText = presentation.modelText();
             future.complete(new ToolResult.Success<>(new Output(
                     handle,
                     presentation.type(),
@@ -172,10 +213,12 @@ public final class RunJavascriptTool
                     presentation.fields(),
                     presentation.preview(),
                     modelText,
+                    presentation.viewKind(),
                     presentation.complete(),
                     presentation.omittedRows(),
                     presentation.omittedFields(),
                     execution.elapsed().toMillis(),
+                    execution.modules(),
                     evidence)));
         } catch (ModelClientException cancelled) {
             future.completeExceptionally(cancelled);
@@ -197,6 +240,7 @@ public final class RunJavascriptTool
     public void closeRequestScope(String correlationId) {
         graphs.remove(correlationId);
         workspaces.close(correlationId);
+        commands.closeRequest(correlationId);
     }
 
     private static String evidenceSummary(List<EvidenceMetadata> evidence) {

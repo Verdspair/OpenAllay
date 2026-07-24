@@ -33,7 +33,6 @@ import dev.openallay.skill.SkillParser;
 import dev.openallay.skill.SkillRepository;
 import dev.openallay.testing.JavascriptAgentTestFixtures;
 import dev.openallay.tool.ToolRegistry;
-import dev.openallay.tool.builtin.CalculateCraftabilityTool;
 import dev.openallay.tool.builtin.RunJavascriptTool;
 import java.net.URI;
 import java.time.Duration;
@@ -75,8 +74,7 @@ final class LiveJavascriptAgentAcceptanceTest {
                         new RhinoJavascriptRuntime(),
                         MinecraftAgentHostGraph::new,
                         new AgentResultWorkspaceRegistry(),
-                        new JavascriptResultPresenter()),
-                new CalculateCraftabilityTool()));
+                        new JavascriptResultPresenter())));
         SkillRepository skills = new SkillRepository(
                 new SkillParser(),
                 registry.descriptors().stream().map(descriptor -> descriptor.id()).toList());

@@ -12,7 +12,6 @@ final class BundledSkillsTest {
     void everyBundledSkillIsValidGroundedAndProgressivelyLoadable() {
         Set<String> tools = Set.of(
                 "openallay:run_javascript",
-                "openallay:calculate_craftability",
                 "openallay:load_skill");
         SkillRepository repository = new SkillRepository(new SkillParser(), tools);
         assertTrue(repository.reload(new BundledSkillLoader().load(), Set.of("ftbquests")));
@@ -22,8 +21,7 @@ final class BundledSkillsTest {
             SkillDocument document = repository.find(metadata.name()).orElseThrow();
             assertFalse(document.instructions().isBlank());
             assertTrue(metadata.allowedTools().stream()
-                    .allMatch(tool -> tool.equals("openallay:run_javascript")
-                            || tool.equals("openallay:calculate_craftability")));
+                    .allMatch(tool -> tool.equals("openallay:run_javascript")));
             assertFalse(repository.metadataPrompt().contains(document.instructions()));
         }
 
@@ -42,5 +40,23 @@ final class BundledSkillsTest {
         SkillDocument gameState = repository.find("inspect-game-state").orElseThrow();
         assertTrue(gameState.instructions().contains("`mc.game.diagnostics`"));
         assertFalse(gameState.instructions().contains("`openallay:inspect_game_state`"));
+        SkillDocument commands = repository.find("run-game-commands").orElseThrow();
+        assertEquals(Set.of("references/commands.md"), commands.references().keySet());
+        assertTrue(commands.instructions().contains("`commands.list()`"));
+        assertTrue(commands.instructions().contains("never rolled back"));
+    }
+
+    @Test
+    void experimentalCommandSkillIsAbsentFromCapturedCatalogWhileDisabled() {
+        SkillRepository repository = new SkillRepository(
+                new SkillParser(), Set.of("openallay:run_javascript"));
+        assertTrue(repository.reload(new BundledSkillLoader().load(), Set.of("ftbquests")));
+        repository.setRuntimeDisabledSkills(Set.of("run-game-commands"));
+
+        assertFalse(repository.snapshot(Set.of())
+                .find("run-game-commands").isPresent());
+        repository.setRuntimeDisabledSkills(Set.of());
+        assertTrue(repository.snapshot(Set.of())
+                .find("run-game-commands").isPresent());
     }
 }

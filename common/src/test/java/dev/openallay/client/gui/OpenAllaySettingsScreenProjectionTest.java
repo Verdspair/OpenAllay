@@ -47,14 +47,23 @@ final class OpenAllaySettingsScreenProjectionTest {
                 .toList());
         assertFalse(projection.toString().contains("ALPHA_KEY"));
         assertFalse(projection.toString().contains("secret-value"));
-        assertTrue(projection.sections().contains(SettingsSection.TOOLS));
+        assertTrue(projection.sections().contains(SettingsSection.EXTENSIONS));
         assertTrue(projection.sections().contains(SettingsSection.SKILLS));
         assertTrue(projection.sections().contains(SettingsSection.ABOUT));
         assertFalse(projection.sections().stream()
                 .anyMatch(section -> section.name().equals("RECIPES")));
         assertEquals(0, projection.recipes().sources().size());
-        assertEquals(6, projection.tools().families().size());
         assertEquals(0, projection.skills().skills().size());
+        assertEquals("openallay:run_javascript", projection.extensions().runtime().id());
+        assertTrue(projection.extensions().roots().stream()
+                .anyMatch(root -> root.name().equals("items")
+                        && root.availability().equals("REQUEST_SCOPED")));
+        assertEquals(
+                List.of("openallay:crafting"),
+                projection.extensions().modules().stream()
+                        .map(dev.openallay.client.gui.settings.ExtensionSettingsProjection.ModuleCard::id)
+                        .toList());
+        assertFalse(projection.extensions().experimentalCommands());
         assertFalse(projection.general().debugMode());
         assertTrue(projection.general().animationsEnabled());
         assertTrue(projection.history().actions().stream()

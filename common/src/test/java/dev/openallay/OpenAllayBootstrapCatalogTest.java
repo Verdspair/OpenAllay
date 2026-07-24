@@ -1,10 +1,8 @@
 package dev.openallay;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.openallay.capability.CapabilityCatalogState;
-import dev.openallay.capability.CapabilityChildPage;
 import dev.openallay.capability.CapabilityKind;
 import dev.openallay.capability.CapabilitySettingsEntry;
 import dev.openallay.context.ToolInvocationContext;
@@ -27,7 +25,7 @@ final class OpenAllayBootstrapCatalogTest {
     record Output(String value) {}
 
     @Test
-    void registersEveryPublicToolAndSkillWithRecipeChildSettings() {
+    void registersOnlyRealPublicToolsAndSkills() {
         ToolRegistry tools = new ToolRegistry();
         tools.register("test:provider", List.of(tool()));
         SkillRepository skills = new SkillRepository(new SkillParser(), Set.of("test:fact"));
@@ -60,12 +58,8 @@ final class OpenAllayBootstrapCatalogTest {
                 entry.id().equals("fact-guide") && entry.kind() == CapabilityKind.SKILL));
         assertTrue(entries.stream().noneMatch(entry ->
                 entry.id().equals("openallay:load_skill")));
-        CapabilitySettingsEntry recipes = entries.stream()
-                .filter(entry -> entry.id().equals("openallay:recipes"))
-                .findFirst()
-                .orElseThrow();
-        assertEquals(
-                new CapabilityChildPage("openallay:recipe_settings"), recipes.childPage());
+        assertTrue(entries.stream().noneMatch(entry ->
+                entry.id().equals("openallay:recipes")));
     }
 
     private static Tool<Input, Output> tool() {

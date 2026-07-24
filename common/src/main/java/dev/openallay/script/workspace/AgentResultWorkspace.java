@@ -1,6 +1,8 @@
 package dev.openallay.script.workspace;
 
 import com.google.gson.JsonElement;
+import dev.openallay.script.result.JavascriptResultShape;
+import dev.openallay.script.result.JavascriptSemanticKind;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -17,12 +19,20 @@ public final class AgentResultWorkspace implements AutoCloseable {
     private final String prefix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
     private final AtomicLong sequence = new AtomicLong();
     private final Map<String, JsonElement> values = new LinkedHashMap<>();
+    private final Map<String, JavascriptResultShape> shapes = new LinkedHashMap<>();
     private final Map<String, Long> sizes = new LinkedHashMap<>();
     private long storedUnits;
     private boolean closed;
 
     public synchronized String store(JsonElement value) {
+        return store(
+                value,
+                JavascriptResultShape.ordinary(JavascriptSemanticKind.GENERIC));
+    }
+
+    public synchronized String store(JsonElement value, JavascriptResultShape shape) {
         requireOpen();
+        java.util.Objects.requireNonNull(shape, "shape");
         long units = measure(value);
         if (units > MAX_RESULT_UNITS) {
             throw new WorkspaceException(
@@ -36,6 +46,7 @@ public final class AgentResultWorkspace implements AutoCloseable {
         }
         String handle = "r_" + prefix + "_" + sequence.incrementAndGet();
         values.put(handle, value.deepCopy());
+        shapes.put(handle, shape);
         sizes.put(handle, units);
         storedUnits += units;
         return handle;
@@ -85,6 +96,24 @@ public final class AgentResultWorkspace implements AutoCloseable {
         return Map.copyOf(selected);
     }
 
+    public synchronized Map<String, JavascriptResultShape> selectShapes(
+            Collection<String> handles) {
+        requireOpen();
+        Collection<String> requested =
+                handles == null ? java.util.List.<String>of() : handles;
+        LinkedHashMap<String, JavascriptResultShape> selected = new LinkedHashMap<>();
+        for (String handle : requested) {
+            JavascriptResultShape shape = shapes.get(handle);
+            if (shape == null) {
+                throw new WorkspaceException(
+                        "workspace_handle_unavailable",
+                        "Result handle is unavailable in this request");
+            }
+            selected.put(handle, shape);
+        }
+        return Map.copyOf(selected);
+    }
+
     public synchronized int size() {
         return values.size();
     }
@@ -93,6 +122,7 @@ public final class AgentResultWorkspace implements AutoCloseable {
     public synchronized void close() {
         closed = true;
         values.clear();
+        shapes.clear();
         sizes.clear();
         storedUnits = 0;
     }

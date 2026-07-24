@@ -4,6 +4,11 @@ import com.google.gson.JsonObject;
 import dev.latvian.mods.rhino.Context;
 import dev.latvian.mods.rhino.Scriptable;
 import dev.latvian.mods.rhino.ScriptableObject;
+import dev.openallay.context.ItemStackSnapshot;
+import dev.openallay.context.RecipeEntrySnapshot;
+import dev.openallay.context.RegistryEntrySnapshot;
+import dev.openallay.script.result.JavascriptResultShape;
+import dev.openallay.script.result.JavascriptSemanticKind;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -20,17 +25,20 @@ public final class HostObjectView extends ScriptableObject {
     private final List<String> keys;
     private final java.util.Set<String> keySet;
     private final Reader reader;
+    private final JavascriptResultShape resultShape;
 
     private HostObjectView(
             Context context,
             Scriptable scope,
             RhinoHostAdapter adapter,
             List<String> keys,
-            Reader reader) {
+            Reader reader,
+            JavascriptResultShape resultShape) {
         this.adapter = Objects.requireNonNull(adapter, "adapter");
         this.keys = List.copyOf(keys);
         this.keySet = java.util.Set.copyOf(keys);
         this.reader = Objects.requireNonNull(reader, "reader");
+        this.resultShape = Objects.requireNonNull(resultShape, "resultShape");
         setParentScope(scope);
         setPrototype(ScriptableObject.getObjectPrototype(scope, context));
         preventExtensions();
@@ -48,7 +56,8 @@ public final class HostObjectView extends ScriptableObject {
                     Object result = schema.read(value, name);
                     return result == HostRecordSchema.Missing.INSTANCE
                             ? Scriptable.NOT_FOUND : result;
-                });
+                },
+                trustedShape(value));
     }
 
     static HostObjectView map(
@@ -65,17 +74,53 @@ public final class HostObjectView extends ScriptableObject {
                 scope,
                 adapter,
                 keys,
-                name -> value.containsKey(name) ? value.get(name) : Scriptable.NOT_FOUND);
+                name -> value.containsKey(name) ? value.get(name) : Scriptable.NOT_FOUND,
+                JavascriptResultShape.ordinary(JavascriptSemanticKind.KEY_VALUE));
     }
 
     static HostObjectView json(
             Context context, Scriptable scope, RhinoHostAdapter adapter, JsonObject value) {
+        return json(
+                context,
+                scope,
+                adapter,
+                value,
+                JavascriptResultShape.ordinary(JavascriptSemanticKind.KEY_VALUE));
+    }
+
+    static HostObjectView json(
+            Context context,
+            Scriptable scope,
+            RhinoHostAdapter adapter,
+            JsonObject value,
+            JavascriptResultShape resultShape) {
         return new HostObjectView(
                 context,
                 scope,
                 adapter,
                 List.copyOf(value.keySet()),
-                name -> value.has(name) ? value.get(name) : Scriptable.NOT_FOUND);
+                name -> value.has(name) ? value.get(name) : Scriptable.NOT_FOUND,
+                resultShape);
+    }
+
+    public JavascriptResultShape resultShape() {
+        return resultShape;
+    }
+
+    private static JavascriptResultShape trustedShape(Object value) {
+        if (value instanceof RecipeEntrySnapshot) {
+            return JavascriptResultShape.trusted(
+                    JavascriptSemanticKind.RECIPE, RecipeEntrySnapshot.class);
+        }
+        if (value instanceof RegistryEntrySnapshot entry && "item".equals(entry.kind())) {
+            return JavascriptResultShape.trusted(
+                    JavascriptSemanticKind.ITEM, RegistryEntrySnapshot.class);
+        }
+        if (value instanceof ItemStackSnapshot stack && !stack.itemId().isBlank()) {
+            return JavascriptResultShape.trusted(
+                    JavascriptSemanticKind.ITEM, ItemStackSnapshot.class);
+        }
+        return JavascriptResultShape.ordinary(JavascriptSemanticKind.KEY_VALUE);
     }
 
     @Override

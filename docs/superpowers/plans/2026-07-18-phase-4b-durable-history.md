@@ -541,8 +541,9 @@ client-stopping lifecycle event.
 - [x] **Step 1: Write failing UI projection tests**
 
 Assert loading disables submission with a status row, unavailable history is a
-nonfatal unsaved diagnostic, saving does not reorder timeline rows, interrupted
-requests expose retry, and normal available state adds no transcript noise.
+nonfatal unsaved diagnostic, successful saving adds no transcript row,
+interrupted requests expose retry, and normal available state adds no
+transcript noise.
 
 - [x] **Step 2: Run and confirm missing projection**
 
@@ -554,10 +555,12 @@ Expected: FAIL until persistence and interruption rows/actions exist.
 
 - [x] **Step 3: Add localized narrow UI states**
 
-Project unframed status rows for `LOADING`, `SAVING`, and `UNAVAILABLE`. Keep
-timeline chronology untouched. Disable submit while loading, keep it enabled
-but visibly unsaved when unavailable, and use the existing retry action for
-`INTERRUPTED`. Add English and Simplified Chinese translations for all text.
+Project unframed status rows for `LOADING` and `UNAVAILABLE`. Keep `SAVING` as
+internal/diagnostic state without a transcript row so successful background
+writes do not change transcript geometry. Disable submit while loading, keep it
+enabled but visibly unsaved when unavailable, and use the existing retry action
+for `INTERRUPTED`. Add English and Simplified Chinese translations for all
+visible text.
 
 - [x] **Step 4: Update documentation**
 

@@ -20,7 +20,7 @@ final class TraceParserTest {
 
         assertEquals("iron-recipe", result.value().id());
         assertEquals(Set.of(ContextCapability.RECIPES), result.value().requiredContext());
-        assertEquals("openallay:find_recipes", ((ToolCallStep) result.value().steps().getFirst()).tool());
+        assertEquals("test:fact", ((ToolCallStep) result.value().steps().getFirst()).tool());
         assertEquals(2, result.value().steps().size());
     }
 
@@ -41,7 +41,7 @@ final class TraceParserTest {
     @Test
     void rejectsUnknownStepsInvalidToolIdsAndMissingExpectations() {
         assertInvalid(validTrace().replace("tool_call", "model_thought"));
-        assertInvalid(validTrace().replace("openallay:find_recipes", "invalid tool"));
+        assertInvalid(validTrace().replace("test:fact", "invalid tool"));
         assertInvalid(validTrace().replace(
                 "\"expect\":{\"status\":\"success\",\"match\":\"contains\",\"value\":{\"outputItem\":\"minecraft:iron_ingot\"}}",
                 "\"expect\":{\"status\":\"success\",\"match\":\"contains\"}"));
@@ -78,7 +78,7 @@ final class TraceParserTest {
                   "steps":[
                     {
                       "type":"tool_call",
-                      "tool":"openallay:find_recipes",
+                      "tool":"test:fact",
                       "arguments":{"outputItem":"minecraft:iron_ingot"},
                       "expect":{"status":"success","match":"contains","value":{"outputItem":"minecraft:iron_ingot"}}
                     },

@@ -13,6 +13,7 @@ public final class SkillRepository implements SkillCatalog {
     private final Set<String> availableTools;
     private volatile Map<String, SkillDocument> skills = Map.of();
     private volatile List<SkillDiagnostic> diagnostics = List.of();
+    private volatile Set<String> runtimeDisabledSkills = Set.of();
 
     public SkillRepository(SkillParser parser, Collection<String> availableTools) {
         this.parser = parser;
@@ -155,7 +156,19 @@ public final class SkillRepository implements SkillCatalog {
     }
 
     public SkillCatalogSnapshot snapshot(Set<String> disabledSkills) {
-        Set<String> disabled = Set.copyOf(disabledSkills);
+        return snapshot(disabledSkills, true);
+    }
+
+    public SkillCatalogSnapshot snapshotIncludingRuntimeDisabled(Set<String> disabledSkills) {
+        return snapshot(disabledSkills, false);
+    }
+
+    private SkillCatalogSnapshot snapshot(
+            Set<String> disabledSkills, boolean includeRuntimeDisabled) {
+        java.util.HashSet<String> disabled = new java.util.HashSet<>(disabledSkills);
+        if (includeRuntimeDisabled) {
+            disabled.addAll(runtimeDisabledSkills);
+        }
         Map<String, SkillDocument> captured = new TreeMap<>();
         for (Map.Entry<String, SkillDocument> entry : skills.entrySet()) {
             if (!disabled.contains(entry.getKey())) {
@@ -163,5 +176,13 @@ public final class SkillRepository implements SkillCatalog {
             }
         }
         return new SkillCatalogSnapshot(captured);
+    }
+
+    /**
+     * Hides capabilities whose availability is controlled outside the general deny-only policy.
+     * Existing request snapshots remain immutable.
+     */
+    public void setRuntimeDisabledSkills(Set<String> disabledSkills) {
+        runtimeDisabledSkills = Set.copyOf(disabledSkills);
     }
 }

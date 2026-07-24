@@ -10,17 +10,17 @@ import org.junit.jupiter.api.Test;
 
 final class BuiltinToolRegistrationTest {
     @Test
-    void exposesJavascriptAnalysisAndOnlyTheNarrowDeterministicAction() {
+    void exposesOnlyTheUnifiedJavascriptAnalysisTool() {
         Set<String> toolIds = OpenAllayBootstrap.builtinTools(testPlatform()).stream()
                 .map(tool -> tool.descriptor().id())
                 .collect(Collectors.toSet());
 
         assertTrue(toolIds.contains("openallay:run_javascript"));
-        assertTrue(toolIds.contains("openallay:calculate_craftability"));
+        assertFalse(toolIds.contains("openallay:calculate_craftability"));
         assertFalse(toolIds.contains("openallay:search_recipes"));
         assertFalse(toolIds.contains("openallay:inspect_game_state"));
         assertFalse(toolIds.contains("openallay:resolve_resource"));
-        assertTrue(toolIds.size() == 2);
+        assertTrue(toolIds.size() == 1);
     }
 
     private static PlatformService testPlatform() {

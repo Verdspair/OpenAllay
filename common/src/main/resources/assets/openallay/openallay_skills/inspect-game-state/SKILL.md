@@ -12,15 +12,17 @@ Use one JavaScript program to select and correlate only the required detached
 sections:
 
 - `mc.game.runtime`: version, loader, topology, and runtime identity.
-- `mc.game.mods`: installed mod metadata.
-- `mc.game.options`: option values and key mappings across video, sound,
+- `mc.game.mods.installed`: installed mod metadata. This direct exact-path
+  lookup does not require schema probing.
+- `mc.game.options.values`: option values and key mappings across video, sound,
   controls, mouse, accessibility, language/chat, online/privacy, packs, and
   general settings.
 - `mc.game.packs`: selected and available resource/data packs.
 - `mc.game.shaders`: shader state and options. Treat an unavailable integration
   as unavailable; do not infer shader state from installed files.
-- `mc.game.diagnostics`: detached F3-style position, direction, dimension,
-  biome, renderer, performance, target, and network values.
+- `mc.game.diagnostics`: section metadata; its `.values` array contains detached
+  F3-style position, direction, dimension, biome, renderer, performance,
+  target, and network values.
 - `mc.game.player` and `mc.player`: only the caller's visible state.
 - `mc.game.worldQueries`: time, weather, difficulty, world border, and spawn.
 

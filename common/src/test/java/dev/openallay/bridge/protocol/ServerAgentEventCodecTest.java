@@ -86,13 +86,13 @@ final class ServerAgentEventCodecTest {
                                 "call-1",
                                 "openallay:get_recipe",
                                 List.of(GuideToolMessage.of(
-                                        GuideToolMessage.Key.INVOCATION_GET_RECIPE_EXACT,
+                                        GuideToolMessage.Key.INVOCATION_LOAD_SKILL_EXACT,
                                         "minecraft:iron_block")))),
                         request));
         assertEquals("call-1", started.invocationId());
         assertEquals(
                 List.of(GuideToolMessage.of(
-                        GuideToolMessage.Key.INVOCATION_GET_RECIPE_EXACT,
+                        GuideToolMessage.Key.INVOCATION_LOAD_SKILL_EXACT,
                         "minecraft:iron_block")),
                 started.presentationMessages());
 

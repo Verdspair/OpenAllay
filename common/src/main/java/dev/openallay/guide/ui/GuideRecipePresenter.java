@@ -11,23 +11,12 @@ import java.util.List;
 public final class GuideRecipePresenter {
     private GuideRecipePresenter() {}
 
-    public static List<GuideRecipeCard> cards(String toolId, JsonObject normalized) {
-        if (normalized == null || !"success".equals(string(normalized, "status"))) {
-            return List.of();
-        }
-        JsonObject value = object(normalized, "value");
-        if (value == null) {
-            return List.of();
-        }
-        String name = toolId.substring(toolId.indexOf(':') + 1);
-        List<JsonObject> recipes = switch (name) {
-            case "search_recipes" -> objects(array(value, "recipes"));
-            case "get_recipe" -> {
-                JsonObject recipe = object(value, "recipe");
-                yield recipe == null ? List.of() : List.of(recipe);
-            }
-            default -> List.of();
-        };
+    /** Renders typed JavaScript recipe rows without impersonating a domain-specific Tool result. */
+    public static List<GuideRecipeCard> cards(JsonArray recipes) {
+        return cards(objects(recipes == null ? new JsonArray() : recipes));
+    }
+
+    private static List<GuideRecipeCard> cards(List<JsonObject> recipes) {
         List<GuideRecipeCard> cards = new ArrayList<>();
         for (JsonObject recipe : recipes) {
             try {

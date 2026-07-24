@@ -9,11 +9,11 @@ import org.junit.jupiter.api.Test;
 
 final class SettingsLayoutTest {
     @Test
-    void topLevelSectionsSeparateToolsAndSkillsWithoutRecipes() {
+    void topLevelSectionsSeparateExtensionsAndSkillsWithoutRecipes() {
         assertEquals(List.of(
                         SettingsSection.GENERAL,
                         SettingsSection.MODELS,
-                        SettingsSection.TOOLS,
+                        SettingsSection.EXTENSIONS,
                         SettingsSection.SKILLS,
                         SettingsSection.HISTORY,
                         SettingsSection.DIAGNOSTICS,

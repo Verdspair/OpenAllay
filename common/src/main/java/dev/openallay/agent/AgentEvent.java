@@ -32,15 +32,29 @@ public sealed interface AgentEvent
     record ToolStarted(
             String invocationId,
             String toolId,
+            JsonObject arguments,
             List<GuideToolMessage> presentationMessages)
             implements AgentEvent {
         public ToolStarted {
             requireIdentity(invocationId, toolId);
+            arguments = Objects.requireNonNull(arguments, "arguments").deepCopy();
             presentationMessages = List.copyOf(presentationMessages);
         }
 
+        public ToolStarted(
+                String invocationId,
+                String toolId,
+                List<GuideToolMessage> presentationMessages) {
+            this(invocationId, toolId, new JsonObject(), presentationMessages);
+        }
+
         public ToolStarted(String invocationId, String toolId) {
-            this(invocationId, toolId, List.of());
+            this(invocationId, toolId, new JsonObject(), List.of());
+        }
+
+        @Override
+        public JsonObject arguments() {
+            return arguments.deepCopy();
         }
     }
 

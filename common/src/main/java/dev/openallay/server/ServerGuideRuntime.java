@@ -80,8 +80,8 @@ public record ServerGuideRuntime(
                 config.contextBudget(), config.model(), Clock.systemUTC());
         PlayerClientToolRouter clientTools = new PlayerClientToolRouter(
                 runtime.tools(), gson, clientToolTransport, config.requestTimeout());
-        String prompt = dev.openallay.agent.AgentSystemPrompt.compose(
-                runtime.skills().metadataPrompt());
+        String prompt = systemPrompt(runtime.skills(), false);
+        String commandPrompt = systemPrompt(runtime.skills(), true);
         int promptAndTools = new Utf8ContextTokenEstimator().estimate(
                 prompt, java.util.List.of(), tools.definitions());
         dev.openallay.guide.GuideContextSpec contextSpec =
@@ -106,6 +106,11 @@ public record ServerGuideRuntime(
                     return new ToolResult.Success<>(new ServerAgentService.RequestRuntime(
                             agent,
                             requestTools,
+                            payload.clientToolIds().contains(
+                                            dev.openallay.bridge.client.ClientToolExecutionEndpoint
+                                                    .EXPERIMENTAL_COMMANDS_CAPABILITY)
+                                    ? commandPrompt
+                                    : prompt,
                             () -> clientTools.close(actor, payload.requestId())));
                 },
                 sessions,
@@ -116,5 +121,14 @@ public record ServerGuideRuntime(
                 scheduled::awaitReady);
         return new ToolResult.Success<>(
                 new ServerGuideRuntime(config, service, contextSpec, clientTools));
+    }
+
+    static String systemPrompt(
+            dev.openallay.skill.SkillRepository skills, boolean experimentalCommands) {
+        java.util.Objects.requireNonNull(skills, "skills");
+        dev.openallay.skill.SkillCatalogSnapshot snapshot = experimentalCommands
+                ? skills.snapshotIncludingRuntimeDisabled(java.util.Set.of())
+                : skills.snapshot(java.util.Set.of());
+        return dev.openallay.agent.AgentSystemPrompt.compose(snapshot.metadataPrompt());
     }
 }

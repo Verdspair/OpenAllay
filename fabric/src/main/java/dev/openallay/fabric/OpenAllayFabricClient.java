@@ -27,6 +27,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import dev.openallay.fabric.network.FabricBridgePayloads;
@@ -36,6 +37,13 @@ public final class OpenAllayFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         OpenAllayRuntime runtime = OpenAllayBootstrap.initialize();
+        ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+            Minecraft client = Minecraft.getInstance();
+            if (!overlay && client.player != null) {
+                runtime.commands().acceptFeedback(
+                        client.player.getUUID(), message.getString());
+            }
+        });
         FabricBridgePayloads.register();
         FabricClientBridge bridge = new FabricClientBridge();
         bridge.register();
@@ -194,7 +202,8 @@ public final class OpenAllayFabricClient implements ClientModInitializer {
                     () -> Minecraft.getInstance().stop(),
                     secret == null || secret.isBlank() ? java.util.Set.of() : java.util.Set.of(secret),
                     contexts::recipeProviderReadiness,
-                    settings == null ? null : settings.settings());
+                    settings == null ? null : settings.settings(),
+                    modelRegistry == null ? null : modelRegistry::encodedTrace);
             ClientTickEvents.END_CLIENT_TICK.register(client -> {
                 if (client.player != null) controller.tick(client.player.getUUID());
             });

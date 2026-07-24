@@ -1,12 +1,15 @@
 package dev.openallay.script.data;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.openallay.knowledge.KnowledgeSnapshot;
 import dev.openallay.script.extension.JavascriptDataModule;
 import dev.openallay.script.extension.JavascriptDataModuleRegistry;
+import dev.openallay.script.schema.HostSchema;
 import dev.openallay.testing.JavascriptAgentTestFixtures;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +26,8 @@ final class MinecraftAgentHostGraphTest {
         JavascriptDataModuleRegistry extensions = new JavascriptDataModuleRegistry();
         extensions.register("test", List.of(new JavascriptDataModule() {
             @Override public String id() { return "test:direct"; }
+
+            @Override public java.lang.reflect.Type valueType() { return ModuleRecord.class; }
 
             @Override
             public Snapshot capture(dev.openallay.context.ToolInvocationContext ignored) {
@@ -69,6 +74,103 @@ final class MinecraftAgentHostGraphTest {
         assertEquals(1, knowledgeCaptures.get());
         assertEquals(1, extensionCaptures.get());
         assertTrue(graph.evidence().contains(context.registries().orElseThrow().evidence()));
+    }
+
+    @Test
+    void exposesCompleteCatalogMetadataAndUnifiedRegistryRows() {
+        var context = JavascriptAgentTestFixtures.context("catalog-metadata");
+        MinecraftAgentHostGraph graph = new MinecraftAgentHostGraph(context);
+        Map<String, Object> selected = graph.select(Set.of(
+                "registries",
+                "registryEntries",
+                "recipeCatalog",
+                "knowledgeCatalog",
+                "game"));
+
+        MinecraftAgentHostGraph.RegistryCatalog registries =
+                assertInstanceOf(
+                        MinecraftAgentHostGraph.RegistryCatalog.class,
+                        selected.get("registries"));
+        assertEquals(context.registries().orElseThrow().entries().size(), registries.entryCount());
+        assertEquals(6, ((List<?>) selected.get("registryEntries")).size());
+
+        MinecraftAgentHostGraph.RecipeCatalogView recipes =
+                assertInstanceOf(
+                        MinecraftAgentHostGraph.RecipeCatalogView.class,
+                        selected.get("recipeCatalog"));
+        assertEquals(context.recipes().orElseThrow().recipes().size(), recipes.recipeCount());
+        assertEquals(context.recipes().orElseThrow().providers(), List.of());
+        assertEquals(context.recipes().orElseThrow().groups(), recipes.groups());
+        assertEquals(context.recipes().orElseThrow().diagnostics(), recipes.diagnostics());
+
+        MinecraftAgentHostGraph.KnowledgeCatalog knowledge =
+                assertInstanceOf(
+                        MinecraftAgentHostGraph.KnowledgeCatalog.class,
+                        selected.get("knowledgeCatalog"));
+        assertEquals(0, knowledge.documentCount());
+        assertFalse(knowledge.evidence().isEmpty());
+
+        assertSame(context.observableGameState().orElseThrow(), selected.get("game"));
+    }
+
+    @Test
+    void declaresUnavailableRootsAndExtensionSchemasWithoutCapturingValues() {
+        AtomicInteger captures = new AtomicInteger();
+        JavascriptDataModuleRegistry extensions = new JavascriptDataModuleRegistry();
+        extensions.register("test-provider", List.of(new JavascriptDataModule() {
+            @Override public String id() { return "test:declared"; }
+
+            @Override public java.lang.reflect.Type valueType() { return ModuleRecord.class; }
+
+            @Override public String summary() { return "Declared test module"; }
+
+            @Override
+            public Snapshot capture(dev.openallay.context.ToolInvocationContext ignored) {
+                captures.incrementAndGet();
+                return new Snapshot(
+                        new ModuleRecord("value"),
+                        List.of(dev.openallay.testing.GroundedTestFixtures.serverEvidence()));
+            }
+        }));
+        var sparse = dev.openallay.context.ToolInvocationContext.developmentConsole("sparse");
+        var descriptorOnly =
+                MinecraftAgentHostGraph.describeRequest(sparse, extensions);
+        assertEquals(0, captures.get());
+        MinecraftAgentHostGraph graph = new MinecraftAgentHostGraph(
+                sparse, KnowledgeSnapshot::empty, extensions);
+
+        var player = descriptorOnly.describe("player").orElseThrow();
+        assertEquals(
+                dev.openallay.script.schema.HostRootDescriptor.Availability.UNAVAILABLE,
+                player.availability());
+        assertEquals(
+                "list",
+                graph.schemaCatalog()
+                        .describe("game.mods.installed")
+                        .orElseThrow()
+                        .schema()
+                        .kind());
+        assertEquals(0, captures.get());
+
+        @SuppressWarnings("unchecked")
+        List<JavascriptDataModuleRegistry.Descriptor> catalog =
+                (List<JavascriptDataModuleRegistry.Descriptor>)
+                        graph.select(Set.of("extensionCatalog")).get("extensionCatalog");
+        assertEquals("test-provider", catalog.getFirst().provider());
+        assertInstanceOf(HostSchema.RecordValue.class, catalog.getFirst().schema());
+        assertEquals(0, captures.get());
+    }
+
+    @Test
+    void declaredOnlyCatalogUsesRequestScopedAvailabilityWithoutAContext() {
+        var catalog = MinecraftAgentHostGraph.declaredOnlyCatalog();
+
+        assertEquals(
+                dev.openallay.script.schema.HostRootDescriptor.Availability.REQUEST_SCOPED,
+                catalog.describe("game.mods.installed").orElseThrow().availability());
+        assertEquals(
+                "list",
+                catalog.describe("recipeCatalog.providers").orElseThrow().schema().kind());
     }
 
     private record ModuleRecord(String value) {}

@@ -87,15 +87,11 @@ public record GuideUiView(
                     snapshot.persistence().state(),
                     "screen.openallay.history.loading",
                     null));
-            case SAVING -> rows.add(new GuideUiRow.Persistence(
-                    snapshot.persistence().state(),
-                    "screen.openallay.history.saving",
-                    null));
             case UNAVAILABLE -> rows.add(new GuideUiRow.Persistence(
                     snapshot.persistence().state(),
                     "screen.openallay.history.unavailable",
                     snapshot.persistence().failure()));
-            case DISABLED, AVAILABLE -> { }
+            case SAVING, DISABLED, AVAILABLE -> { }
         }
         for (GuideRequestSnapshot request : selected.requests()) {
             rows.add(new GuideUiRow.User(request.requestId(), request.userMessage()));

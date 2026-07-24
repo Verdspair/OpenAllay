@@ -127,10 +127,15 @@ appropriate source of truth as part of the change.
 
 ## 5. Grounding, authority, and tools
 
-- Tools are read-only unless a future accepted decision explicitly authorizes a
-  narrowly scoped write. There is no shell, arbitrary code execution, server
-  command execution, world mutation, inventory mutation, or unrestricted
-  reflection surface.
+- Tools are read-only unless an accepted decision explicitly authorizes a
+  narrowly scoped write. SKMB-2026-07-25-028 authorizes one default-off
+  experimental Rhino command bridge: when the player enables it, scripts may
+  discover the complete active Minecraft command tree and submit exact commands
+  through that player's normal Minecraft command route. It adds no OpenAllay
+  command allowlist or call cap, but Minecraft parsing, connection state, and
+  player permissions remain authoritative. There is still no shell, arbitrary
+  JVM code execution, unrestricted reflection, filesystem/network/process
+  bridge, or direct live-object access from Rhino.
 - Tool permissions live in code and server authorization checks, never in a
   prompt or Skill.
 - Every factual success must expose immutable evidence containing authority,
@@ -145,11 +150,15 @@ appropriate source of truth as part of the change.
 - Craftability is deterministic and non-recursive. Allocate overlapping
   alternatives globally, report observed allocation and missing requirements,
   and keep `conclusive=false` when recipe or inventory evidence is incomplete.
-- Do not ask the model to perform arithmetic or allocation that deterministic
-  Java code can perform.
-- Keep `openallay:find_recipes` only as a deprecated compatibility projection;
-  new workflows use resource resolution, recipe search, exact recipe lookup,
-  inventory inspection, and craftability.
+- Model-facing data access is `openallay:run_javascript` over detached,
+  evidence-bearing `mc` roots. Do not register a parallel Resource VFS or
+  legacy domain retrieval surface.
+- Reusable deterministic domain operations belong in reviewed exact-ID
+  JavaScript modules documented by a Skill. Craftability uses
+  `require("openallay:crafting")` inside the same batch program; do not expose
+  `openallay:calculate_craftability` as a second model Tool.
+- Java remains the deterministic oracle for module contract tests. Do not ask
+  the model to redo allocation arithmetic in prose.
 
 ## 6. Knowledge integrations
 

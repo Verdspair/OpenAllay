@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import dev.latvian.mods.rhino.Context;
 import dev.latvian.mods.rhino.Scriptable;
 import dev.latvian.mods.rhino.ScriptableObject;
+import dev.openallay.script.result.JavascriptResultShape;
 import java.util.List;
 import java.util.Objects;
 
@@ -17,11 +18,17 @@ public final class HostListView extends ScriptableObject {
 
     private final RhinoHostAdapter adapter;
     private final Values values;
+    private final JavascriptResultShape elementShape;
 
     private HostListView(
-            Context context, Scriptable scope, RhinoHostAdapter adapter, Values values) {
+            Context context,
+            Scriptable scope,
+            RhinoHostAdapter adapter,
+            Values values,
+            JavascriptResultShape elementShape) {
         this.adapter = Objects.requireNonNull(adapter, "adapter");
         this.values = Objects.requireNonNull(values, "values");
+        this.elementShape = elementShape;
         setParentScope(scope);
         setPrototype(ScriptableObject.getArrayPrototype(scope, context));
         preventExtensions();
@@ -32,15 +39,24 @@ public final class HostListView extends ScriptableObject {
         return new HostListView(context, scope, adapter, new Values() {
             @Override public int size() { return value.size(); }
             @Override public Object get(int index) { return value.get(index); }
-        });
+        }, null);
     }
 
     static HostListView json(
             Context context, Scriptable scope, RhinoHostAdapter adapter, JsonArray value) {
+        return json(context, scope, adapter, value, null);
+    }
+
+    static HostListView json(
+            Context context,
+            Scriptable scope,
+            RhinoHostAdapter adapter,
+            JsonArray value,
+            JavascriptResultShape elementShape) {
         return new HostListView(context, scope, adapter, new Values() {
             @Override public int size() { return value.size(); }
             @Override public Object get(int index) { return value.get(index); }
-        });
+        }, elementShape);
     }
 
     @Override
@@ -69,9 +85,12 @@ public final class HostListView extends ScriptableObject {
 
     @Override
     public Object get(Context context, int index, Scriptable start) {
-        return has(context, index, start)
+        if (!has(context, index, start)) {
+            return Scriptable.NOT_FOUND;
+        }
+        return elementShape == null
                 ? adapter.adapt(values.get(index))
-                : Scriptable.NOT_FOUND;
+                : adapter.adaptWorkspace(values.get(index), elementShape);
     }
 
     @Override

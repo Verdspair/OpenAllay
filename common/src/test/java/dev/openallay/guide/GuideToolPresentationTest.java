@@ -1,11 +1,9 @@
 package dev.openallay.guide;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.InputStreamReader;
@@ -15,117 +13,74 @@ import org.junit.jupiter.api.Test;
 
 final class GuideToolPresentationTest {
     @Test
-    void summarizesResolvedResourcesWithoutEmbeddingLocaleText() {
-        JsonObject normalized = success();
-        JsonObject value = normalized.getAsJsonObject("value");
-        JsonArray matches = new JsonArray();
-        JsonObject match = new JsonObject();
-        match.addProperty("id", "farmersdelight:apple_cider");
-        match.addProperty("kind", "item");
-        match.addProperty("displayName", "Apple Cider");
-        matches.add(match);
-        value.add("matches", matches);
-
-        List<GuideToolMessage> messages =
-                GuideToolPresentation.messages("openallay:resolve_resource", normalized);
-        assertEquals(GuideToolMessage.Key.RESOLVE_ONE, messages.getFirst().key());
-        assertEquals(
-                GuideToolMessage.of(
-                        GuideToolMessage.Key.RESOLVE_MATCH,
-                        "Apple Cider",
-                        "farmersdelight:apple_cider",
-                        "item"),
-                messages.get(1));
-        assertFalse(messages.toString().contains("normalized"));
-    }
-
-    @Test
-    void distinguishesSchemaDiscoveryAndAnalyticalResultsFromEmptySearches() {
-        JsonObject schemaResult = JsonParser.parseString("""
-                {"status":"success","value":{"matches":[],"schema":{
-                  "dataset":"items","rows":12,"fields":[{}, {}, {}]}}}
-                """).getAsJsonObject();
-        assertEquals(
-                GuideToolMessage.of(GuideToolMessage.Key.RESOLVE_SCHEMA, "3", "12", "items"),
-                GuideToolPresentation.messages("openallay:resolve_resource", schemaResult).getFirst());
-
-        JsonObject analysisResult = JsonParser.parseString("""
-                {"status":"success","value":{"matches":[],"analysis":{
-                  "sourceRows":12,"rows":[{}],"stages":[{}, {}]}}}
-                """).getAsJsonObject();
-        assertEquals(
-                GuideToolMessage.of(GuideToolMessage.Key.RESOLVE_ANALYSIS, "12", "2", "1"),
-                GuideToolPresentation.messages("openallay:resolve_resource", analysisResult).getFirst());
-    }
-
-    @Test
-    void invocationProjectionOnlyIncludesAllowlistedIdentifierLikeValues() {
-        JsonObject recipe = new JsonObject();
-        recipe.addProperty("outputItem", "minecraft:iron_block");
-        recipe.addProperty("untrusted", "sk-secret-value");
+    void onlyCurrentToolsHaveSpecialInvocationMessages() {
+        JsonObject skill = new JsonObject();
+        skill.addProperty("name", "analyze-game-data");
         assertEquals(
                 List.of(GuideToolMessage.of(
-                        GuideToolMessage.Key.INVOCATION_SEARCH_RECIPES_EXACT,
-                        "minecraft:iron_block")),
-                GuideToolInvocationPresentation.messages("openallay:search_recipes", recipe));
-
-        JsonObject natural = new JsonObject();
-        natural.addProperty("query", "sk-secret-value");
-        String projected = GuideToolInvocationPresentation
-                .messages("openallay:resolve_resource", natural)
-                .toString();
-        assertFalse(projected.contains("sk-secret-value"));
-    }
-
-    @Test
-    void unknownInvocationHasNoInventedReadOnlyActionSentence() {
-        assertTrue(GuideToolInvocationPresentation
-                .messages("openallay:unknown", new JsonObject())
-                .isEmpty());
-
-        JsonObject input = new JsonObject();
-        input.addProperty("section", "MODS");
-        assertEquals(
-                List.of(GuideToolMessage.of(
-                        GuideToolMessage.Key.INVOCATION_INSPECT_GAME_STATE_SECTION,
-                        "MODS")),
-                GuideToolInvocationPresentation.messages(
-                        "openallay:inspect_game_state", input));
-
+                        GuideToolMessage.Key.INVOCATION_LOAD_SKILL_EXACT,
+                        "analyze-game-data")),
+                GuideToolInvocationPresentation.messages("openallay:load_skill", skill));
         assertEquals(
                 List.of(GuideToolMessage.of(
                         GuideToolMessage.Key.INVOCATION_RUN_JAVASCRIPT)),
                 GuideToolInvocationPresentation.messages(
                         "openallay:run_javascript", new JsonObject()));
+        assertTrue(GuideToolInvocationPresentation
+                .messages("openallay:removed_domain_tool", new JsonObject())
+                .isEmpty());
     }
 
     @Test
-    void collapsedRecipeSummaryUsesPlayerFacingOutputName() {
-        JsonObject normalized = JsonParser.parseString("""
-                {"status":"success","value":{"recipes":[{
-                  "reference":{"sourceId":"viewer:jei","generation":"generation","recipeId":"internal:opaque/hash"},
-                  "workstation":"minecraft:crafting_table",
-                  "outputs":[{"stack":{"itemId":"minecraft:iron_block","count":1,"displayName":"Block of Iron"}}]
-                }]}}
+    void projectsJavascriptAndSkillResultsWithoutLegacyDomainNarration() {
+        JsonObject javascript = JsonParser.parseString("""
+                {"status":"success","value":{"cardinality":9,"complete":false,
+                  "preview":[{},{}]}}
                 """).getAsJsonObject();
-
-        List<GuideToolMessage> messages =
-                GuideToolPresentation.messages("openallay:search_recipes", normalized);
-
         assertEquals(
-                GuideToolMessage.of(GuideToolMessage.Key.RECIPE_ITEM, "Block of Iron"),
-                messages.get(1));
-        assertFalse(messages.toString().contains("internal:opaque"));
+                List.of(GuideToolMessage.of(
+                        GuideToolMessage.Key.ANALYSIS_PREVIEW, "2", "9")),
+                GuideToolPresentation.messages("openallay:run_javascript", javascript));
+
+        JsonObject skill = JsonParser.parseString("""
+                {"status":"success","value":{"name":"analyze-game-data",
+                  "allowedTools":["openallay:run_javascript"],"provenance":"bundled"}}
+                """).getAsJsonObject();
+        assertEquals(
+                List.of(
+                        GuideToolMessage.of(
+                                GuideToolMessage.Key.SKILL_LOADED, "analyze-game-data"),
+                        GuideToolMessage.of(
+                                GuideToolMessage.Key.SKILL_TOOLS, "1", "bundled")),
+                GuideToolPresentation.messages("openallay:load_skill", skill));
+
+        JsonObject generic = JsonParser.parseString(
+                "{\"status\":\"success\",\"value\":{\"internal\":\"not projected\"}}")
+                .getAsJsonObject();
+        assertEquals(
+                List.of(GuideToolMessage.of(GuideToolMessage.Key.RESULT_COMPLETED)),
+                GuideToolPresentation.messages("openallay:future_tool", generic));
+    }
+
+    @Test
+    void failuresUseClosedFriendlyMessages() {
+        JsonObject normalized = JsonParser.parseString(
+                "{\"status\":\"failure\",\"code\":\"stale_reference\",\"message\":\"reload\"}")
+                .getAsJsonObject();
+        assertEquals(
+                List.of(GuideToolMessage.of(
+                        GuideToolMessage.Key.FAILURE_STALE_REFERENCE)),
+                GuideToolPresentation.messages("openallay:run_javascript", normalized));
     }
 
     @Test
     void strictCodecRoundTripsClosedMessagesAndRejectsSchemaDrift() {
         List<GuideToolMessage> expected = List.of(
-                GuideToolMessage.of(GuideToolMessage.Key.RECIPE_DETAIL, "minecraft:iron_block"),
+                GuideToolMessage.of(GuideToolMessage.Key.RESULT_COMPLETED),
                 GuideToolMessage.of(
-                        GuideToolMessage.Key.RECIPE_OUTPUT,
-                        "minecraft:iron_block",
-                        "1"));
+                        GuideToolMessage.Key.ANALYSIS_PREVIEW,
+                        "2",
+                        "9"));
         assertEquals(expected, GuideToolMessageCodec.decode(GuideToolMessageCodec.encode(expected)));
 
         assertThrows(IllegalArgumentException.class, () -> GuideToolMessageCodec.decode(
@@ -156,12 +111,5 @@ final class GuideToolPresentationTest {
         } catch (Exception exception) {
             throw new AssertionError("Unable to load " + locale, exception);
         }
-    }
-
-    private static JsonObject success() {
-        JsonObject normalized = new JsonObject();
-        normalized.addProperty("status", "success");
-        normalized.add("value", new JsonObject());
-        return normalized;
     }
 }

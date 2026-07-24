@@ -16,12 +16,14 @@ public final class BundledSkillLoader {
             "diagnose-missing-recipe",
             "guide-ftb-progression",
             "inspect-game-state",
-            "search-guide-books");
+            "search-guide-books",
+            "run-game-commands");
     private static final Map<String, List<String>> SUPPORT_FILES = Map.of(
             "analyze-game-data", List.of(
                     "references/datasets.md",
                     "references/examples.md",
-                    "references/pipelines.md"));
+                    "references/pipelines.md"),
+            "run-game-commands", List.of("references/commands.md"));
 
     public List<SkillSource> load() {
         List<SkillSource> sources = new ArrayList<>();

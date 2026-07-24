@@ -3,6 +3,7 @@ package dev.openallay.guide.e2e;
 import com.google.gson.Gson;
 import dev.openallay.guide.GuideRequestSnapshot;
 import dev.openallay.guide.GuideRequestStatus;
+import dev.openallay.guide.GuideModelMode;
 import dev.openallay.guide.GuideService;
 import dev.openallay.guide.GuideServiceManager;
 import dev.openallay.guide.GuideSnapshot;
@@ -16,11 +17,11 @@ import dev.openallay.client.gui.OpenAllayScreen;
 import dev.openallay.client.gui.OpenAllaySettingsScreen;
 import dev.openallay.settings.ClientSettingsService;
 import dev.openallay.tool.ToolResult;
-import dev.openallay.tool.config.ToolFamilyId;
 import dev.openallay.recipe.RecipeProviderReadiness;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
@@ -31,6 +32,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 /**
@@ -48,6 +50,7 @@ public final class GuideClientE2EController {
     private final Set<String> secrets;
     private final Supplier<RecipeProviderReadiness> recipeReadiness;
     private final ClientSettingsService clientSettings;
+    private final BiFunction<String, UUID, java.util.Optional<String>> traceLookup;
     private final List<GuideRequestStatus> transitions = new ArrayList<>();
     private Instant startedAt;
     private UUID requestId;
@@ -64,6 +67,9 @@ public final class GuideClientE2EController {
     private int activeScreenshotTicks;
     private int activeProgressVisibleTicks;
     private boolean activeScreenshotCaptured;
+    private String pendingReport;
+    private String pendingTraceProfile;
+    private int traceWaitTicks;
 
     public GuideClientE2EController(
             GuideClientE2EConfig config,
@@ -75,7 +81,7 @@ public final class GuideClientE2EController {
             Runnable shutdown,
             Set<String> secrets) {
         this(config, loader, gameVersion, modVersion, services, gson, shutdown, secrets,
-                RecipeProviderReadiness::ready);
+                RecipeProviderReadiness::ready, null, null);
     }
 
     public GuideClientE2EController(
@@ -89,7 +95,7 @@ public final class GuideClientE2EController {
             Set<String> secrets,
             Supplier<RecipeProviderReadiness> recipeReadiness) {
         this(config, loader, gameVersion, modVersion, services, gson, shutdown, secrets,
-                recipeReadiness, null);
+                recipeReadiness, null, null);
     }
 
     public GuideClientE2EController(
@@ -103,6 +109,32 @@ public final class GuideClientE2EController {
             Set<String> secrets,
             Supplier<RecipeProviderReadiness> recipeReadiness,
             ClientSettingsService clientSettings) {
+        this(
+                config,
+                loader,
+                gameVersion,
+                modVersion,
+                services,
+                gson,
+                shutdown,
+                secrets,
+                recipeReadiness,
+                clientSettings,
+                null);
+    }
+
+    public GuideClientE2EController(
+            GuideClientE2EConfig config,
+            String loader,
+            String gameVersion,
+            String modVersion,
+            GuideServiceManager services,
+            Gson gson,
+            Runnable shutdown,
+            Set<String> secrets,
+            Supplier<RecipeProviderReadiness> recipeReadiness,
+            ClientSettingsService clientSettings,
+            BiFunction<String, UUID, java.util.Optional<String>> traceLookup) {
         this.config = java.util.Objects.requireNonNull(config, "config");
         this.loader = require(loader, "loader");
         this.gameVersion = require(gameVersion, "gameVersion");
@@ -113,6 +145,7 @@ public final class GuideClientE2EController {
         this.secrets = Set.copyOf(secrets);
         this.recipeReadiness = java.util.Objects.requireNonNull(recipeReadiness, "recipeReadiness");
         this.clientSettings = clientSettings;
+        this.traceLookup = traceLookup;
     }
 
     /** Starts exactly once after a real client player exists. */
@@ -122,6 +155,10 @@ public final class GuideClientE2EController {
             return;
         }
         if (started) {
+            if (pendingReport != null) {
+                finishWithTrace();
+                return;
+            }
             tickActiveScreenshotProbe();
             return;
         }
@@ -282,7 +319,32 @@ public final class GuideClientE2EController {
                 }
             });
         }
-        finish(new GuideE2EReportJson(gson).encode(report, secrets));
+        pendingReport = new GuideE2EReportJson(gson).encode(report, secrets);
+        pendingTraceProfile = request.modelSelection().profileId();
+        if (traceLookup == null || request.modelSelection().modelMode() != GuideModelMode.CLIENT) {
+            finish(pendingReport);
+        }
+    }
+
+    private void finishWithTrace() {
+        java.util.Optional<String> trace = traceLookup.apply(pendingTraceProfile, requestId);
+        if (trace.isPresent()) {
+            try {
+                writeAtomically(config.tracePath(), trace.orElseThrow());
+            } catch (IOException failure) {
+                failWithoutRequest(
+                        "trace_write_failed",
+                        "Unable to retain the complete Agent trace");
+                return;
+            }
+            finish(pendingReport);
+            return;
+        }
+        if (++traceWaitTicks > 200) {
+            failWithoutRequest(
+                    "trace_unavailable",
+                    "The complete Agent trace was not published");
+        }
     }
 
     private void tickScreenshotProbe() {
@@ -332,12 +394,12 @@ public final class GuideClientE2EController {
                 OpenAllaySettingsScreen settings = new OpenAllaySettingsScreen(
                         clientSettings, () -> {});
                 client.gui.setScreen(settings);
-                settings.e2eOpenTools(ToolFamilyId.RESOURCE_RESOLUTION);
+                settings.e2eOpenExtensions();
             }
             case 8 -> {
                 screenshot(client, "07-wide-tool-settings.png");
                 if (client.gui.screen() instanceof OpenAllaySettingsScreen settings) {
-                    settings.e2eScrollToolDetails(320);
+                    settings.e2eScrollExtensionDetails(320);
                 }
             }
             case 9 -> {
@@ -522,14 +584,38 @@ public final class GuideClientE2EController {
         finished = true;
         if (subscription != null) subscription.close();
         try {
-            if (config.reportPath().getParent() != null) {
-                Files.createDirectories(config.reportPath().getParent());
-            }
-            Files.writeString(config.reportPath(), report + System.lineSeparator(), StandardCharsets.UTF_8);
+            writeAtomically(config.reportPath(), report + System.lineSeparator());
         } catch (IOException exception) {
             System.err.println("Unable to write OpenAllay E2E report: " + exception.getMessage());
         }
         if (config.shutdownAfterReport()) shutdown.run();
+    }
+
+    private static void writeAtomically(java.nio.file.Path target, String value)
+            throws IOException {
+        java.nio.file.Path absolute = target.toAbsolutePath();
+        if (absolute.getParent() != null) {
+            Files.createDirectories(absolute.getParent());
+        }
+        java.nio.file.Path directory = absolute.getParent() == null
+                ? java.nio.file.Path.of(".").toAbsolutePath()
+                : absolute.getParent();
+        java.nio.file.Path temporary = Files.createTempFile(
+                directory, ".openallay-e2e-", ".tmp");
+        try {
+            Files.writeString(temporary, value, StandardCharsets.UTF_8);
+            try {
+                Files.move(
+                        temporary,
+                        absolute,
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException unsupported) {
+                Files.move(temporary, absolute, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
     }
 
     private static String sha256(String value) {

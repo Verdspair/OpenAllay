@@ -27,6 +27,7 @@ import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.bus.api.IEventBus;
 import dev.openallay.neoforge.network.NeoForgeClientBridge;
+import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.lifecycle.ClientStartedEvent;
 import net.neoforged.neoforge.client.event.lifecycle.ClientStoppingEvent;
@@ -43,6 +44,13 @@ public final class OpenAllayNeoForgeClient {
 
     public static void initialize(OpenAllayRuntime runtime, IEventBus modBus) {
         if (!REGISTERED.compareAndSet(false, true)) return;
+        NeoForge.EVENT_BUS.addListener((ClientChatReceivedEvent.System event) -> {
+            Minecraft client = Minecraft.getInstance();
+            if (!event.isOverlay() && client.player != null) {
+                runtime.commands().acceptFeedback(
+                        client.player.getUUID(), event.getMessage().getString());
+            }
+        });
         NeoForgeClientBridge bridge = new NeoForgeClientBridge();
         bridge.register(modBus);
         modBus.addListener((RegisterKeyMappingsEvent event) -> {
@@ -211,7 +219,8 @@ public final class OpenAllayNeoForgeClient {
                     client::stop,
                     secret == null || secret.isBlank() ? java.util.Set.of() : java.util.Set.of(secret),
                     contexts::recipeProviderReadiness,
-                    settings == null ? null : settings.settings());
+                    settings == null ? null : settings.settings(),
+                    modelRegistry == null ? null : modelRegistry::encodedTrace);
             NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> {
                 if (client.player != null) controller.tick(client.player.getUUID());
             });

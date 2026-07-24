@@ -2,6 +2,7 @@ package dev.openallay.guide.ui;
 
 import com.google.gson.JsonObject;
 import dev.openallay.guide.GuideSource;
+import dev.openallay.guide.GuideToolInvocationView;
 import dev.openallay.guide.GuideToolMessage;
 import dev.openallay.guide.GuideToolStatus;
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.Optional;
 public record GuideToolDetailView(
         String titleKey,
         GuideToolStatus status,
+        GuideToolInvocationView invocation,
         List<GuideDetailCard> cards,
         List<GuideToolMessage> narration,
         Optional<Debug> debug) {
@@ -20,15 +22,32 @@ public record GuideToolDetailView(
             throw new IllegalArgumentException("titleKey must not be blank");
         }
         Objects.requireNonNull(status, "status");
+        Objects.requireNonNull(invocation, "invocation");
         cards = List.copyOf(cards);
         narration = List.copyOf(narration);
         debug = Objects.requireNonNull(debug, "debug");
+    }
+
+    public GuideToolDetailView(
+            String titleKey,
+            GuideToolStatus status,
+            List<GuideDetailCard> cards,
+            List<GuideToolMessage> narration,
+            Optional<Debug> debug) {
+        this(
+                titleKey,
+                status,
+                GuideToolInvocationView.none(),
+                cards,
+                narration,
+                debug);
     }
 
     public record Debug(
             String invocationId,
             String toolId,
             List<GuideSource> sources,
+            JsonObject invocationArguments,
             JsonObject normalized,
             String validationDiagnostic) {
         public Debug {
@@ -37,8 +56,30 @@ public record GuideToolDetailView(
                 throw new IllegalArgumentException("debug identity must not be blank");
             }
             sources = List.copyOf(sources);
+            invocationArguments =
+                    invocationArguments == null ? null : invocationArguments.deepCopy();
             normalized = normalized == null ? null : normalized.deepCopy();
             validationDiagnostic = validationDiagnostic == null ? "" : validationDiagnostic;
+        }
+
+        public Debug(
+                String invocationId,
+                String toolId,
+                List<GuideSource> sources,
+                JsonObject normalized,
+                String validationDiagnostic) {
+            this(
+                    invocationId,
+                    toolId,
+                    sources,
+                    null,
+                    normalized,
+                    validationDiagnostic);
+        }
+
+        @Override
+        public JsonObject invocationArguments() {
+            return invocationArguments == null ? null : invocationArguments.deepCopy();
         }
 
         @Override

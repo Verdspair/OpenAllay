@@ -1,13 +1,13 @@
 package dev.openallay.client.gui;
 
 import dev.openallay.client.gui.settings.DiagnosticsSettingsProjection;
+import dev.openallay.client.gui.settings.ExtensionSettingsProjection;
 import dev.openallay.client.gui.settings.GeneralSettingsProjection;
 import dev.openallay.client.gui.settings.HistorySettingsProjection;
 import dev.openallay.client.gui.settings.ModelProfileDraft;
 import dev.openallay.client.gui.settings.RecipeSettingsProjection;
 import dev.openallay.client.gui.settings.SettingsLayout;
 import dev.openallay.client.gui.settings.SettingsSection;
-import dev.openallay.client.gui.settings.ToolSettingsProjection;
 import dev.openallay.client.gui.settings.SkillSettingsProjection;
 import dev.openallay.guide.e2e.GuideClientE2EConfig;
 import dev.openallay.model.config.ModelProfileDefinition;
@@ -16,8 +16,6 @@ import dev.openallay.model.config.ModelProtocol;
 import dev.openallay.model.config.SecretValue;
 import dev.openallay.model.catalog.ModelCatalog;
 import dev.openallay.model.catalog.ModelCatalogRequest;
-import dev.openallay.recipe.RecipeVisibilityPolicy;
-import dev.openallay.recipe.config.RecipeClientConfig;
 import dev.openallay.settings.ClientSettingsService;
 import dev.openallay.settings.ClientSettingsSnapshot;
 import dev.openallay.settings.SettingsNotice;
@@ -27,9 +25,6 @@ import dev.openallay.settings.diagnostics.SettingsDiagnosticsSnapshot;
 import dev.openallay.settings.model.ModelConnectionResult;
 import dev.openallay.settings.model.ModelProfileSettingsView;
 import dev.openallay.tool.ToolResult;
-import dev.openallay.tool.config.ToolFamilyConfig;
-import dev.openallay.tool.config.ToolFamilyId;
-import dev.openallay.tool.config.ToolSourceDefinition;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -41,7 +36,6 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.MultiLineEditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
@@ -71,19 +65,11 @@ public final class OpenAllaySettingsScreen extends Screen {
     private boolean draftEnabled;
     private ModelProtocol draftProtocol;
     private int editorScroll;
-    private RecipeClientConfig recipeDraft;
-    private ToolFamilyId selectedTool = ToolFamilyId.RECIPES;
-    private String selectedToolSourceId;
     private String selectedSkillName;
     private boolean skillEditing;
-    private boolean narrowToolDetail;
     private boolean narrowSkillDetail;
     private String skillDraftMarkdown = "";
     private MultiLineEditBox skillEditor;
-    private EditBox sourceDisplayName;
-    private EditBox sourceDirectory;
-    private EditBox sourceLocale;
-    private SourceDraft sourceDraft;
     private int pageScroll;
     private int pageContentHeight;
     private ClientSettingsService.HistoryConfirmationToken historyConfirmation;
@@ -112,7 +98,6 @@ public final class OpenAllaySettingsScreen extends Screen {
         this.returnToGuide = Objects.requireNonNull(returnToGuide, "returnToGuide");
         this.snapshot = service.snapshot();
         assistantNameDraft = snapshot.display().assistantName();
-        recipeDraft = snapshot.recipes().config();
         selectedSkillName = snapshot.skills().skills().isEmpty()
                 ? null
                 : snapshot.skills().skills().getFirst().metadata().name();
@@ -128,8 +113,8 @@ public final class OpenAllaySettingsScreen extends Screen {
         }
         if (section == SettingsSection.MODELS) {
             addModelsPage();
-        } else if (section == SettingsSection.TOOLS) {
-            addKnowledgePage();
+        } else if (section == SettingsSection.EXTENSIONS) {
+            addExtensionsPage();
         } else if (section == SettingsSection.SKILLS) {
             addSkillsPage();
         } else if (section == SettingsSection.GENERAL) {
@@ -164,12 +149,6 @@ public final class OpenAllaySettingsScreen extends Screen {
                 select(retained);
                 confirmation = Confirmation.NONE;
             }
-            if (!previous.recipes().config().equals(next.recipes().config())
-                    || completedReload(
-                            previous, next, SettingsOperation.Kind.RELOADING_RECIPES)) {
-                recipeDraft = next.recipes().config();
-                confirmation = Confirmation.NONE;
-            }
             if (!previous.display().equals(next.display())
                     || completedReload(
                             previous, next, SettingsOperation.Kind.RELOADING_DISPLAY)) {
@@ -196,7 +175,6 @@ public final class OpenAllaySettingsScreen extends Screen {
         service.cancelConnectionTest();
         service.cancelModelCatalog();
         historyConfirmation = null;
-        narrowToolDetail = false;
         narrowSkillDetail = false;
         skillEditing = false;
         if (listener != null) {
@@ -255,18 +233,15 @@ public final class OpenAllaySettingsScreen extends Screen {
             return true;
         }
         boolean scrollablePage = (section == SettingsSection.DIAGNOSTICS
-                        || section == SettingsSection.HISTORY)
+                        || section == SettingsSection.HISTORY
+                        || section == SettingsSection.EXTENSIONS)
                 && layout.content().contains(mouseX, mouseY);
-        boolean scrollableTools = section == SettingsSection.TOOLS
-                && layout.editor().contains(mouseX, mouseY);
-        if (scrollablePage || scrollableTools) {
+        if (scrollablePage) {
             int maximum = Math.max(0, pageContentHeight - layout.content().height() + 18);
             int replacement = net.minecraft.util.Mth.clamp(
                     pageScroll - (int) Math.round(scrollY * 24), 0, maximum);
             if (replacement != pageScroll) {
-                if (scrollableTools) captureSourceDraft();
                 pageScroll = replacement;
-                if (scrollableTools) rebuildWidgets();
             }
             return true;
         }
@@ -289,8 +264,8 @@ public final class OpenAllaySettingsScreen extends Screen {
         }
         if (section == SettingsSection.MODELS) {
             renderModels(graphics);
-        } else if (section == SettingsSection.TOOLS) {
-            renderKnowledge(graphics);
+        } else if (section == SettingsSection.EXTENSIONS) {
+            renderExtensions(graphics);
         } else if (section == SettingsSection.SKILLS) {
             renderSkills(graphics);
         } else if (section == SettingsSection.GENERAL) {
@@ -478,190 +453,30 @@ public final class OpenAllaySettingsScreen extends Screen {
                 .build());
     }
 
-    private void addKnowledgePage() {
-        if (layout.wide() || !narrowToolDetail) {
-            addToolList();
-        }
-        if (layout.wide() || narrowToolDetail) {
-            addToolDetail();
-        }
-    }
-
-    private void addToolList() {
-        SettingsLayout.Rect area = layout.wide() ? layout.list() : layout.content();
-        int x = area.x() + 7;
-        int y = area.y() + 28;
-        int width = area.width() - 14;
-        for (ToolSettingsProjection.Family family : toolProjection().families()) {
-            Button button = addRenderableWidget(OpenAllayButton.create(
-                            Component.translatable(family.titleKey()),
-                            ignored -> {
-                                captureSourceDraft();
-                                selectedTool = family.id();
-                                selectedToolSourceId = null;
-                                sourceDraft = null;
-                                pageScroll = 0;
-                                narrowToolDetail = true;
-                                rebuildWidgets();
-                            })
-                    .selected(family.id() == selectedTool)
-                    .bounds(x, y, width, 22)
-                    .build());
-            button.active = family.id() != selectedTool;
-            y += 26;
-        }
-    }
-
-    private void addToolDetail() {
-        ToolSettingsProjection.Family family = selectedToolFamily();
+    private void addExtensionsPage() {
         SettingsLayout.Rect area = layout.editor();
         int x = area.x() + 9;
-        int y = area.y() + 48 - pageScroll;
+        int y = area.y() + 48;
         int width = area.width() - 18;
-        Button enable = OpenAllayButton.create(
-                        Component.translatable(family.enabled()
-                                ? "screen.openallay.settings.tools.disable"
-                                : "screen.openallay.settings.tools.enable"),
-                        ignored -> accept(service.saveToolSettings(
-                                toolProjection().toggleTool(family.id()))))
-                .bounds(x, y, Math.max(80, (width - 4) / 2), 22)
+        ExtensionSettingsProjection extensions = extensionProjection();
+        Button commands = OpenAllayButton.create(
+                        Component.translatable(
+                                extensions.experimentalCommands()
+                                        ? "screen.openallay.settings.extensions.commands.disable"
+                                        : "screen.openallay.settings.extensions.commands.enable"),
+                        ignored -> accept(service.saveExperimentalCommands(
+                                !extensions.experimentalCommands())))
+                .bounds(x, y, width, 20)
                 .build();
-        enable.active = family.available()
-                && snapshot.operation().kind() == SettingsOperation.Kind.IDLE;
-        addToolWidget(enable, area);
-        int enableWidth = enable.getWidth();
-        Button restore = OpenAllayButton.create(
-                        Component.translatable("screen.openallay.settings.tools.restore"),
-                        ignored -> accept(service.restoreToolSettings(family.id())))
-                .bounds(x + enableWidth + 4, y, width - enableWidth - 4, 22)
-                .build();
-        restore.active = snapshot.operation().kind() == SettingsOperation.Kind.IDLE;
-        addToolWidget(restore, area);
-        y += 32;
-
-        if (family.id() == ToolFamilyId.RECIPES) {
-            int half = Math.max(80, (width - 4) / 2);
-            Button visibility = OpenAllayButton.create(
-                            Component.translatable(
-                                    recipeDraft.visibility() == RecipeVisibilityPolicy.ALL_KNOWN
-                                            ? "screen.openallay.settings.recipe.visibility_all"
-                                            : "screen.openallay.settings.recipe.visibility_unlocked"),
-                            ignored -> {
-                                recipeDraft = recipeProjection().cycleVisibility();
-                                accept(service.saveRecipeSettings(recipeDraft));
-                            })
-                    .bounds(x, y, half, 20)
-                    .build();
-            addToolWidget(visibility, area);
-            Button preferred = OpenAllayButton.create(
-                            Component.translatable(
-                                    "screen.openallay.settings.recipe.preferred",
-                                    preferredViewerLabel()),
-                            ignored -> {
-                                recipeDraft = recipeProjection().cyclePreferredViewer();
-                                accept(service.saveRecipeSettings(recipeDraft));
-                            })
-                    .bounds(x + half + 4, y, width - half - 4, 20)
-                    .build();
-            addToolWidget(preferred, area);
-            y += 30;
-        }
-
-        y += toolCardsHeight(family, width) + 8;
-
-        for (ToolSettingsProjection.Source source : family.sources()) {
-            int toggleWidth = Math.min(76, Math.max(58, width / 4));
-            Button select = OpenAllayButton.create(
-                            Component.literal(source.displayName()),
-                            ignored -> {
-                                captureSourceDraft();
-                                selectedToolSourceId = source.id();
-                                sourceDraft = null;
-                                rebuildWidgets();
-                            })
-                    .selected(source.id().equals(selectedToolSourceId))
-                    .bounds(x, y, width - toggleWidth - 4, 20)
-                    .build();
-            select.active = !source.id().equals(selectedToolSourceId);
-            addToolWidget(select, area);
-            Button toggle = OpenAllayButton.create(
-                            Component.translatable(source.enabled()
-                                    ? "screen.openallay.settings.capability.enabled"
-                                    : "screen.openallay.settings.capability.disabled"),
-                            ignored -> accept(service.saveToolSettings(
-                                    toolProjection().toggleSource(family.id(), source.id()))))
-                    .bounds(x + width - toggleWidth, y, toggleWidth, 20)
-                    .build();
-            toggle.active = source.available()
-                    && snapshot.operation().kind() == SettingsOperation.Kind.IDLE;
-            addToolWidget(toggle, area);
-            y += 24;
-        }
-
-        if (family.id() == ToolFamilyId.GUIDES) {
-            Button add = OpenAllayButton.create(
-                            Component.translatable("screen.openallay.settings.tools.source.add_local"),
-                            ignored -> addLocalMarkdownSource())
-                    .bounds(x, y + 2, Math.min(180, width), 20)
-                    .build();
-            addToolWidget(add, area);
-            y += 30;
-        }
-        int sourceEditorY = y;
-        selectedToolSource().ifPresent(
-                source -> addSourceEditor(source, x, sourceEditorY, width));
+        commands.active = snapshot.operation().kind() == SettingsOperation.Kind.IDLE;
+        commands.setTooltip(Tooltip.create(Component.translatable(
+                "screen.openallay.settings.extensions.commands.description")));
+        addRenderableWidget(commands);
         pageContentHeight = Math.max(
-                0, y + pageScroll - area.y() + (selectedToolSource().isPresent() ? 116 : 12));
-    }
-
-    private void addToolWidget(Button widget, SettingsLayout.Rect area) {
-        if (widget.getY() >= area.y() + 42 && widget.getY() + widget.getHeight() <= area.bottom()) {
-            addRenderableWidget(widget);
-        }
-    }
-
-    private void addSourceEditor(
-            ToolSettingsProjection.Source source, int x, int y, int width) {
-        if (!source.editable()) {
-            return;
-        }
-        SourceDraft retained = sourceDraft != null && sourceDraft.sourceId().equals(source.id())
-                ? sourceDraft
-                : new SourceDraft(
-                        source.id(),
-                        source.displayName(),
-                        source.config().get("directory").getAsString(),
-                        source.config().get("locale").getAsString());
-        sourceDisplayName = field(
-                x, y, width, "screen.openallay.settings.tools.source.name", retained.displayName());
-        y += 22;
-        sourceDirectory = field(
-                x,
-                y,
-                width,
-                "screen.openallay.settings.tools.source.directory",
-                retained.directory());
-        y += 22;
-        sourceLocale = field(
-                x,
-                y,
-                width,
-                "screen.openallay.settings.tools.source.locale",
-                retained.locale());
-        y += 24;
-        int half = Math.max(60, (width - 4) / 2);
-        Button save = OpenAllayButton.create(
-                        Component.translatable("screen.openallay.settings.save"),
-                        ignored -> saveSelectedSource())
-                .bounds(x, y, half, 20)
-                .build();
-        addToolWidget(save, layout.editor());
-        Button delete = OpenAllayButton.create(
-                        Component.translatable("screen.openallay.settings.delete"),
-                        ignored -> deleteSelectedSource())
-                .bounds(x + half + 4, y, width - half - 4, 20)
-                .build();
-        addToolWidget(delete, layout.editor());
+                0,
+                82
+                        + extensionRuntimeHeight(extensions.runtime(), width)
+                        + extensionCatalogHeight(extensions, width));
     }
 
     private void addSkillsPage() {
@@ -911,7 +726,8 @@ public final class OpenAllaySettingsScreen extends Screen {
                     new Action("screen.openallay.settings.cancel", this::cancel),
                     new Action("screen.openallay.settings.models.refresh", this::refreshMetadata),
                     new Action("screen.openallay.settings.done", this::onClose));
-            case TOOLS -> knowledgeActions();
+            case EXTENSIONS -> List.of(
+                    new Action("screen.openallay.settings.done", this::onClose));
             case SKILLS -> List.of(
                     new Action(
                             "screen.openallay.settings.reload",
@@ -1309,207 +1125,331 @@ public final class OpenAllaySettingsScreen extends Screen {
                 false);
     }
 
-    private void renderKnowledge(GuiGraphicsExtractor graphics) {
+    private void renderExtensions(GuiGraphicsExtractor graphics) {
         SettingsLayout.Rect area = layout.editor();
-        ToolSettingsProjection.Family family = selectedToolFamily();
         graphics.text(
                 font,
-                Component.translatable(family.titleKey()),
+                Component.translatable("screen.openallay.settings.extensions"),
                 area.x() + 10,
                 area.y() + 12,
                 ACCENT,
                 false);
         graphics.text(
                 font,
-                Component.translatable(family.descriptionKey()),
+                Component.translatable("screen.openallay.settings.extensions.description"),
                 area.x() + 10,
                 area.y() + 29,
                 MUTED,
                 false);
         graphics.enableScissor(area.x(), area.y() + 42, area.right(), area.bottom());
-        int cardsY = area.y() + (family.id() == ToolFamilyId.RECIPES ? 110 : 80) - pageScroll;
+        int cardsY = area.y() + 80 - pageScroll;
         int cardsX = area.x() + 9;
         int cardsWidth = Math.max(80, area.width() - 18);
-        for (ToolSettingsProjection.ToolCard card : family.tools()) {
-            cardsY = renderToolCard(graphics, card, cardsX, cardsY, cardsWidth) + 6;
-        }
-        int sourcesY = cardsY;
-        selectedToolSource().ifPresent(source -> {
-            int y = sourcesY + family.sources().size() * 24
-                    + (source.editable() ? 108 : 8);
-            Component sourceInfo = Component.literal(source.displayName()).copy().append(" · ")
-                    .append(Component.translatable(source.available()
-                            ? "screen.openallay.settings.tools.source.ready"
-                            : "screen.openallay.settings.tools.source.unavailable"));
-            graphics.text(font, sourceInfo, area.x() + 10, y, MUTED, false);
-            if (snapshot.display().debugMode()) {
-                graphics.text(
-                        font,
-                        Component.literal(source.id() + " · " + source.kind()),
-                        area.x() + 10,
-                        y + 11,
-                        MUTED,
-                        false);
-            }
-        });
+        ExtensionSettingsProjection projection = extensionProjection();
+        cardsY = renderExtensionRuntime(
+                graphics, projection.runtime(), cardsX, cardsY, cardsWidth);
+        renderExtensionCatalog(graphics, projection, cardsX, cardsY + 7, cardsWidth);
         graphics.disableScissor();
     }
 
-    private int renderToolCard(
+    private int renderExtensionRuntime(
             GuiGraphicsExtractor graphics,
-            ToolSettingsProjection.ToolCard card,
+            ExtensionSettingsProjection.RuntimeCard runtime,
             int x,
             int y,
             int width) {
-        int height = toolCardHeight(card, width);
+        int height = extensionRuntimeHeight(runtime, width);
         graphics.fill(x, y, x + width, y + height, PANEL_ALT);
-        graphics.outline(x, y, width, height, card.available() ? 0xFF46515F : 0xFF68484D);
+        graphics.outline(x, y, width, height, ACCENT);
         int cursor = y + 7;
-        String status = card.available()
-                ? card.enabled() ? "✓ " : "○ "
-                : "! ";
-        graphics.text(
-                font,
-                Component.literal(status).append(Component.translatable(card.titleKey())),
-                x + 7,
-                cursor,
-                card.available() ? TEXT : ERROR,
-                false);
-        cursor += 13;
         cursor = renderWrapped(
                 graphics,
-                Component.translatable(card.descriptionKey()),
+                Component.translatable(runtime.titleKey()),
                 x + 7,
                 cursor,
+                width - 14,
+                ACCENT,
+                10);
+        cursor = renderWrapped(
+                graphics,
+                Component.translatable(runtime.descriptionKey()),
+                x + 7,
+                cursor + 3,
                 width - 14,
                 MUTED,
                 10);
-        Component badges = Component.translatable(card.readOnly()
-                        ? "screen.openallay.settings.tools.read_only"
-                        : "screen.openallay.settings.tools.restricted")
-                .copy().append(" · ")
-                .append(Component.translatable(card.available()
-                        ? card.enabled()
-                                ? "screen.openallay.settings.tools.available_enabled"
-                                : "screen.openallay.settings.tools.available_disabled"
-                        : "screen.openallay.settings.tools.unavailable"));
-        graphics.text(font, badges, x + 7, cursor + 2, ACCENT, false);
-        cursor += 16;
-        cursor = renderToolFields(
+        cursor = renderWrapped(
                 graphics,
-                Component.translatable("screen.openallay.settings.tools.inputs"),
-                card.parameters().stream().map(parameter -> new ToolField(
-                        parameter.name(), parameter.label(), parameter.type(),
-                        parameter.required(), parameter.description())).toList(),
+                Component.translatable(
+                        "screen.openallay.settings.extensions.runtime.inputs",
+                        String.join(", ", runtime.parameters())),
                 x + 7,
-                cursor,
+                cursor + 3,
                 width - 14,
-                true);
-        cursor = renderToolFields(
+                MUTED,
+                10);
+        renderWrapped(
                 graphics,
-                Component.translatable("screen.openallay.settings.tools.returns"),
-                card.returns().stream().map(value -> new ToolField(
-                        value.name(), value.label(), value.type(), false, value.description())).toList(),
+                Component.translatable(
+                        "screen.openallay.settings.extensions.runtime.outputs",
+                        String.join(", ", runtime.returns())),
                 x + 7,
-                cursor,
+                cursor + 3,
                 width - 14,
-                false);
-        if (card.debug().isPresent()) {
-            cursor += 3;
-            graphics.text(
-                    font,
-                    Component.translatable("screen.openallay.settings.tools.debug"),
-                    x + 7,
-                    cursor,
-                    0xFFFFD479,
-                    false);
-            cursor += 13;
-            ToolSettingsProjection.Debug debug = card.debug().orElseThrow();
-            cursor = renderWrapped(graphics, Component.literal(
-                            "ID: " + debug.toolId() + " · alias: " + debug.modelAlias()),
-                    x + 9, cursor, width - 18, MUTED, 10);
-            cursor = renderWrapped(graphics, Component.literal(
-                            "provider: " + debug.providerId() + " · access: " + debug.access()),
-                    x + 9, cursor, width - 18, MUTED, 10);
-            cursor = renderWrapped(graphics, Component.translatable(debug.executionKey()).copy()
-                            .append(" · context: ")
-                            .append(debug.requiredContext().isEmpty()
-                                    ? "none" : String.join(", ", debug.requiredContext())),
-                    x + 9, cursor, width - 18, MUTED, 10);
-            if (debug.diagnostic() != null) {
-                cursor = renderWrapped(graphics, Component.literal(
-                                "diagnostic: " + debug.diagnostic()),
-                        x + 9, cursor, width - 18, ERROR, 10);
-            }
-            cursor = renderDebugSchema(
-                    graphics, "input schema", debug.inputSchema(), x + 9, cursor, width - 18);
-            cursor = renderDebugSchema(
-                    graphics, "output schema", debug.outputSchema(), x + 9, cursor, width - 18);
-        }
+                MUTED,
+                10);
         return y + height;
     }
 
-    private int renderToolFields(
+    private int renderExtensionCatalog(
             GuiGraphicsExtractor graphics,
-            Component heading,
-            List<ToolField> fields,
-            int x,
-            int y,
-            int width,
-            boolean showRequired) {
-        graphics.text(font, heading, x, y, ACCENT, false);
-        y += 12;
-        if (fields.isEmpty()) {
-            graphics.text(
-                    font,
-                    Component.translatable("screen.openallay.settings.tools.none"),
-                    x + 5,
-                    y,
-                    MUTED,
-                    false);
-            return y + 12;
-        }
-        for (ToolField field : fields) {
-            Component label = toolFieldLabel(field.name(), field.fallbackLabel()).copy()
-                    .append(" · " + field.type());
-            if (showRequired) {
-                label = label.copy().append(" · ").append(Component.translatable(field.required()
-                        ? "screen.openallay.settings.tools.required"
-                        : "screen.openallay.settings.tools.optional"));
-            }
-            y = renderWrapped(graphics, label, x + 5, y, width - 5, TEXT, 10);
-            if (hasToolFieldDescription(field)) {
-                y = renderWrapped(
-                        graphics,
-                        toolFieldDescription(field.name(), field.description()),
-                        x + 11,
-                        y,
-                        width - 11,
-                        MUTED,
-                        10);
-            }
-        }
-        return y + 2;
-    }
-
-    private int renderDebugSchema(
-            GuiGraphicsExtractor graphics,
-            String heading,
-            String schema,
+            ExtensionSettingsProjection projection,
             int x,
             int y,
             int width) {
-        graphics.text(font, heading, x, y, 0xFFFFD479, false);
-        y += 11;
-        if (schema.isBlank()) {
-            graphics.text(font, "unavailable", x + 4, y, MUTED, false);
-            return y + 11;
+        y = renderExtensionHeading(
+                graphics,
+                "screen.openallay.settings.extensions.modules",
+                projection.modules().size(),
+                x,
+                y);
+        if (projection.modules().isEmpty()) {
+            y = renderExtensionEmpty(graphics, x, y);
+        } else {
+            for (ExtensionSettingsProjection.ModuleCard module : projection.modules()) {
+                y = renderExtensionCard(
+                        graphics,
+                        Component.literal(module.id()),
+                        Component.translatable(
+                                "screen.openallay.settings.extensions.module.bundled"),
+                        null,
+                        x,
+                        y,
+                        width);
+            }
         }
-        for (String sourceLine : schema.split("\\R", -1)) {
-            y = renderWrapped(
-                    graphics, Component.literal(sourceLine), x + 4, y, width - 4, MUTED, 10);
+
+        y = renderExtensionHeading(
+                graphics,
+                "screen.openallay.settings.extensions.adapters",
+                projection.adapters().size(),
+                x,
+                y + 4);
+        if (projection.adapters().isEmpty()) {
+            y = renderExtensionEmpty(graphics, x, y);
+        } else {
+            for (ExtensionSettingsProjection.AdapterCard adapter : projection.adapters()) {
+                Component detail = Component.literal(adapter.summary()).copy()
+                        .append("\n")
+                        .append(Component.translatable(
+                                "screen.openallay.settings.extensions.provider",
+                                adapter.provider()));
+                String schema = schemaPreview(adapter.schema(), projection.debugMode());
+                y = renderExtensionCard(
+                        graphics,
+                        Component.literal(adapter.id()),
+                        detail,
+                        schema.isBlank() ? null : Component.literal(schema),
+                        x,
+                        y,
+                        width);
+            }
         }
-        return y + 2;
+
+        y = renderExtensionHeading(
+                graphics,
+                "screen.openallay.settings.extensions.roots",
+                projection.roots().size(),
+                x,
+                y + 4);
+        for (ExtensionSettingsProjection.RootCard root : projection.roots()) {
+            Component detail = Component.literal(root.summary()).copy()
+                    .append("\n")
+                    .append(Component.translatable(
+                            root.availability().equals("REQUEST_SCOPED")
+                                    ? "screen.openallay.settings.extensions.request_scoped"
+                                    : "screen.openallay.settings.extensions.provider",
+                            root.provider()));
+            if (projection.debugMode()) {
+                detail = detail.copy().append("\nprovider: ")
+                        .append(root.provider())
+                        .append(" · evidence: ")
+                        .append(root.evidenceOwner());
+            }
+            y = renderExtensionCard(
+                    graphics,
+                    Component.literal("mc." + root.name()),
+                    detail,
+                    Component.literal(schemaPreview(root.schema(), projection.debugMode())),
+                    x,
+                    y,
+                    width);
+        }
+        return y;
+    }
+
+    private int renderExtensionHeading(
+            GuiGraphicsExtractor graphics,
+            String key,
+            int count,
+            int x,
+            int y) {
+        graphics.text(
+                font,
+                Component.translatable(key, count),
+                x + 2,
+                y,
+                ACCENT,
+                false);
+        return y + 14;
+    }
+
+    private int renderExtensionEmpty(GuiGraphicsExtractor graphics, int x, int y) {
+        graphics.text(
+                font,
+                Component.translatable("screen.openallay.settings.extensions.none"),
+                x + 7,
+                y,
+                MUTED,
+                false);
+        return y + 16;
+    }
+
+    private int renderExtensionCard(
+            GuiGraphicsExtractor graphics,
+            Component title,
+            Component detail,
+            Component schema,
+            int x,
+            int y,
+            int width) {
+        int height = extensionCardHeight(title, detail, schema, width);
+        graphics.fill(x, y, x + width, y + height, PANEL_ALT);
+        graphics.outline(x, y, width, height, 0xFF46515F);
+        int cursor = y + 6;
+        cursor = renderWrapped(graphics, title, x + 7, cursor, width - 14, TEXT, 10);
+        cursor = renderWrapped(graphics, detail, x + 7, cursor + 2, width - 14, MUTED, 10);
+        if (schema != null) {
+            cursor = renderWrapped(
+                    graphics,
+                    Component.translatable("screen.openallay.settings.extensions.schema")
+                            .copy()
+                            .append(": ")
+                            .append(schema),
+                    x + 7,
+                    cursor + 2,
+                    width - 14,
+                    0xFFFFD479,
+                    10);
+        }
+        return y + height + 5;
+    }
+
+    private int extensionCatalogHeight(
+            ExtensionSettingsProjection projection, int width) {
+        int height = 14;
+        if (projection.modules().isEmpty()) {
+            height += 16;
+        } else {
+            for (ExtensionSettingsProjection.ModuleCard module : projection.modules()) {
+                height += extensionCardHeight(
+                                Component.literal(module.id()),
+                                Component.translatable(
+                                        "screen.openallay.settings.extensions.module.bundled"),
+                                null,
+                                width)
+                        + 5;
+            }
+        }
+        height += 18;
+        if (projection.adapters().isEmpty()) {
+            height += 16;
+        } else {
+            for (ExtensionSettingsProjection.AdapterCard adapter : projection.adapters()) {
+                Component detail = Component.literal(adapter.summary()).copy()
+                        .append("\n")
+                        .append(Component.translatable(
+                                "screen.openallay.settings.extensions.provider",
+                                adapter.provider()));
+                String schema = schemaPreview(adapter.schema(), projection.debugMode());
+                height += extensionCardHeight(
+                                Component.literal(adapter.id()),
+                                detail,
+                                schema.isBlank() ? null : Component.literal(schema),
+                                width)
+                        + 5;
+            }
+        }
+        height += 18;
+        for (ExtensionSettingsProjection.RootCard root : projection.roots()) {
+            Component detail = Component.literal(root.summary()).copy()
+                    .append("\n")
+                    .append(Component.translatable(
+                            root.availability().equals("REQUEST_SCOPED")
+                                    ? "screen.openallay.settings.extensions.request_scoped"
+                                    : "screen.openallay.settings.extensions.provider",
+                            root.provider()));
+            if (projection.debugMode()) {
+                detail = detail.copy().append("\nprovider: ")
+                        .append(root.provider())
+                        .append(" · evidence: ")
+                        .append(root.evidenceOwner());
+            }
+            height += extensionCardHeight(
+                            Component.literal("mc." + root.name()),
+                            detail,
+                            Component.literal(schemaPreview(
+                                    root.schema(), projection.debugMode())),
+                            width)
+                    + 5;
+        }
+        return height;
+    }
+
+    private int extensionCardHeight(
+            Component title, Component detail, Component schema, int width) {
+        int inner = Math.max(20, width - 14);
+        int height = 12
+                + wrappedHeight(title, inner, 10)
+                + wrappedHeight(detail, inner, 10);
+        if (schema != null) {
+            height += 2 + wrappedHeight(
+                    Component.translatable("screen.openallay.settings.extensions.schema")
+                            .copy()
+                            .append(": ")
+                            .append(schema),
+                    inner,
+                    10);
+        }
+        return height;
+    }
+
+    private int extensionRuntimeHeight(
+            ExtensionSettingsProjection.RuntimeCard runtime, int width) {
+        int inner = Math.max(20, width - 14);
+        return 18
+                + wrappedHeight(Component.translatable(runtime.titleKey()), inner, 10)
+                + wrappedHeight(Component.translatable(runtime.descriptionKey()), inner, 10)
+                + wrappedHeight(Component.translatable(
+                                "screen.openallay.settings.extensions.runtime.inputs",
+                                String.join(", ", runtime.parameters())),
+                        inner,
+                        10)
+                + wrappedHeight(Component.translatable(
+                                "screen.openallay.settings.extensions.runtime.outputs",
+                                String.join(", ", runtime.returns())),
+                        inner,
+                        10);
+    }
+
+    private static String schemaPreview(String schema, boolean debugMode) {
+        if (schema == null || schema.isBlank()) {
+            return "";
+        }
+        int maximum = debugMode ? 2_000 : 260;
+        return schema.length() <= maximum
+                ? schema
+                : schema.substring(0, maximum - 1) + "…";
     }
 
     private int renderWrapped(
@@ -1527,96 +1467,9 @@ public final class OpenAllaySettingsScreen extends Screen {
         return y;
     }
 
-    private Component toolFieldLabel(String name, String fallback) {
-        String key = "screen.openallay.settings.tools.field." + name;
-        return Language.getInstance().has(key) ? Component.translatable(key) : Component.literal(fallback);
-    }
-
-    private Component toolFieldDescription(String name, String fallback) {
-        String key = "screen.openallay.settings.tools.field." + name + ".description";
-        return Language.getInstance().has(key) ? Component.translatable(key) : Component.literal(fallback);
-    }
-
-    private boolean hasToolFieldDescription(ToolField field) {
-        return !field.description().isBlank()
-                || Language.getInstance().has(
-                        "screen.openallay.settings.tools.field." + field.name() + ".description");
-    }
-
-    private int toolCardsHeight(ToolSettingsProjection.Family family, int width) {
-        return family.tools().stream().mapToInt(card -> toolCardHeight(card, width) + 6).sum();
-    }
-
-    private int toolCardHeight(ToolSettingsProjection.ToolCard card, int width) {
-        int inner = Math.max(20, width - 14);
-        int height = 7 + 13
-                + wrappedHeight(Component.translatable(card.descriptionKey()), inner, 10)
-                + 16;
-        height += toolFieldsHeight(card.parameters().stream().map(parameter -> new ToolField(
-                parameter.name(), parameter.label(), parameter.type(),
-                parameter.required(), parameter.description())).toList(), inner, true);
-        height += toolFieldsHeight(card.returns().stream().map(value -> new ToolField(
-                value.name(), value.label(), value.type(), false, value.description())).toList(), inner, false);
-        if (card.debug().isPresent()) {
-            ToolSettingsProjection.Debug debug = card.debug().orElseThrow();
-            height += 16;
-            height += wrappedHeight(Component.literal(
-                    "ID: " + debug.toolId() + " · alias: " + debug.modelAlias()), inner - 4, 10);
-            height += wrappedHeight(Component.literal(
-                    "provider: " + debug.providerId() + " · access: " + debug.access()), inner - 4, 10);
-            height += wrappedHeight(Component.translatable(debug.executionKey()).copy()
-                    .append(" · context: ")
-                    .append(debug.requiredContext().isEmpty()
-                            ? "none" : String.join(", ", debug.requiredContext())), inner - 4, 10);
-            if (debug.diagnostic() != null) {
-                height += wrappedHeight(
-                        Component.literal("diagnostic: " + debug.diagnostic()), inner - 4, 10);
-            }
-            height += debugSchemaHeight(debug.inputSchema(), inner - 4);
-            height += debugSchemaHeight(debug.outputSchema(), inner - 4);
-        }
-        return height + 7;
-    }
-
-    private int toolFieldsHeight(List<ToolField> fields, int width, boolean showRequired) {
-        int height = 12;
-        if (fields.isEmpty()) return height + 12;
-        for (ToolField field : fields) {
-            Component label = toolFieldLabel(field.name(), field.fallbackLabel()).copy()
-                    .append(" · " + field.type());
-            if (showRequired) {
-                label = label.copy().append(" · ").append(Component.translatable(field.required()
-                        ? "screen.openallay.settings.tools.required"
-                        : "screen.openallay.settings.tools.optional"));
-            }
-            height += wrappedHeight(label, width - 5, 10);
-            if (hasToolFieldDescription(field)) {
-                height += wrappedHeight(
-                        toolFieldDescription(field.name(), field.description()), width - 11, 10);
-            }
-        }
-        return height + 2;
-    }
-
-    private int debugSchemaHeight(String schema, int width) {
-        int height = 11;
-        if (schema.isBlank()) return height + 11;
-        for (String line : schema.split("\\R", -1)) {
-            height += wrappedHeight(Component.literal(line), width - 4, 10);
-        }
-        return height + 2;
-    }
-
     private int wrappedHeight(Component text, int width, int lineHeight) {
         return Math.max(1, font.split(text, Math.max(20, width)).size()) * lineHeight;
     }
-
-    private record ToolField(
-            String name,
-            String fallbackLabel,
-            String type,
-            boolean required,
-            String description) {}
 
     private void renderSkills(GuiGraphicsExtractor graphics) {
         SettingsLayout.Rect area = layout.editor();
@@ -1709,14 +1562,6 @@ public final class OpenAllaySettingsScreen extends Screen {
                 && next.notice().level() == SettingsNotice.Level.SUCCESS;
     }
 
-    private List<Action> knowledgeActions() {
-        return List.of(
-                new Action(
-                        "screen.openallay.settings.reload",
-                        () -> accept(service.reloadToolSettings(selectedTool, true))),
-                new Action("screen.openallay.settings.done", this::onClose));
-    }
-
     private void saveCurrent() {
         confirmation = Confirmation.NONE;
         if (section == SettingsSection.MODELS) {
@@ -1739,12 +1584,6 @@ public final class OpenAllaySettingsScreen extends Screen {
     }
 
     private void backOrClose() {
-        if (!layout.wide() && section == SettingsSection.TOOLS && narrowToolDetail) {
-            narrowToolDetail = false;
-            selectedToolSourceId = null;
-            rebuildWidgets();
-            return;
-        }
         if (!layout.wide() && section == SettingsSection.SKILLS && narrowSkillDetail) {
             narrowSkillDetail = false;
             skillEditing = false;
@@ -1831,134 +1670,21 @@ public final class OpenAllaySettingsScreen extends Screen {
         };
     }
 
-    private ToolSettingsProjection toolProjection() {
-        return ToolSettingsProjection.from(snapshot.tools(), snapshot.display().debugMode());
+    private ExtensionSettingsProjection extensionProjection() {
+        return ExtensionSettingsProjection.from(
+                snapshot.extensions(),
+                snapshot.experimentalCommands(),
+                snapshot.display().debugMode());
     }
 
     private SkillSettingsProjection skillProjection() {
         return SkillSettingsProjection.from(snapshot.skills(), snapshot.display().debugMode());
     }
 
-    private ToolSettingsProjection.Family selectedToolFamily() {
-        return toolProjection().find(selectedTool).orElseGet(() -> {
-            selectedTool = ToolFamilyId.RECIPES;
-            return toolProjection().find(selectedTool).orElseThrow();
-        });
-    }
-
-    private Optional<ToolSettingsProjection.Source> selectedToolSource() {
-        if (selectedToolSourceId == null) {
-            return Optional.empty();
-        }
-        return selectedToolFamily().sources().stream()
-                .filter(source -> source.id().equals(selectedToolSourceId))
-                .findFirst();
-    }
-
     private Optional<SkillSettingsProjection.Skill> selectedSkill() {
         return selectedSkillName == null
                 ? Optional.empty()
                 : skillProjection().find(selectedSkillName);
-    }
-
-    private void addLocalMarkdownSource() {
-        ToolSettingsProjection.Family guides =
-                toolProjection().find(ToolFamilyId.GUIDES).orElseThrow();
-        int suffix = 1;
-        String shortName = "notes";
-        while (containsSource(guides, "user:" + shortName)) {
-            shortName = "notes-" + ++suffix;
-        }
-        com.google.gson.JsonObject config = new com.google.gson.JsonObject();
-        config.addProperty("directory", shortName);
-        config.addProperty("locale", "zh_cn");
-        List<ToolSourceDefinition> sources = new ArrayList<>();
-        for (ToolSettingsProjection.Source source : guides.sources()) {
-            sources.add(new ToolSourceDefinition(
-                    source.id(),
-                    source.kind(),
-                    source.displayName(),
-                    source.enabled(),
-                    source.config(),
-                    source.lifecycle()));
-        }
-        ToolSourceDefinition created = new ToolSourceDefinition(
-                "user:" + shortName,
-                "local_markdown",
-                Component.translatable("screen.openallay.settings.tools.source.local_default")
-                        .getString(),
-                true,
-                config,
-                ToolSourceDefinition.Lifecycle.USER);
-        sources.add(created);
-        selectedToolSourceId = created.sourceId();
-        accept(service.saveToolSettings(new ToolFamilyConfig(
-                ToolFamilyConfig.SCHEMA_VERSION,
-                ToolFamilyId.GUIDES,
-                guides.enabled(),
-                sources)));
-    }
-
-    private static boolean containsSource(
-            ToolSettingsProjection.Family family, String sourceId) {
-        return family.sources().stream().anyMatch(source -> source.id().equals(sourceId));
-    }
-
-    private void saveSelectedSource() {
-        ToolSettingsProjection.Source selected = selectedToolSource().orElse(null);
-        if (selected == null || !selected.editable()) {
-            return;
-        }
-        com.google.gson.JsonObject config = new com.google.gson.JsonObject();
-        config.addProperty("directory", sourceDirectory.getValue().strip());
-        config.addProperty("locale", sourceLocale.getValue().strip().toLowerCase(java.util.Locale.ROOT));
-        List<ToolSourceDefinition> sources = new ArrayList<>();
-        for (ToolSettingsProjection.Source source : selectedToolFamily().sources()) {
-            sources.add(source.id().equals(selected.id())
-                    ? new ToolSourceDefinition(
-                            source.id(),
-                            source.kind(),
-                            sourceDisplayName.getValue().strip(),
-                            source.enabled(),
-                            config,
-                            source.lifecycle())
-                    : new ToolSourceDefinition(
-                            source.id(),
-                            source.kind(),
-                            source.displayName(),
-                            source.enabled(),
-                            source.config(),
-                            source.lifecycle()));
-        }
-        accept(service.saveToolSettings(new ToolFamilyConfig(
-                ToolFamilyConfig.SCHEMA_VERSION,
-                selectedTool,
-                selectedToolFamily().enabled(),
-                sources)));
-    }
-
-    private void deleteSelectedSource() {
-        ToolSettingsProjection.Source selected = selectedToolSource().orElse(null);
-        if (selected == null || !selected.deletable()) {
-            return;
-        }
-        List<ToolSourceDefinition> sources = selectedToolFamily().sources().stream()
-                .filter(source -> !source.id().equals(selected.id()))
-                .map(source -> new ToolSourceDefinition(
-                        source.id(),
-                        source.kind(),
-                        source.displayName(),
-                        source.enabled(),
-                        source.config(),
-                        source.lifecycle()))
-                .toList();
-        selectedToolSourceId = null;
-        sourceDraft = null;
-        accept(service.saveToolSettings(new ToolFamilyConfig(
-                ToolFamilyConfig.SCHEMA_VERSION,
-                selectedTool,
-                selectedToolFamily().enabled(),
-                sources)));
     }
 
     private void saveSkillOverride() {
@@ -1969,28 +1695,6 @@ public final class OpenAllaySettingsScreen extends Screen {
         skillEditing = false;
         accept(service.saveSkillOverride(selected.name(), skillDraftMarkdown));
         skillDraftMarkdown = "";
-    }
-
-    private RecipeSettingsProjection recipeProjection() {
-        return RecipeSettingsProjection.from(
-                snapshot.recipes(), recipeDraft, snapshot.display().debugMode());
-    }
-
-    private Component preferredViewerLabel() {
-        if (RecipeClientConfig.AUTO.equals(recipeDraft.preferredViewer())) {
-            return Component.translatable("screen.openallay.settings.recipe.preferred_auto");
-        }
-        return recipeProjection().sources().stream()
-                .filter(source -> source.actionId().equals(recipeDraft.preferredViewer()))
-                .findFirst()
-                .<Component>map(source -> friendlyTitle(
-                        source.titleKey(), "screen.openallay.settings.recipe.source.other"))
-                .orElseGet(() -> Component.translatable(
-                        "screen.openallay.settings.recipe.preferred_unavailable"));
-    }
-
-    private static Component friendlyTitle(String titleKey, String fallbackKey) {
-        return Component.translatable(Language.getInstance().has(titleKey) ? titleKey : fallbackKey);
     }
 
     private void save() {
@@ -2248,7 +1952,6 @@ public final class OpenAllaySettingsScreen extends Screen {
         pageScroll = 0;
         pageContentHeight = 0;
         historyConfirmation = null;
-        narrowToolDetail = false;
         narrowSkillDetail = false;
         skillEditing = false;
         skillDraftMarkdown = "";
@@ -2323,22 +2026,6 @@ public final class OpenAllaySettingsScreen extends Screen {
         if (section == SettingsSection.GENERAL && assistantName != null) {
             assistantNameDraft = assistantName.getValue();
         }
-        captureSourceDraft();
-    }
-
-    private void captureSourceDraft() {
-        if (section != SettingsSection.TOOLS
-                || selectedToolSourceId == null
-                || sourceDisplayName == null
-                || sourceDirectory == null
-                || sourceLocale == null) {
-            return;
-        }
-        sourceDraft = new SourceDraft(
-                selectedToolSourceId,
-                sourceDisplayName.getValue(),
-                sourceDirectory.getValue(),
-                sourceLocale.getValue());
     }
 
     private void cycleProtocol() {
@@ -2409,20 +2096,10 @@ public final class OpenAllaySettingsScreen extends Screen {
     }
 
     /** Screenshot-harness navigation only; inert in every normal client launch. */
-    public void e2eOpenTools() {
-        e2eOpenTools(ToolFamilyId.GAME_CONTEXT);
-    }
-
-    /** Screenshot-harness navigation only; does not save or mutate Tool policy. */
-    public void e2eOpenTools(ToolFamilyId family) {
+    public void e2eOpenExtensions() {
         requireE2eControls();
-        Objects.requireNonNull(family, "family");
         captureDraft();
-        section = SettingsSection.TOOLS;
-        selectedTool = family;
-        selectedToolSourceId = null;
-        sourceDraft = null;
-        narrowToolDetail = true;
+        section = SettingsSection.EXTENSIONS;
         pageScroll = 0;
         pageContentHeight = 0;
         rebuildWidgets();
@@ -2452,12 +2129,11 @@ public final class OpenAllaySettingsScreen extends Screen {
     }
 
     /** Positive pixels move the Tool detail down; intended for retained screenshot coverage. */
-    public void e2eScrollToolDetails(int pixels) {
+    public void e2eScrollExtensionDetails(int pixels) {
         requireE2eControls();
-        if (section != SettingsSection.TOOLS || layout == null) {
-            throw new IllegalStateException("E2E Tool details are not open");
+        if (section != SettingsSection.EXTENSIONS || layout == null) {
+            throw new IllegalStateException("E2E Extension details are not open");
         }
-        captureSourceDraft();
         int maximum = Math.max(0, pageContentHeight - layout.content().height() + 18);
         pageScroll = net.minecraft.util.Mth.clamp(pageScroll + pixels, 0, maximum);
         rebuildWidgets();
@@ -2494,10 +2170,12 @@ public final class OpenAllaySettingsScreen extends Screen {
                         snapshot.recipes(),
                         snapshot.recipes().config(),
                         snapshot.display().debugMode()),
-                ToolSettingsProjection.from(
-                        snapshot.tools(), snapshot.display().debugMode()),
                 SkillSettingsProjection.from(
                         snapshot.skills(), snapshot.display().debugMode()),
+                ExtensionSettingsProjection.from(
+                        snapshot.extensions(),
+                        snapshot.experimentalCommands(),
+                        snapshot.display().debugMode()),
                 HistorySettingsProjection.from(
                         snapshot.history(),
                         snapshot.display().debugMode(),
@@ -2512,8 +2190,8 @@ public final class OpenAllaySettingsScreen extends Screen {
             List<ModelCard> models,
             GeneralSettingsProjection general,
             RecipeSettingsProjection recipes,
-            ToolSettingsProjection tools,
             SkillSettingsProjection skills,
+            ExtensionSettingsProjection extensions,
             HistorySettingsProjection history,
             DiagnosticsSettingsProjection diagnostics,
             SettingsOperation operation,
@@ -2523,8 +2201,8 @@ public final class OpenAllaySettingsScreen extends Screen {
             models = List.copyOf(models);
             Objects.requireNonNull(general, "general");
             Objects.requireNonNull(recipes, "recipes");
-            Objects.requireNonNull(tools, "tools");
             Objects.requireNonNull(skills, "skills");
+            Objects.requireNonNull(extensions, "extensions");
             Objects.requireNonNull(history, "history");
             Objects.requireNonNull(diagnostics, "diagnostics");
         }
@@ -2541,8 +2219,6 @@ public final class OpenAllaySettingsScreen extends Screen {
 
     private record Action(String translationKey, Runnable action) {}
 
-    private record SourceDraft(
-            String sourceId, String displayName, String directory, String locale) {}
 
     private enum Confirmation {
         NONE,

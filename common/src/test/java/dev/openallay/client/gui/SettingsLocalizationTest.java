@@ -18,7 +18,7 @@ final class SettingsLocalizationTest {
             "screen.openallay.settings.short",
             "screen.openallay.settings.general",
             "screen.openallay.settings.models",
-            "screen.openallay.settings.tools",
+            "screen.openallay.settings.extensions",
             "screen.openallay.settings.skills",
             "screen.openallay.settings.knowledge",
             "screen.openallay.settings.history",
@@ -70,11 +70,9 @@ final class SettingsLocalizationTest {
             "screen.openallay.settings.recipe.visibility_unlocked",
             "screen.openallay.settings.recipe.preferred_auto",
             "screen.openallay.settings.recipe.source.minecraft_client_recipe_book",
-            "openallay.settings.tools.recipes.title",
-            "openallay.settings.tools.guides.description",
-            "screen.openallay.settings.tools.source.add_local",
+            "screen.openallay.settings.extensions.runtime.title",
+            "screen.openallay.settings.extensions.runtime.description",
             "screen.openallay.settings.skills.create_override",
-            "settings.openallay.capability.tool.openallay_recipes.title",
             "settings.openallay.capability.skill.search_guide_books.description");
 
     @Test

@@ -30,6 +30,8 @@ import java.util.concurrent.Executor;
  * Loader code owns client-thread marshalling in the supplied context provider.
  */
 public final class ClientToolExecutionEndpoint {
+    public static final String EXPERIMENTAL_COMMANDS_CAPABILITY =
+            "openallay:capability/experimental_commands";
     @FunctionalInterface
     public interface ContextProvider {
         CompletableFuture<ToolInvocationContext> capture(
@@ -90,17 +92,30 @@ public final class ClientToolExecutionEndpoint {
             return new ToolResult.Failure<>("invalid_session", "Invalid Agent session ID");
         }
         java.util.Objects.requireNonNull(frozenTools, "frozenTools");
-        List<String> exported = frozenTools.descriptors().stream()
-                .filter(descriptor -> descriptor.access() == ToolAccess.READ_ONLY)
+        java.util.ArrayList<String> exported = new java.util.ArrayList<>(
+                frozenTools.descriptors().stream()
+                .filter(descriptor -> descriptor.access() == ToolAccess.READ_ONLY
+                        || descriptor.access() == ToolAccess.EXPERIMENTAL_ACTION)
                 .map(descriptor -> descriptor.id())
                 .sorted()
-                .toList();
-        RequestState state = new RequestState(sessionId, frozenTools, Set.copyOf(exported));
+                .toList());
+        frozenTools.find("openallay:run_javascript")
+                .filter(dev.openallay.tool.builtin.RunJavascriptTool.class::isInstance)
+                .map(dev.openallay.tool.builtin.RunJavascriptTool.class::cast)
+                .filter(tool -> tool.freezeCommandCapability(requestId.toString()))
+                .ifPresent(ignored -> exported.add(EXPERIMENTAL_COMMANDS_CAPABILITY));
+        RequestState state = new RequestState(
+                sessionId,
+                frozenTools,
+                exported.stream()
+                        .filter(id -> !id.equals(EXPERIMENTAL_COMMANDS_CAPABILITY))
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet()));
         if (requests.putIfAbsent(requestId, state) != null) {
             return new ToolResult.Failure<>(
                     "duplicate_request", "Client Tool request ID is already active");
         }
-        return new ToolResult.Success<>(new OpenedRequest(requestId, sessionId, exported));
+        return new ToolResult.Success<>(
+                new OpenedRequest(requestId, sessionId, List.copyOf(exported)));
     }
 
     public ToolResult<VoidResult> handle(ClientToolCallPayload payload) {
@@ -118,7 +133,9 @@ public final class ClientToolExecutionEndpoint {
         Tool<?, ?> tool = request.exported.contains(payload.toolId())
                 ? request.tools.find(payload.toolId()).orElse(null)
                 : null;
-        if (tool == null || tool.descriptor().access() != ToolAccess.READ_ONLY) {
+        if (tool == null
+                || (tool.descriptor().access() != ToolAccess.READ_ONLY
+                        && tool.descriptor().access() != ToolAccess.EXPERIMENTAL_ACTION)) {
             sendFailure(payload, "client_tool_unavailable", "Client Tool is absent or disabled");
             return new ToolResult.Failure<>(
                     "client_tool_unavailable", "Client Tool is absent or disabled");

@@ -1,7 +1,6 @@
 package dev.openallay;
 
 import com.google.gson.Gson;
-import dev.openallay.capability.CapabilityChildPage;
 import dev.openallay.capability.CapabilityKind;
 import dev.openallay.capability.CapabilitySettingsCatalog;
 import dev.openallay.capability.CapabilitySettingsDescriptor;
@@ -17,19 +16,20 @@ import dev.openallay.skill.SkillParser;
 import dev.openallay.skill.SkillRepository;
 import dev.openallay.tool.ToolRegistry;
 import dev.openallay.tool.Tool;
-import dev.openallay.tool.builtin.CalculateCraftabilityTool;
 import dev.openallay.tool.builtin.RunJavascriptTool;
 import dev.openallay.script.RhinoJavascriptRuntime;
 import dev.openallay.script.data.MinecraftAgentHostGraph;
 import dev.openallay.script.workspace.AgentResultWorkspaceRegistry;
 import dev.openallay.script.workspace.JavascriptResultPresenter;
 import dev.openallay.script.extension.JavascriptDataModuleRegistry;
+import dev.openallay.script.command.CommandCapabilityRuntime;
 import dev.openallay.trace.json.TraceParser;
 import dev.openallay.trace.minecraft.TraceReplayService;
 import dev.openallay.trace.minecraft.TraceRepository;
 import dev.openallay.trace.replay.AgentTraceReplayer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public final class OpenAllayBootstrap {
     private static OpenAllayRuntime runtime;
@@ -48,11 +48,17 @@ public final class OpenAllayBootstrap {
         KnowledgeRegistry knowledge = new KnowledgeRegistry();
         JavascriptDataModuleRegistry javascriptModules =
                 new JavascriptDataModuleRegistry();
+        CommandCapabilityRuntime commands = new CommandCapabilityRuntime();
         ToolRegistry tools = new ToolRegistry();
         tools.register(
                 "openallay:builtins",
                 builtinTools(
-                        platform, gson, javascriptWorkspaces, knowledge, javascriptModules));
+                        platform,
+                        gson,
+                        javascriptWorkspaces,
+                        knowledge,
+                        javascriptModules,
+                        commands));
         PatchouliMultiblockStore patchouliMultiblocks = new PatchouliMultiblockStore();
         SkillRepository skills = new SkillRepository(
                 new SkillParser(),
@@ -64,6 +70,7 @@ public final class OpenAllayBootstrap {
         if (!skills.reload(new BundledSkillLoader().load(), installedSkillMods)) {
             OpenAllayConstants.LOGGER.warn("Bundled Skill validation failed: {}", skills.diagnostics());
         }
+        skills.setRuntimeDisabledSkills(Set.of("run-game-commands"));
         tools.register("openallay:skills", List.of(new LoadSkillTool(skills)));
         TraceReplayService traceReplay = new TraceReplayService(
                 new TraceRepository(new TraceParser()),
@@ -76,6 +83,7 @@ public final class OpenAllayBootstrap {
                 knowledge,
                 patchouliMultiblocks,
                 javascriptModules,
+                commands,
                 skills,
                 new DevelopmentToolInspector(tools),
                 traceReplay,
@@ -91,22 +99,17 @@ public final class OpenAllayBootstrap {
             ToolRegistry tools, SkillRepository skills) {
         CapabilitySettingsCatalog catalog = new CapabilitySettingsCatalog();
         List<CapabilitySettingsDescriptor> descriptors = new ArrayList<>();
-        descriptors.add(descriptor("patchouli", CapabilityKind.KNOWLEDGE_SOURCE, "source", null));
-        descriptors.add(descriptor("ftbquests", CapabilityKind.KNOWLEDGE_SOURCE, "source", null));
-        descriptors.add(descriptor(
-                "openallay:recipes",
-                CapabilityKind.TOOL,
-                "tool",
-                new CapabilityChildPage("openallay:recipe_settings")));
+        descriptors.add(descriptor("patchouli", CapabilityKind.KNOWLEDGE_SOURCE, "source"));
+        descriptors.add(descriptor("ftbquests", CapabilityKind.KNOWLEDGE_SOURCE, "source"));
         tools.registrations().stream()
                 .filter(registration -> !registration.tool().descriptor().id()
                         .equals("openallay:load_skill"))
                 .map(registration -> descriptor(
-                        registration.tool().descriptor().id(), CapabilityKind.TOOL, "tool", null))
+                        registration.tool().descriptor().id(), CapabilityKind.TOOL, "tool"))
                 .forEach(descriptors::add);
         skills.metadata().stream()
                 .map(metadata -> descriptor(
-                        metadata.name(), CapabilityKind.SKILL, "skill", null))
+                        metadata.name(), CapabilityKind.SKILL, "skill"))
                 .forEach(descriptors::add);
         catalog.register("openallay:core", descriptors);
         return catalog;
@@ -115,12 +118,11 @@ public final class OpenAllayBootstrap {
     private static CapabilitySettingsDescriptor descriptor(
             String id,
             CapabilityKind kind,
-            String keyKind,
-            CapabilityChildPage childPage) {
+            String keyKind) {
         String keyId = id.replace(':', '_').replace('/', '_').replace('-', '_');
         String prefix = "settings.openallay.capability." + keyKind + "." + keyId;
         return new CapabilitySettingsDescriptor(
-                id, kind, prefix + ".title", prefix + ".description", childPage);
+                id, kind, prefix + ".title", prefix + ".description", null);
     }
 
     static List<Tool<?, ?>> builtinTools(PlatformService platform) {
@@ -145,7 +147,8 @@ public final class OpenAllayBootstrap {
                 gson,
                 javascriptWorkspaces,
                 knowledge,
-                new JavascriptDataModuleRegistry());
+                new JavascriptDataModuleRegistry(),
+                new CommandCapabilityRuntime());
     }
 
     static List<Tool<?, ?>> builtinTools(
@@ -154,13 +157,28 @@ public final class OpenAllayBootstrap {
             AgentResultWorkspaceRegistry javascriptWorkspaces,
             KnowledgeRegistry knowledge,
             JavascriptDataModuleRegistry javascriptModules) {
-        return List.of(
-                new RunJavascriptTool(
-                        new RhinoJavascriptRuntime(),
-                        context -> new MinecraftAgentHostGraph(
-                                context, knowledge::snapshot, javascriptModules),
-                        javascriptWorkspaces,
-                        new JavascriptResultPresenter()),
-                new CalculateCraftabilityTool());
+        return builtinTools(
+                platform,
+                gson,
+                javascriptWorkspaces,
+                knowledge,
+                javascriptModules,
+                new CommandCapabilityRuntime());
+    }
+
+    static List<Tool<?, ?>> builtinTools(
+            PlatformService platform,
+            Gson gson,
+            AgentResultWorkspaceRegistry javascriptWorkspaces,
+            KnowledgeRegistry knowledge,
+            JavascriptDataModuleRegistry javascriptModules,
+            CommandCapabilityRuntime commands) {
+        return List.of(new RunJavascriptTool(
+                new RhinoJavascriptRuntime(),
+                context -> new MinecraftAgentHostGraph(
+                        context, knowledge::snapshot, javascriptModules),
+                javascriptWorkspaces,
+                new JavascriptResultPresenter(),
+                commands));
     }
 }

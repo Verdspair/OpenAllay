@@ -76,10 +76,6 @@ public final class ClientPlacedToolExecutor implements AgentToolExecutor {
                 ? Optional.empty()
                 : remote.canonicalToolId(REMOTE_PREFIX + modelToolName);
         if (localId.isPresent()) {
-            if (remoteId.equals(localId) && useRemote(localId.orElseThrow(), arguments)) {
-                return remote.execute(
-                        REMOTE_PREFIX + modelToolName, arguments, context, cancellation);
-            }
             return local.execute(modelToolName, arguments, context, cancellation);
         }
         if (remoteId.isPresent()) {
@@ -92,15 +88,6 @@ public final class ClientPlacedToolExecutor implements AgentToolExecutor {
         normalized.addProperty("message", "Tool is unavailable in this request");
         return CompletableFuture.completedFuture(
                 new AgentToolResult(UNKNOWN_TOOL_ID, normalized, true));
-    }
-
-    private static boolean useRemote(String toolId, JsonObject arguments) {
-        if (!toolId.equals("openallay:inspect_game_state") || arguments == null) {
-            return false;
-        }
-        return arguments.has("section")
-                && arguments.get("section").isJsonPrimitive()
-                && arguments.get("section").getAsString().equalsIgnoreCase("WORLD_QUERY");
     }
 
     private static String withoutRemotePrefix(String name) {

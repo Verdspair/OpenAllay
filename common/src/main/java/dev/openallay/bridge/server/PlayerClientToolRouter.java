@@ -66,7 +66,8 @@ public final class PlayerClientToolRouter {
             ToolRegistry tools, Gson gson, Transport transport, Duration resultTimeout) {
         java.util.Objects.requireNonNull(tools, "tools");
         Set<String> nonReadOnly = tools.descriptors().stream()
-                .filter(descriptor -> descriptor.access() != ToolAccess.READ_ONLY)
+                .filter(descriptor -> descriptor.access() != ToolAccess.READ_ONLY
+                        && descriptor.access() != ToolAccess.EXPERIMENTAL_ACTION)
                 .map(descriptor -> descriptor.id())
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         trustedTools = ToolRuntimeCatalog.from(tools.registrations(), nonReadOnly);
@@ -223,18 +224,7 @@ public final class PlayerClientToolRouter {
         }
 
         private boolean useClient(String toolId, JsonObject arguments) {
-            if (!clientTools.contains(toolId)) {
-                return false;
-            }
-            if (!toolId.equals("openallay:inspect_game_state")) {
-                return true;
-            }
-            String section = arguments != null
-                            && arguments.has("section")
-                            && arguments.get("section").isJsonPrimitive()
-                    ? arguments.get("section").getAsString()
-                    : "";
-            return !section.equalsIgnoreCase("WORLD_QUERY");
+            return clientTools.contains(toolId);
         }
 
         private boolean receive(ClientToolResultChunkPayload chunk) {

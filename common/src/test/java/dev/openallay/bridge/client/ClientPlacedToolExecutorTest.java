@@ -23,14 +23,14 @@ import org.junit.jupiter.api.Test;
 
 final class ClientPlacedToolExecutorTest {
     @Test
-    void exposesOneLogicalDefinitionAndRoutesWorldQueryToTheServer() {
+    void exposesOneLogicalDefinitionAndPrefersTheLocalPlacement() {
         ToolRegistry registry = new ToolRegistry();
         registry.register("test", List.of(new InspectTool()));
         RemoteCapabilityStore capabilities = new RemoteCapabilityStore();
         capabilities.replace(new CapabilityPayload(
                 BridgeProtocol.VERSION,
                 List.of(
-                        capability("openallay:inspect_game_state"),
+                        capability("test:fact"),
                         capability("unique:fact")),
                 false, 0, 0, 0, ""));
         AtomicReference<RemoteToolCallPayload> sent = new AtomicReference<>();
@@ -47,15 +47,15 @@ final class ClientPlacedToolExecutorTest {
         assertEquals(2, tools.definitions().size());
         assertEquals(1, tools.definitions().stream()
                 .filter(definition -> tools.canonicalToolId(definition.name()).orElseThrow()
-                        .equals("openallay:inspect_game_state"))
+                        .equals("test:fact"))
                 .count());
         assertTrue(tools.definitions().stream().noneMatch(
                 definition -> definition.name().startsWith("server__")));
 
         JsonObject options = new JsonObject();
-        options.addProperty("section", "OPTIONS");
+        options.addProperty("value", "local");
         var local = tools.execute(
-                        "openallay__inspect_game_state",
+                        "test__fact",
                         options,
                         ToolInvocationContext.developmentConsole("local"),
                         new CancellationSignal())
@@ -65,14 +65,7 @@ final class ClientPlacedToolExecutorTest {
                 .getAsJsonObject("value").get("placement").getAsString());
         assertEquals(null, sent.get());
 
-        JsonObject query = new JsonObject();
-        query.addProperty("section", "WORLD_QUERY");
-        tools.execute(
-                "openallay__inspect_game_state",
-                query,
-                ToolInvocationContext.developmentConsole("remote"),
-                new CancellationSignal());
-        assertEquals("openallay:inspect_game_state", sent.get().toolId());
+        assertEquals(null, sent.get());
     }
 
     private static CapabilityPayload.RemoteToolCapability capability(String id) {
@@ -82,12 +75,12 @@ final class ClientPlacedToolExecutorTest {
 
     private static final class InspectTool
             implements Tool<InspectTool.Input, InspectTool.Output> {
-        record Input(String section) {}
+        record Input(String value) {}
         record Output(String placement) {}
 
         private static final ToolDescriptor<Input, Output> DESCRIPTOR = new ToolDescriptor<>(
-                "openallay:inspect_game_state",
-                "Inspect game state",
+                "test:fact",
+                "Return a local fact",
                 Input.class,
                 Output.class,
                 ToolAccess.READ_ONLY);

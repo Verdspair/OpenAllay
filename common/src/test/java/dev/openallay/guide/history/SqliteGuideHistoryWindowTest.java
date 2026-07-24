@@ -122,7 +122,7 @@ final class SqliteGuideHistoryWindowTest {
                         previousTool.activity().status(),
                         previousTool.activity().normalized(),
                         List.of(GuideToolMessage.of(
-                                GuideToolMessage.Key.RECIPE_DETAIL,
+                                GuideToolMessage.Key.RESULT_COMPLETED,
                                 "minecraft:updated_recipe")),
                         previousTool.activity().sources()));
 
@@ -139,7 +139,7 @@ final class SqliteGuideHistoryWindowTest {
         assertEquals(ModelUsage.empty(), page.requests().getFirst().usage());
         assertEquals(new ModelUsage(21, 8, 3), page.requests().getLast().usage());
         assertEquals(List.of(GuideToolMessage.of(
-                        GuideToolMessage.Key.RECIPE_DETAIL,
+                        GuideToolMessage.Key.RESULT_COMPLETED,
                         "minecraft:updated_recipe")),
                 ((GuideTimelineEntry.Tool) page.requests().getLast().timeline().get(1))
                         .activity().presentationMessages());
@@ -336,7 +336,7 @@ final class SqliteGuideHistoryWindowTest {
         GuideToolActivity activity = new GuideToolActivity(
                 "call-1", 0, "openallay:get_recipe", GuideToolStatus.SUCCEEDED,
                 new JsonObject(), List.of(GuideToolMessage.of(
-                        GuideToolMessage.Key.RECIPE_DETAIL,
+                        GuideToolMessage.Key.RESULT_COMPLETED,
                         "minecraft:recipe_" + index)), List.of());
         return List.of(
                 new GuideTimelineEntry.Assistant(0, "checking", false, List.of()),

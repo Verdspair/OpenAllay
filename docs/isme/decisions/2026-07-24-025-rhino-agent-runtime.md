@@ -27,14 +27,15 @@ decision_basis:
       - openallay:run_javascript
       - openallay:load_skill
       - openallay:manage_skill
-      - openallay:calculate_craftability
     large_results: retain canonical JSON in a request workspace and return a handle, schema, cardinality, and bounded preview
     continuation: later scripts reopen prior results by opaque handle and transform them without copying the full result into model context
     time_budget: two seconds of wall-clock execution, checked by Rhino instruction observation and cancellation
     script_budget: 65536 source characters; result depth 64; 250000 nodes and array elements; 16384 object fields; 524288 characters per string
     workspace_budget: 16 results and 32 MiB estimated canonical units per request; four handles and 8 MiB selected per execution
     skill_read_budget: 8192 characters per chunk with snapshot-bound opaque continuation cursors
-    preview_budget: six rows, sixteen fields per object, five nested levels, and bounded scalar/model text
+    preview_budget: >-
+      one 8192-token conservative UTF-8 model-text budget across metadata,
+      complete-row preview, continuation guidance, and evidence; no fixed row cap
     skill_writes: local managed directory only, strict Agent Skills subset, atomic replace, explicit create/update/delete operation
     extension_bridge: code-registered read-only adapters contribute detached values and helper modules
   authority:
@@ -132,6 +133,8 @@ The model-facing result is a projection, not the canonical JSON:
 - scalar and compact values are rendered directly;
 - collections report type, cardinality, discovered field paths, and a concise
   preview;
+- preview admission is governed by the total conservative token estimate, not
+  by a fixed number of rows; every small result that fits is shown completely;
 - larger values return the same metadata plus a workspace handle;
 - evidence/provenance required for factual use remains present in the
   projection;

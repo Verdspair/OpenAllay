@@ -25,15 +25,18 @@ final class AgentSystemPromptTest {
         assertTrue(prompt.contains("ALWAYS matches analyze-game-data"));
         assertTrue(prompt.contains("exact known object or exact ID"));
         assertTrue(prompt.contains("merely because it lists the same Tool"));
-        assertTrue(prompt.contains("direct-Tool exception"));
+        assertTrue(prompt.contains("This exception never applies"));
+        assertTrue(prompt.contains("installed mods, options, packs"));
+        assertTrue(prompt.contains("does not require analyze-game-data"));
         assertTrue(prompt.contains("Never repeat a successful call"));
         assertTrue(prompt.contains("Do not spend calls rediscovering mc root names"));
         assertTrue(prompt.contains("Make at most one focused discovery call"));
         assertTrue(prompt.contains("first run_javascript call must perform the complete"));
         assertTrue(prompt.contains("scope: complete JavaScript result"));
-        assertTrue(prompt.contains("terminal for that analysis"));
-        assertTrue(prompt.contains(
-                "calculate_craftability is only for a player asking whether"));
+        assertTrue(prompt.contains("normally sufficient"));
+        assertTrue(prompt.contains("materially verifies a candidate universe"));
+        assertTrue(prompt.contains("require(\"openallay:crafting\")"));
+        assertTrue(prompt.contains("there is no second craftability Tool"));
         assertTrue(prompt.contains("current request's Tool definitions"));
         assertFalse(prompt.contains("use inspect_game_state"));
         assertTrue(prompt.contains("<name>inspect-game-state</name>"));

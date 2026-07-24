@@ -164,8 +164,8 @@ final class OpenAllayScreenProjectionTest {
     void collapsedToolSummaryKeepsAtMostThreeSemanticMessages() {
         GuideToolMessage first = GuideToolMessage.of(GuideToolMessage.Key.RESULT_PENDING);
         GuideToolMessage second = GuideToolMessage.of(GuideToolMessage.Key.RESULT_COMPLETED);
-        GuideToolMessage third = GuideToolMessage.of(GuideToolMessage.Key.RECIPES_NONE);
-        GuideToolMessage fourth = GuideToolMessage.of(GuideToolMessage.Key.CATALOG_PARTIAL);
+        GuideToolMessage third = GuideToolMessage.of(GuideToolMessage.Key.RESULT_COMPLETED);
+        GuideToolMessage fourth = GuideToolMessage.of(GuideToolMessage.Key.RESULT_VALUE_UNAVAILABLE);
         assertEquals(
                 List.of(first, second, third),
                 OpenAllayScreen.visibleToolSummaryMessages(
@@ -177,7 +177,7 @@ final class OpenAllayScreenProjectionTest {
     @Test
     void toolMessagesUseClosedTranslationKeysAndLiteralArguments() {
         GuideToolMessage message = GuideToolMessage.of(
-                GuideToolMessage.Key.RECIPE_DETAIL,
+                GuideToolMessage.Key.RESULT_COMPLETED,
                 "minecraft:iron_block");
 
         Component rendered = OpenAllayScreen.toolMessage(message);
@@ -226,7 +226,7 @@ final class OpenAllayScreenProjectionTest {
                         {"status":"success","value":{"counts":{"minecraft:apple":3}}}
                         """).getAsJsonObject(),
                 List.of(GuideToolMessage.of(
-                        GuideToolMessage.Key.INVENTORY_ITEM,
+                        GuideToolMessage.Key.RESULT_COMPLETED,
                         "minecraft:apple",
                         "3")),
                 List.of());

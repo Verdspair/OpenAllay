@@ -22,12 +22,10 @@ import dev.openallay.settings.model.ModelProfileSettingsView;
 import dev.openallay.settings.capability.CapabilitySettingsView;
 import dev.openallay.settings.capability.RecipeSettingsView;
 import dev.openallay.settings.diagnostics.SettingsDiagnosticsAggregator;
+import dev.openallay.settings.extension.ExtensionSettingsView;
 import dev.openallay.settings.history.HistorySettingsView;
 import dev.openallay.settings.skill.SkillSettingsView;
-import dev.openallay.settings.tool.ToolSettingsBackend;
-import dev.openallay.settings.tool.ToolSettingsView;
-import dev.openallay.tool.config.ToolFamilyConfig;
-import dev.openallay.tool.config.ToolFamilyId;
+import dev.openallay.script.command.CommandCapabilityConfig;
 import dev.openallay.recipe.config.RecipeClientConfig;
 import dev.openallay.tool.ToolResult;
 import java.util.Collections;
@@ -125,18 +123,16 @@ public final class ClientSettingsService implements AutoCloseable {
         ToolResult<SkillSettingsView> reloadSkills();
     }
 
-    public interface ToolActions {
-        ToolResult<ToolSettingsBackend.State> save(ToolFamilyConfig candidate);
-
-        ToolResult<ToolSettingsBackend.State> restore(ToolFamilyId family);
-
-        ToolResult<ToolSettingsBackend.State> reload(ToolFamilyId family);
-    }
-
     public interface DisplayActions {
         ToolResult<GuideDisplayConfig> saveDisplay(GuideDisplayConfig candidate);
 
         ToolResult<GuideDisplayConfig> reloadDisplay();
+    }
+
+    public interface CommandActions {
+        ToolResult<CommandCapabilityConfig> save(CommandCapabilityConfig candidate);
+
+        ToolResult<CommandCapabilityConfig> reload();
     }
 
     public interface HistoryActions {
@@ -264,7 +260,8 @@ public final class ClientSettingsService implements AutoCloseable {
     private final CapabilityActions capabilityActions;
     private final RecipeActions recipeActions;
     private final SkillActions skillActions;
-    private final ToolActions toolActions;
+    private final CommandActions commandActions;
+    private final ExtensionSettingsView extensionState;
     private final HistoryActions historyActions;
     private final ClientEventDispatcher dispatcher;
     private final Executor worker;
@@ -278,7 +275,7 @@ public final class ClientSettingsService implements AutoCloseable {
     private CapabilitySettingsView capabilityState;
     private RecipeSettingsView recipeState;
     private SkillSettingsView skillState;
-    private ToolSettingsView toolState;
+    private CommandCapabilityConfig commandState;
     private HistoryRuntimeState historyState;
     private long modelGeneration;
     private long metadataGeneration;
@@ -395,10 +392,11 @@ public final class ClientSettingsService implements AutoCloseable {
                 capabilityActions,
                 initialRecipes,
                 recipeActions,
-                ToolSettingsView.empty(),
-                defaultToolActions(),
                 SkillSettingsView.empty(),
                 defaultSkillActions(),
+                ExtensionSettingsView.defaults(),
+                CommandCapabilityConfig.defaults(),
+                defaultCommandActions(),
                 historyActions,
                 dispatcher,
                 worker,
@@ -416,10 +414,11 @@ public final class ClientSettingsService implements AutoCloseable {
             CapabilityActions capabilityActions,
             RecipeSettingsView initialRecipes,
             RecipeActions recipeActions,
-            ToolSettingsView initialTools,
-            ToolActions toolActions,
             SkillSettingsView initialSkills,
             SkillActions skillActions,
+            ExtensionSettingsView initialExtensions,
+            CommandCapabilityConfig initialCommands,
+            CommandActions commandActions,
             HistoryActions historyActions,
             ClientEventDispatcher dispatcher,
             Executor worker,
@@ -435,10 +434,11 @@ public final class ClientSettingsService implements AutoCloseable {
         this.capabilityActions = Objects.requireNonNull(capabilityActions, "capabilityActions");
         this.recipeState = Objects.requireNonNull(initialRecipes, "initialRecipes");
         this.recipeActions = Objects.requireNonNull(recipeActions, "recipeActions");
-        this.toolState = Objects.requireNonNull(initialTools, "initialTools");
-        this.toolActions = Objects.requireNonNull(toolActions, "toolActions");
         this.skillState = Objects.requireNonNull(initialSkills, "initialSkills");
         this.skillActions = Objects.requireNonNull(skillActions, "skillActions");
+        this.extensionState = Objects.requireNonNull(initialExtensions, "initialExtensions");
+        this.commandState = Objects.requireNonNull(initialCommands, "initialCommands");
+        this.commandActions = Objects.requireNonNull(commandActions, "commandActions");
         this.historyActions = Objects.requireNonNull(historyActions, "historyActions");
         this.historyState = safeHistoryState(historyActions);
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
@@ -602,67 +602,6 @@ public final class ClientSettingsService implements AutoCloseable {
         return result;
     }
 
-    public CompletableFuture<ToolResult<Boolean>> saveToolSettings(ToolFamilyConfig candidate) {
-        Objects.requireNonNull(candidate, "candidate");
-        Reservation reservation = reserve(SettingsOperation.domain(
-                SettingsOperation.Kind.SAVING_TOOL));
-        if (!reservation.accepted()) {
-            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
-        }
-        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
-        worker.execute(() -> {
-            ToolResult<ToolSettingsBackend.State> saved = safely(
-                    () -> toolActions.save(candidate),
-                    "tool_settings_save_failed",
-                    "Unable to save Tool settings");
-            dispatcher.execute(() -> finishTools(
-                    reservation.id(), saved, result, "tool_settings_saved"));
-        });
-        return result;
-    }
-
-    public CompletableFuture<ToolResult<Boolean>> reloadToolSettings(
-            ToolFamilyId family, boolean discardDirtyConfirmed) {
-        Objects.requireNonNull(family, "family");
-        if (!discardDirtyConfirmed) {
-            return discardConfirmation();
-        }
-        Reservation reservation = reserve(SettingsOperation.domain(
-                SettingsOperation.Kind.RELOADING_TOOL));
-        if (!reservation.accepted()) {
-            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
-        }
-        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
-        worker.execute(() -> {
-            ToolResult<ToolSettingsBackend.State> loaded = safely(
-                    () -> toolActions.reload(family),
-                    "tool_settings_reload_failed",
-                    "Unable to reload Tool settings");
-            dispatcher.execute(() -> finishTools(
-                    reservation.id(), loaded, result, "tool_settings_reloaded"));
-        });
-        return result;
-    }
-
-    public CompletableFuture<ToolResult<Boolean>> restoreToolSettings(ToolFamilyId family) {
-        Objects.requireNonNull(family, "family");
-        Reservation reservation = reserve(SettingsOperation.domain(
-                SettingsOperation.Kind.SAVING_TOOL));
-        if (!reservation.accepted()) {
-            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
-        }
-        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
-        worker.execute(() -> {
-            ToolResult<ToolSettingsBackend.State> restored = safely(
-                    () -> toolActions.restore(family),
-                    "tool_settings_restore_failed",
-                    "Unable to restore default Tool settings");
-            dispatcher.execute(() -> finishTools(
-                    reservation.id(), restored, result, "tool_settings_restored"));
-        });
-        return result;
-    }
-
     public CompletableFuture<ToolResult<Boolean>> saveSkillOverride(
             String name, String markdown) {
         Objects.requireNonNull(name, "name");
@@ -757,6 +696,44 @@ public final class ClientSettingsService implements AutoCloseable {
                     "Unable to reload display settings");
             dispatcher.execute(() -> finishDisplay(
                     reservation.id(), loaded, result, "display_reloaded"));
+        });
+        return result;
+    }
+
+    public CompletableFuture<ToolResult<Boolean>> saveExperimentalCommands(boolean enabled) {
+        CommandCapabilityConfig candidate = new CommandCapabilityConfig(
+                CommandCapabilityConfig.SCHEMA_VERSION, enabled);
+        Reservation reservation = reserve(SettingsOperation.domain(
+                SettingsOperation.Kind.SAVING_EXPERIMENTAL_COMMANDS));
+        if (!reservation.accepted()) {
+            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
+        }
+        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
+        worker.execute(() -> {
+            ToolResult<CommandCapabilityConfig> saved = safely(
+                    () -> commandActions.save(candidate),
+                    "settings_save_failed",
+                    "Unable to save experimental command settings");
+            dispatcher.execute(() -> finishCommands(
+                    reservation.id(), saved, result, "experimental_commands_saved"));
+        });
+        return result;
+    }
+
+    public CompletableFuture<ToolResult<Boolean>> reloadExperimentalCommands() {
+        Reservation reservation = reserve(SettingsOperation.domain(
+                SettingsOperation.Kind.RELOADING_EXPERIMENTAL_COMMANDS));
+        if (!reservation.accepted()) {
+            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
+        }
+        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
+        worker.execute(() -> {
+            ToolResult<CommandCapabilityConfig> loaded = safely(
+                    commandActions::reload,
+                    "settings_reload_failed",
+                    "Unable to reload experimental command settings");
+            dispatcher.execute(() -> finishCommands(
+                    reservation.id(), loaded, result, "experimental_commands_reloaded"));
         });
         return result;
     }
@@ -1203,44 +1180,6 @@ public final class ClientSettingsService implements AutoCloseable {
         outward.complete(result);
     }
 
-    private void finishTools(
-            long operationId,
-            ToolResult<ToolSettingsBackend.State> completed,
-            CompletableFuture<ToolResult<Boolean>> outward,
-            String successCode) {
-        ToolResult<Boolean> result;
-        synchronized (lock) {
-            if (!isCurrentLocked(operationId)) {
-                return;
-            }
-            operation = SettingsOperation.idle();
-            if (completed instanceof ToolResult.Success<ToolSettingsBackend.State> success) {
-                ToolSettingsBackend.State state = success.value();
-                toolState = state.view();
-                capabilityState = new CapabilitySettingsView(
-                        state.capabilityPolicy(),
-                        capabilityState.catalog(),
-                        capabilityState.unknownDisabledTools(),
-                        capabilityState.unknownDisabledSkills());
-                notice = SettingsNotice.success(
-                        successCode,
-                        switch (successCode) {
-                            case "tool_settings_reloaded" -> "Tool settings reloaded";
-                            case "tool_settings_restored" -> "Default Tool settings restored";
-                            default -> "Tool settings saved";
-                        });
-                result = new ToolResult.Success<>(Boolean.TRUE);
-            } else {
-                ToolResult.Failure<ToolSettingsBackend.State> failure =
-                        (ToolResult.Failure<ToolSettingsBackend.State>) completed;
-                notice = SettingsNotice.failure(failure.code(), failure.message());
-                result = new ToolResult.Failure<>(failure.code(), failure.message());
-            }
-            publishLocked();
-        }
-        outward.complete(result);
-    }
-
     private void finishSkills(
             long operationId,
             ToolResult<SkillSettingsView> completed,
@@ -1293,6 +1232,36 @@ public final class ClientSettingsService implements AutoCloseable {
             } else {
                 ToolResult.Failure<GuideDisplayConfig> failure =
                         (ToolResult.Failure<GuideDisplayConfig>) completed;
+                notice = SettingsNotice.failure(failure.code(), failure.message());
+                result = new ToolResult.Failure<>(failure.code(), failure.message());
+            }
+            publishLocked();
+        }
+        outward.complete(result);
+    }
+
+    private void finishCommands(
+            long operationId,
+            ToolResult<CommandCapabilityConfig> completed,
+            CompletableFuture<ToolResult<Boolean>> outward,
+            String successCode) {
+        ToolResult<Boolean> result;
+        synchronized (lock) {
+            if (!isCurrentLocked(operationId)) {
+                return;
+            }
+            operation = SettingsOperation.idle();
+            if (completed instanceof ToolResult.Success<CommandCapabilityConfig> success) {
+                commandState = success.value();
+                notice = SettingsNotice.success(
+                        successCode,
+                        successCode.equals("experimental_commands_reloaded")
+                                ? "Experimental command settings reloaded"
+                                : "Experimental command settings saved");
+                result = new ToolResult.Success<>(Boolean.TRUE);
+            } else {
+                ToolResult.Failure<CommandCapabilityConfig> failure =
+                        (ToolResult.Failure<CommandCapabilityConfig>) completed;
                 notice = SettingsNotice.failure(failure.code(), failure.message());
                 result = new ToolResult.Failure<>(failure.code(), failure.message());
             }
@@ -1498,8 +1467,9 @@ public final class ClientSettingsService implements AutoCloseable {
                 modelView,
                 capabilityState,
                 recipeState,
-                toolState,
                 skillState,
+                extensionState,
+                commandState,
                 historyView,
                 diagnostics.snapshot(
                         display.debugMode(),
@@ -1713,28 +1683,6 @@ public final class ClientSettingsService implements AutoCloseable {
         };
     }
 
-    private static ToolActions defaultToolActions() {
-        return new ToolActions() {
-            @Override
-            public ToolResult<ToolSettingsBackend.State> save(ToolFamilyConfig candidate) {
-                return new ToolResult.Failure<>(
-                        "settings_unavailable", "Tool settings are unavailable");
-            }
-
-            @Override
-            public ToolResult<ToolSettingsBackend.State> restore(ToolFamilyId family) {
-                return new ToolResult.Failure<>(
-                        "settings_unavailable", "Tool settings are unavailable");
-            }
-
-            @Override
-            public ToolResult<ToolSettingsBackend.State> reload(ToolFamilyId family) {
-                return new ToolResult.Failure<>(
-                        "settings_unavailable", "Tool settings are unavailable");
-            }
-        };
-    }
-
     private static DisplayActions defaultDisplayActions() {
         return new DisplayActions() {
             @Override
@@ -1747,6 +1695,25 @@ public final class ClientSettingsService implements AutoCloseable {
             public ToolResult<GuideDisplayConfig> reloadDisplay() {
                 return new ToolResult.Failure<>(
                         "settings_unavailable", "Display settings are unavailable");
+            }
+        };
+    }
+
+    private static CommandActions defaultCommandActions() {
+        return new CommandActions() {
+            @Override
+            public ToolResult<CommandCapabilityConfig> save(
+                    CommandCapabilityConfig candidate) {
+                return new ToolResult.Failure<>(
+                        "settings_unavailable",
+                        "Experimental command settings are unavailable");
+            }
+
+            @Override
+            public ToolResult<CommandCapabilityConfig> reload() {
+                return new ToolResult.Failure<>(
+                        "settings_unavailable",
+                        "Experimental command settings are unavailable");
             }
         };
     }

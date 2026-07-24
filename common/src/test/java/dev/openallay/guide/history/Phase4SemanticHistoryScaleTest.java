@@ -133,7 +133,7 @@ final class Phase4SemanticHistoryScaleTest {
             GuideToolActivity tool = new GuideToolActivity(
                     "call-" + index, 0, "openallay:get_recipe", GuideToolStatus.SUCCEEDED,
                     new JsonObject(), List.of(GuideToolMessage.of(
-                            GuideToolMessage.Key.RECIPE_DETAIL,
+                            GuideToolMessage.Key.RESULT_COMPLETED,
                             "minecraft:recipe_" + index)), List.of());
             List<GuideTimelineEntry> timeline = List.of(
                     new GuideTimelineEntry.Assistant(

@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import dev.openallay.agent.AgentRequest;
 import dev.openallay.agent.AgentState;
 import dev.openallay.agent.tool.AgentToolResult;
+import dev.openallay.model.ModelRequest;
 import dev.openallay.model.ModelTurn;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -33,6 +34,10 @@ public final class LiveAgentTraceRecorder {
 
     public synchronized void modelTurn(ModelTurn turn) {
         add("model_turn", gson.toJsonTree(turn));
+    }
+
+    public synchronized void modelRequest(ModelRequest request) {
+        add("model_request", gson.toJsonTree(request));
     }
 
     public synchronized void toolCall(String toolId, JsonObject arguments) {

@@ -7,7 +7,6 @@ import dev.openallay.guide.GuideToolActivity;
 import dev.openallay.guide.GuideToolMessage;
 import dev.openallay.guide.GuideToolPresentation;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,12 +25,14 @@ public final class GuideToolDetailPresenter {
                         activity.invocationId(),
                         activity.toolId(),
                         activity.sources(),
+                        activity.invocationArguments(),
                         normalized,
                         projection.diagnostic()))
                 : Optional.empty();
         return new GuideToolDetailView(
                 titleKey(activity.toolId()),
                 activity.status(),
+                activity.invocation(),
                 projection.cards(),
                 narration,
                 debug);
@@ -51,12 +52,8 @@ public final class GuideToolDetailPresenter {
         String name = toolName(toolId);
         try {
             return switch (name) {
-                case "search_recipes", "get_recipe" -> recipeCards(toolId, normalized);
-                case "find_item_usages" -> usageCards(value);
-                case "inspect_inventory" -> inventoryCards(value);
-                case "calculate_craftability" -> craftabilityCards(value);
                 case "run_javascript" -> javascriptCards(value);
-                default -> new Projection(List.of(), "text-only registered tool projection");
+                default -> new Projection(List.of(), "generic tool projection");
             };
         } catch (RuntimeException exception) {
             return new Projection(List.of(), "malformed semantic result");
@@ -68,6 +65,132 @@ public final class GuideToolDetailPresenter {
         if (preview == null || preview.isJsonNull()) {
             return new Projection(List.of(), "analysis preview is missing");
         }
+        String viewKind = string(value, "viewKind");
+        try {
+            return switch (viewKind) {
+                case "RECIPE" -> javascriptRecipeCards(value, preview);
+                case "ITEM" -> javascriptItemCards(value, preview);
+                case "TABLE" -> javascriptTableCard(value, preview);
+                case "KEY_VALUE" -> javascriptKeyValueCard(value, preview);
+                case "SCALAR" -> new Projection(List.of(new GuideDetailCard.Text(
+                        "screen.openallay.detail.analysis",
+                        List.of(displayValue(preview)))), "");
+                default -> javascriptFallbackCard(value, preview);
+            };
+        } catch (RuntimeException malformed) {
+            return javascriptFallbackCard(value, preview);
+        }
+    }
+
+    private static Projection javascriptRecipeCards(JsonObject value, JsonElement preview) {
+        JsonArray recipes = new JsonArray();
+        if (preview.isJsonArray()) {
+            preview.getAsJsonArray().forEach(recipes::add);
+        } else if (preview.isJsonObject()) {
+            recipes.add(preview);
+        }
+        List<GuideDetailCard> cards = GuideRecipePresenter
+                .cards(recipes)
+                .stream()
+                .<GuideDetailCard>map(GuideDetailCard.Recipe::new)
+                .toList();
+        return cards.isEmpty()
+                ? javascriptFallbackCard(value, preview)
+                : new Projection(cards, "");
+    }
+
+    private static Projection javascriptItemCards(JsonObject value, JsonElement preview) {
+        List<JsonElement> encoded = preview.isJsonArray()
+                ? preview.getAsJsonArray().asList()
+                : List.of(preview);
+        List<GuideItemView> items = new ArrayList<>();
+        for (JsonElement element : encoded) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject object = element.getAsJsonObject();
+            String id = string(object, "itemId");
+            if (id.isBlank()) {
+                id = string(object, "id");
+            }
+            if (id.isBlank()) {
+                continue;
+            }
+            String displayName = string(object, "displayName");
+            long count = optionalPositiveLong(object.get("count"), 1);
+            items.add(new GuideItemView(id, displayName, count));
+        }
+        return items.isEmpty()
+                ? javascriptFallbackCard(value, preview)
+                : new Projection(List.of(new GuideDetailCard.ItemGrid(
+                        "screen.openallay.detail.analysis.items", items)), "");
+    }
+
+    private static Projection javascriptTableCard(JsonObject value, JsonElement preview) {
+        if (!preview.isJsonArray() || preview.getAsJsonArray().isEmpty()) {
+            return javascriptFallbackCard(value, preview);
+        }
+        if (!preview.getAsJsonArray().get(0).isJsonObject()) {
+            return javascriptFallbackCard(value, preview);
+        }
+        java.util.Set<String> previewFields =
+                preview.getAsJsonArray().get(0).getAsJsonObject().keySet();
+        List<String> columns = new ArrayList<>();
+        JsonElement fields = value.get("fields");
+        if (fields != null && fields.isJsonArray()) {
+            for (JsonElement field : fields.getAsJsonArray()) {
+                if (field.isJsonPrimitive() && previewFields.contains(field.getAsString())) {
+                    // Keep the canonical lookup key intact. Rendering wraps the visible header,
+                    // while clipping here would make row.get(column) miss long original keys.
+                    columns.add(field.getAsString());
+                }
+            }
+        }
+        for (String field : previewFields) {
+            if (!columns.contains(field)) {
+                columns.add(field);
+            }
+        }
+        if (columns.isEmpty()) {
+            return javascriptFallbackCard(value, preview);
+        }
+        List<List<String>> rows = new ArrayList<>();
+        for (JsonElement element : preview.getAsJsonArray()) {
+            if (!element.isJsonObject()) {
+                return javascriptFallbackCard(value, preview);
+            }
+            JsonObject row = element.getAsJsonObject();
+            rows.add(columns.stream()
+                    .map(column -> displayValue(row.get(column)))
+                    .toList());
+        }
+        return new Projection(List.of(new GuideDetailCard.Table(
+                "screen.openallay.detail.analysis.table",
+                columns,
+                rows,
+                bool(value, "complete"),
+                optionalNonnegativeInt(value, "omittedRows"),
+                optionalNonnegativeInt(value, "omittedFields"))), "");
+    }
+
+    private static Projection javascriptKeyValueCard(JsonObject value, JsonElement preview) {
+        if (!preview.isJsonObject()) {
+            return javascriptFallbackCard(value, preview);
+        }
+        List<GuideDetailCard.DataCell> entries = preview.getAsJsonObject().entrySet().stream()
+                .map(entry -> new GuideDetailCard.DataCell(
+                        clip(entry.getKey(), 80), displayValue(entry.getValue())))
+                .toList();
+        return entries.isEmpty()
+                ? javascriptFallbackCard(value, preview)
+                : new Projection(List.of(new GuideDetailCard.KeyValue(
+                        "screen.openallay.detail.analysis.fields",
+                        entries,
+                        bool(value, "complete"),
+                        optionalNonnegativeInt(value, "omittedFields"))), "");
+    }
+
+    private static Projection javascriptFallbackCard(JsonObject value, JsonElement preview) {
         List<GuideDetailCard.DataRow> rows = new ArrayList<>();
         if (preview.isJsonArray()) {
             int index = 0;
@@ -97,9 +220,6 @@ public final class GuideToolDetailPresenter {
             for (Map.Entry<String, JsonElement> entry : value.getAsJsonObject().entrySet()) {
                 cells.add(new GuideDetailCard.DataCell(
                         clip(entry.getKey(), 80), displayValue(entry.getValue())));
-                if (cells.size() == 16) {
-                    break;
-                }
             }
         } else {
             cells.add(new GuideDetailCard.DataCell(fallbackKey, displayValue(value)));
@@ -117,123 +237,14 @@ public final class GuideToolDetailPresenter {
         if (value.isJsonPrimitive()) {
             return clip(value.getAsString().replaceAll("\\p{Cntrl}", " "), 260);
         }
-        if (value.isJsonArray()) {
-            return "[" + value.getAsJsonArray().size() + " values]";
-        }
-        return "{" + value.getAsJsonObject().size() + " fields}";
-    }
-
-    private static Projection recipeCards(String toolId, JsonObject normalized) {
-        List<GuideDetailCard> cards = GuideRecipePresenter.cards(toolId, normalized).stream()
-                .<GuideDetailCard>map(GuideDetailCard.Recipe::new)
-                .toList();
-        if (!cards.isEmpty()) {
-            return new Projection(cards, "");
-        }
-        JsonObject value = object(normalized, "value");
-        boolean hasRecipeData = "search_recipes".equals(toolName(toolId))
-                ? !array(value, "recipes").isEmpty()
-                : object(value, "recipe") != null;
-        return new Projection(
-                List.of(), hasRecipeData ? "invalid recipe card data" : "");
-    }
-
-    private static Projection inventoryCards(JsonObject value) {
-        JsonObject counts = object(value, "counts");
-        if (counts == null || counts.isEmpty()) {
-            return new Projection(List.of(), "");
-        }
-        List<GuideItemView> items = counts.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .map(entry -> new GuideItemView(entry.getKey(), entry.getKey(), nonnegativeLong(entry.getValue())))
-                .filter(item -> item.count() > 0)
-                .toList();
-        return items.isEmpty()
-                ? new Projection(List.of(), "")
-                : new Projection(List.of(new GuideDetailCard.ItemGrid(
-                        "screen.openallay.detail.inventory", items)), "");
-    }
-
-    private static Projection usageCards(JsonObject value) {
-        JsonArray usages = array(value, "usages");
-        if (usages.isEmpty()) {
-            return new Projection(List.of(), "");
-        }
-        List<String> lines = new ArrayList<>();
-        for (JsonElement element : usages) {
-            JsonObject usage = requireObject(element, "usage");
-            JsonObject reference = requireObject(usage, "reference");
-            lines.add(role(string(usage, "role")) + " · " + requiredString(reference, "recipeId"));
-        }
-        return new Projection(List.of(new GuideDetailCard.Text(
-                "screen.openallay.detail.usages", lines)), "");
-    }
-
-    private static Projection craftabilityCards(JsonObject value) {
-        JsonObject result = requireObject(value, "result");
-        Map<String, RequirementBuilder> requirements = new LinkedHashMap<>();
-        for (JsonElement element : array(result, "allocations")) {
-            JsonObject allocation = requireObject(element, "allocation");
-            String key = requiredString(allocation, "requirementKey");
-            long count = positiveLong(allocation, "count");
-            requirements.computeIfAbsent(key, RequirementBuilder::new)
-                    .allocatedItems.add(new GuideItemView(
-                            requiredString(allocation, "itemId"),
-                            requiredString(allocation, "itemId"),
-                            count));
-        }
-        for (JsonElement element : array(result, "missing")) {
-            JsonObject missing = requireObject(element, "missing requirement");
-            String key = requiredString(missing, "requirementKey");
-            RequirementBuilder builder = requirements.computeIfAbsent(key, RequirementBuilder::new);
-            builder.required = positiveLong(missing, "required");
-            builder.allocated = nonnegativeLong(missing.get("allocated"));
-            builder.missing = positiveLong(missing, "missing");
-            for (JsonElement alternative : array(missing, "alternatives")) {
-                String itemId = alternative.getAsString();
-                builder.alternatives.add(new GuideItemView(itemId, itemId, 0));
-            }
-        }
-        List<GuideDetailCard.Requirement> rows = new ArrayList<>();
-        for (RequirementBuilder builder : requirements.values()) {
-            long itemTotal = builder.allocatedItems.stream().mapToLong(GuideItemView::count).sum();
-            long allocated = builder.required == 0 ? itemTotal : builder.allocated;
-            long required = builder.required == 0 ? itemTotal : builder.required;
-            rows.add(new GuideDetailCard.Requirement(
-                    builder.key,
-                    required,
-                    allocated,
-                    builder.missing,
-                    builder.allocatedItems,
-                    builder.alternatives));
-        }
-        return new Projection(List.of(new GuideDetailCard.Requirements(
-                bool(result, "craftable"),
-                bool(result, "conclusive"),
-                positiveLong(result, "requestedCrafts"),
-                nonnegativeLong(result.get("maximumCrafts")),
-                rows)), "");
+        return clip(value.toString().replaceAll("\\p{Cntrl}", " "), 260);
     }
 
     private static String titleKey(String toolId) {
         return switch (toolName(toolId)) {
-            case "search_recipes" -> "screen.openallay.tool.search_recipes";
-            case "get_recipe" -> "screen.openallay.tool.get_recipe";
-            case "find_item_usages" -> "screen.openallay.tool.find_item_usages";
-            case "inspect_inventory" -> "screen.openallay.tool.inspect_inventory";
-            case "calculate_craftability" -> "screen.openallay.tool.calculate_craftability";
             case "run_javascript" -> "screen.openallay.tool.run_javascript";
+            case "load_skill" -> "screen.openallay.tool.load_skill";
             default -> "screen.openallay.tool.result";
-        };
-    }
-
-    private static String role(String role) {
-        return switch (role) {
-            case "INPUT" -> "作为材料";
-            case "CATALYST" -> "作为工具或催化剂";
-            case "OUTPUT" -> "作为产物";
-            case "BYPRODUCT" -> "作为副产物";
-            default -> "相关配方";
         };
     }
 
@@ -242,27 +253,9 @@ public final class GuideToolDetailPresenter {
         return separator < 0 ? toolId : toolId.substring(separator + 1);
     }
 
-    private static JsonObject requireObject(JsonObject value, String field) {
-        JsonObject result = object(value, field);
-        if (result == null) throw new IllegalArgumentException(field + " must be an object");
-        return result;
-    }
-
-    private static JsonObject requireObject(JsonElement value, String label) {
-        if (value == null || !value.isJsonObject()) {
-            throw new IllegalArgumentException(label + " must be an object");
-        }
-        return value.getAsJsonObject();
-    }
-
     private static JsonObject object(JsonObject value, String field) {
         return value != null && value.has(field) && value.get(field).isJsonObject()
                 ? value.getAsJsonObject(field) : null;
-    }
-
-    private static JsonArray array(JsonObject value, String field) {
-        return value != null && value.has(field) && value.get(field).isJsonArray()
-                ? value.getAsJsonArray(field) : new JsonArray();
     }
 
     private static String requiredString(JsonObject value, String field) {
@@ -280,12 +273,6 @@ public final class GuideToolDetailPresenter {
         return value != null && value.has(field) && value.get(field).getAsBoolean();
     }
 
-    private static long positiveLong(JsonObject value, String field) {
-        long result = nonnegativeLong(value.get(field));
-        if (result <= 0) throw new IllegalArgumentException(field + " must be positive");
-        return result;
-    }
-
     private static long nonnegativeLong(JsonElement value) {
         if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
             throw new IllegalArgumentException("count must be numeric");
@@ -293,6 +280,15 @@ public final class GuideToolDetailPresenter {
         long result = value.getAsLong();
         if (result < 0) throw new IllegalArgumentException("count must not be negative");
         return result;
+    }
+
+    private static long optionalPositiveLong(JsonElement value, long fallback) {
+        if (value == null || !value.isJsonPrimitive()
+                || !value.getAsJsonPrimitive().isNumber()) {
+            return fallback;
+        }
+        long result = value.getAsLong();
+        return result > 0 ? result : fallback;
     }
 
     private static int optionalNonnegativeInt(JsonObject value, String field) {
@@ -323,16 +319,4 @@ public final class GuideToolDetailPresenter {
         }
     }
 
-    private static final class RequirementBuilder {
-        private final String key;
-        private long required;
-        private long allocated;
-        private long missing;
-        private final List<GuideItemView> allocatedItems = new ArrayList<>();
-        private final List<GuideItemView> alternatives = new ArrayList<>();
-
-        private RequirementBuilder(String key) {
-            this.key = key;
-        }
-    }
 }

@@ -1,6 +1,6 @@
 package dev.openallay.tool.gamestate;
 
-/** Closed top-level vocabulary behind the single inspect_game_state Tool ID. */
+/** Closed top-level vocabulary exposed through the detached JavaScript host graph. */
 public enum GameStateSection {
     OVERVIEW,
     MODS,

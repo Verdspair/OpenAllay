@@ -34,6 +34,8 @@ accepted and contains explicit approval evidence.
 | SKMB-2026-07-19-024 | accepted | ordered parallel Tool turns, typed batch/query surfaces, fixed online knowledge, provider recovery, and client-visible location routing | A, B, C, D, E, F | decisions/2026-07-19-024-batch-query-and-provider-recovery.md | pending |
 | SKMB-2026-07-24-025 | accepted | isolated Rhino Agent runtime, request result workspace, extension adapters, and managed Skill writes | A, B, C, D, E, F, G | decisions/2026-07-24-025-rhino-agent-runtime.md | verified |
 | SKMB-2026-07-24-026 | accepted | direct Java host graph binding for Rhino, workspace, and extensions | C, E, F | decisions/2026-07-24-026-direct-rhino-host-objects.md | verified |
+| SKMB-2026-07-24-027 | accepted | bundled JavaScript modules, complete live E2E traces, silent history saves, and VFS disposition | B, C, E, F, G | decisions/2026-07-24-027-js-modules-live-e2e-and-silent-history.md | pending |
+| SKMB-2026-07-25-028 | accepted | capability/schema catalog, typed Rhino results, Extensions settings, and experimental complete command bridge | B, C, E, F, G | decisions/2026-07-25-028-capability-catalog-rich-results-and-experimental-commands.md | pending |
 
 SKMB-2026-07-18-006 is implemented by `a0eaeff`, `19ab90f`, and `c6ca6bc`.
 Its deterministic clean-build and packaged-driver evidence is recorded in the
@@ -57,11 +59,17 @@ both-loader evidence is recorded in the Phase 4G plan and
 not run when no credential was exported to the verification process.
 
 SKMB-2026-07-18-017 was implemented through `771cc94`. Its earlier combined
-catalog and generic Skill-toggle presentation are superseded by SKMB-019's
-separate Tool/source and Skill-document contracts. Dependency validation,
-future-request capture, friendly normal-mode projection, and shared
-Fabric/NeoForge runtime wiring remain applicable. JEI and REI are registered;
-EMI remains unimplemented and is not shown as an available source.
+catalog and generic Skill-toggle presentation were first superseded by
+SKMB-019. Dependency validation, future-request capture, friendly normal-mode
+projection, and shared Fabric/NeoForge runtime wiring remain applicable. JEI
+and REI are registered; EMI remains unimplemented and is not shown as an
+available source.
+
+The 0.2 JavaScript runtime and Extensions surface supersede SKMB-019's
+Tool-family/source settings slice. There is no `tool_config_saving` state,
+Tool-family file, or Tool/source settings snapshot. Skills remain separate;
+recipe and knowledge capture publish directly into the request-scoped
+JavaScript host graph.
 
 SKMB-2026-07-18-014 and the remaining native settings/diagnostics scope of
 SKMB-2026-07-18-016 are implemented through `a3ae197`. The service-owned,
@@ -123,7 +131,6 @@ graphical evidence review all passed. Phase 4 is closed.
 | context_loading | A model-budgeted durable context seed is loading before provider dispatch | GuideService | Cancellable; no provider request has started | SKMB-2026-07-18-018 |
 | credential_staged | A new immutable local secret exists but no persisted profile references it yet | LocalCredentialStore | Safe to ignore/collect until atomic profile replacement succeeds | SKMB-2026-07-19-019 |
 | profile_referenced | A credential-free schema-2 model profile atomically references a resolvable local or external credential | ModelProfileSettingsStore | Raw secret remains outside model JSON and observable settings state | SKMB-2026-07-19-019 |
-| tool_config_saving | One complete logical Tool/source candidate is being validated and persisted | Tool settings service | Prior Tool snapshot remains active until atomic replacement succeeds | SKMB-2026-07-19-019 |
 | skill_reloading | A bundled/local Agent Skills package candidate is being validated | SkillRepository | Invalid override retains the previous valid or bundled package | SKMB-2026-07-19-019 |
 | history_schema_rebuilding | A recognized pre-release schema 1, 2, 3, or 4 is being transactionally recreated as the current schema | GuideHistoryStore | Rollback preserves the older database if rebuild fails | SKMB-2026-07-19-019 |
 | response_streaming | A model response body is actively producing validated deltas under its dispatch deadline | ModelClient | Cancellable; last-progress is observable and late bytes are generation-fenced | SKMB-2026-07-19-020 |
@@ -188,7 +195,6 @@ graphical evidence review all passed. Phase 4 is closed.
 | T38 | settings idle | player confirms a valid profile candidate | settings_saving | Prepare a complete replacement, atomically replace `models.json`, then publish the prepared runtime for future requests | SKMB-2026-07-18-015 |
 | T39 | settings idle | player starts connection test after cost notice | connection_testing | Send one isolated cancellable real model probe; discard content and retain only redacted transient status/latency | SKMB-2026-07-18-015 |
 | T40 | settings idle | confirmed typed settings action starts | settings_mutating | Run one domain-owned async mutation; publish one immutable terminal snapshot and never enqueue a hidden second write | SKMB-2026-07-18-016 |
-| T41 | Tool configuration current | player confirms valid Tool enablement/source candidate | tool_config_saving | Atomically replace only the owning Tool file and publish one prepared immutable Tool/source snapshot for future client requests | SKMB-2026-07-19-019 |
 | T42 | semantic_tail_literal | syntax closes and validates | semantic_tail_validated | Replace only the mutable tail with immutable safe Markdown/reference/component nodes | SKMB-2026-07-18-018 |
 | T43 | history window idle | viewport requests another neighborhood | history_page_loading | Start or coalesce one generation-bound page read; retain the current anchor/window | SKMB-2026-07-18-018 |
 | T44 | history_page_loading | page succeeds or fails | history window idle | Merge the matching page and preserve the anchor, or retain the prior window with a retryable diagnostic | SKMB-2026-07-18-018 |
@@ -225,6 +231,9 @@ graphical evidence review all passed. Phase 4 is closed.
 | T76 | tool_wait | first JavaScript call resolves the request snapshot | javascript_host_graph_ready | Capture knowledge/extensions once and retain direct references to detached request records; do not build a Gson input tree | SKMB-2026-07-24-026 |
 | T77 | javascript_host_graph_ready | validated JavaScript execution starts | javascript_host_scope_open | Bind selected roots and workspace values through one fresh lazy identity-cached host adapter | SKMB-2026-07-24-026 |
 | T78 | javascript_host_scope_open | result normalized, execution fails, cancels, or times out | javascript_host_graph_ready or terminal | Discard the Rhino scope and wrapper cache; publish a handle only after successful result normalization and admission | SKMB-2026-07-24-026 |
+| T79 | command_capability_disabled or enabled | player atomically saves the opposite experimental setting | command_capability_enabled or disabled for future requests | Publish the new setting only after durable replacement succeeds; an active request retains its captured command capability | SKMB-2026-07-25-028 |
+| T80 | javascript_host_scope_open with command capability enabled | script calls `commands.run` while connected | command_submission_pending then command_feedback_wait then javascript_host_scope_open | Marshal the exact command to the owning Minecraft thread in script order, collect the current player's non-overlay game messages until the feedback window closes, and return the observed messages; Minecraft retains parsing and player permission authority | SKMB-2026-07-25-028 |
+| T81 | command_submission_pending or command_feedback_wait | disconnect, cancellation, submission failure, quiet feedback completion, or feedback deadline | javascript_host_scope_open with a result/explicit failure or terminal cancellation | Submit nothing after a pre-submission terminal condition; already submitted commands remain submitted; return `feedback` with observed messages or `no_feedback` without inventing success | SKMB-2026-07-25-028 |
 
 ## Invariants
 
@@ -277,11 +286,9 @@ graphical evidence review all passed. Phase 4 is closed.
 | I45 | Player-initiated normal history management is actor-scoped and whole-database reset is Debug Mode-only and separately confirmed; the only automatic destructive policy is the transactionally scoped rebuild of recognized unshipped schemas 1 through 4 | SKMB-2026-07-18-014, SKMB-2026-07-19-019, SKMB-2026-07-19-020 |
 | I46 | Profile replacement is candidate-validated, atomically persisted, and published as one prepared runtime state; failure retains the prior file/runtime | SKMB-2026-07-18-015 |
 | I47 | Connection testing is an explicit isolated real request with no Guide context/tools/history, no retry/fallback, and no retained secret/body/output | SKMB-2026-07-18-015 |
-| I48 | Native settings use one common operation/snapshot service while model/credential, Tool/source, Skill, display, metadata, and history persistence remain independently versioned | SKMB-2026-07-18-016, SKMB-2026-07-19-019 |
+| I48 | Native settings use one common operation/snapshot service while model/credential, recipe capture, Skill, Extension command capability, display, metadata, and history persistence remain independently versioned | SKMB-2026-07-18-016, SKMB-2026-07-19-019, SKMB-2026-07-25-028 |
 | I49 | Settings file/provider/SQLite work never runs on a Minecraft-owned thread, and screen detach never owns or rolls back a confirmed durable mutation | SKMB-2026-07-18-016 |
 | I49a | The schema-3 local assistant name is validated presentation identity; rename and display-toggle writes preserve every unaffected display field and never rewrite history, evidence, sessions, tools, or model authority | SKMB-2026-07-18-016 |
-| I50 | Tool settings can only narrow registered local Tool access, while Skill documents and `allowed-tools` dependencies grant no authority; every active request retains one captured immutable Tool/source/Skill snapshot | SKMB-2026-07-19-019 |
-| I51 | Tool-specific source settings use stable registered IDs under that tool's child page; adding JEI/REI/EMI/future adapters does not add top-level mod settings fields | SKMB-2026-07-18-017 |
 | I52 | Semantic output is a versioned closed AST; HTML, URLs, embeds, arbitrary UI trees, code, callbacks, commands, and mutations are unrepresentable | SKMB-2026-07-18-018 |
 | I53 | Raw resource existence is presentation-only; actionable stable handles must originate in the same authorized request context | SKMB-2026-07-18-018 |
 | I54 | Every semantic component has readable fallback text and narration, and color/animation never owns state | SKMB-2026-07-18-018 |
@@ -289,14 +296,14 @@ graphical evidence review all passed. Phase 4 is closed.
 | I56 | Incremental history writes and page/context reads remain ordered off Minecraft-owned threads and generation-check every completion | SKMB-2026-07-18-018 |
 | I57 | Auto-scroll follows only while already at the bottom; earlier-page insertion preserves the player's anchor row and pixel offset | SKMB-2026-07-18-018 |
 | I58 | Client model schema 2 and all observable settings state retain only qualified credential references/presence; raw API keys exist only in the transient masked input, SecretValue, provider header boundary, and local `credentials.sqlite3`, while `env:<name>` remains external/headless-only | SKMB-2026-07-19-019 |
-| I59 | Every source is owned and strictly validated by one logical Tool; built-in sources cannot be deleted, while registered user source kinds may support full CRUD | SKMB-2026-07-19-019 |
+| I59 | The 0.2.0 runtime has no legacy Tool-family/source settings state; Extensions projects declared JavaScript roots, schemas, modules, and adapters without capturing live data or providing source CRUD | SKMB-2026-07-19-019, SKMB-2026-07-25-028 |
 | I60 | Bundled Skills are read-only Agent Skills packages with uppercase `SKILL.md`; local edits are external overrides and never grant scripts, paths, tools, or Agent write authority | SKMB-2026-07-19-019 |
 | I61 | Only recognized unshipped OpenAllay history schemas 1 through 4 rebuild automatically; future, corrupt, foreign, missing/inconsistent-metadata, or otherwise unrecognized databases remain untouched | SKMB-2026-07-19-019, SKMB-2026-07-19-020 |
 | I62 | Every active request has a redacted observable phase, elapsed basis, last-progress time and optional retry/deadline; clocks never create transcript or persistence writes | SKMB-2026-07-19-020 |
 | I63 | The configured model request timeout covers complete response-body consumption, and cancel/timeout/disconnect suppress every late stream event | SKMB-2026-07-19-020 |
 | I64 | Rendering never owns scroll mutation; streaming keeps a stable literal tail and preserves manual viewport anchors | SKMB-2026-07-19-020 |
-| I65 | `inspect_game_state` is one strict sectioned read-only Tool for directly player-observable UI/HUD/F3/player-owned/query state; it cannot execute command strings, reflect arbitrary fields, scan spatial world content, inspect external containers, or write | SKMB-2026-07-19-020 |
-| I66 | Recipes and Guides remain independent narrow high-volume deep-content Tool families, while future map/block/container interaction requires a separate decision and authority boundary | SKMB-2026-07-19-020 |
+| I65 | Directly player-observable UI/HUD/F3/player-owned/query state is exposed as detached typed data below the `mc` JavaScript host graph; it cannot retain live game objects, reflect arbitrary fields, scan spatial world content, inspect external containers, or write except through the separately enabled command bridge | SKMB-2026-07-19-020, SKMB-2026-07-25-028 |
+| I66 | Recipes and guides remain independent narrow high-volume datasets below the JavaScript host graph, while future map/block/container interaction requires a separate decision and authority boundary; they are not parallel model Tool families | SKMB-2026-07-19-020, SKMB-2026-07-25-028 |
 | I67 | Player-observable state is captured on the owning Minecraft thread into immutable evidence-bearing records; missing sections degrade independently and never become fabricated empty facts | SKMB-2026-07-19-020 |
 | I68 | Remote Tool failures in either direction are complete model-visible Tool results unless the enclosing request is cancelled/disconnected; partial bridge assemblies are sparse, active-request scoped, and bounded by the five-minute bridge deadline | SKMB-2026-07-19-021 |
 | I69 | Model-authored semantic data cannot name native widget classes, textures, slots, coordinates, callbacks, commands, URLs, or arbitrary view trees | SKMB-2026-07-19-022 |
@@ -310,12 +317,12 @@ graphical evidence review all passed. Phase 4 is closed.
 | I77 | Player conversation export has no arbitrary-path input, publishes only complete atomic files under `gameDir/openallay/exports`, and excludes credentials, normalized Tool data, checkpoints, model settings, and raw diagnostics | SKMB-2026-07-19-023 |
 | I78 | Clipboard writes are explicit local player actions over already-visible user or assistant text and are never exposed as an Agent Tool | SKMB-2026-07-19-023 |
 | I79 | Same-turn Tool calls may execute concurrently, but the complete provider continuation preserves original ToolUse order and exact invocation identity | SKMB-2026-07-19-024 |
-| I80 | The analytical game-content surface is a closed typed virtual dataset over detached snapshots; shell text, scripts, arbitrary paths/URLs, reflection, and mutation are unrepresentable | SKMB-2026-07-19-024 |
+| I80 | The analytical game-content surface is a closed typed virtual dataset over detached snapshots; shell text, arbitrary paths/URLs, and reflection are unrepresentable. Mutation remains unrepresentable except for the explicit default-off experimental command bridge accepted by SKMB-2026-07-25-028 | SKMB-2026-07-19-024, SKMB-2026-07-25-028 |
 | I81 | Automatic model transport retry is allowed only before response progress and is bounded to two retries; HTTP 4xx, timeout, partial stream, cancel, and Tool execution are never replayed | SKMB-2026-07-19-024 |
 | I82 | Fixed online documentation sources fail independently, remain partial public evidence, and never replace current-game authoritative snapshots | SKMB-2026-07-19-024 |
 | I83 | Current biome, coordinates, dimension, and direction are client-visible diagnostics and never require server command permission | SKMB-2026-07-19-024 |
 | I84 | Model-authored JavaScript runs only over detached immutable request data in a fresh Rhino scope; arbitrary Java, reflection, class loading, network, process, real filesystem, and live Minecraft access are unrepresentable | SKMB-2026-07-24-025 |
-| I85 | Canonical JavaScript output remains internal JSON; the model receives an explicit compact projection, while large values remain request-scoped and reopenable only by opaque handle | SKMB-2026-07-24-025 |
+| I85 | Canonical JavaScript output remains internal JSON; the model receives a compact CLI-like projection bounded by one total conservative token estimate rather than a fixed row count, while large values remain request-scoped and reopenable only by opaque handle | SKMB-2026-07-24-025 |
 | I86 | A Rhino scope and workspace are never shared across request correlation IDs and are closed on every terminal, disconnect, and shutdown path | SKMB-2026-07-24-025 |
 | I87 | Bundled Skills remain immutable; Agent Skill writes are confined to one managed local root, validate a complete package, publish atomically, and affect future request snapshots only | SKMB-2026-07-24-025 |
 | I88 | Extension adapters may use trusted implementation techniques during owning-thread capture, but ordinary Agent JavaScript receives only their detached evidence-bearing contribution and pure helper facade | SKMB-2026-07-24-025 |
@@ -323,6 +330,14 @@ graphical evidence review all passed. Phase 4 is closed.
 | I90 | Rhino input is a lazy read-only view over the original detached Java request records; request roots and workspace values are never serialized into source, parsed with `JSON.parse`, or eagerly copied into a complete parallel script tree | SKMB-2026-07-24-026 |
 | I91 | Only record components and supported scalar/collection/JSON value shapes are script-visible; Java methods, fields, classes, constructors, reflection, bean accessors, and arbitrary host objects remain unrepresentable | SKMB-2026-07-24-026 |
 | I92 | Each execution owns one wrapper identity cache, while each request owns one host graph and workspace; none may cross execution/request boundaries or outlive terminal cleanup | SKMB-2026-07-24-026 |
+| I93 | Reusable domain algorithms are exact-ID bundled JavaScript modules loaded inside the denied-host Rhino scope; they cannot read arbitrary files, fetch URLs, access Java, or grant Tool authority | SKMB-2026-07-24-027 |
+| I94 | Successful pending history writes never allocate transcript rows; loading and durable failure remain visible, while pending counts remain diagnostic state | SKMB-2026-07-24-027 |
+| I95 | Real-client acceptance retains a complete, untruncated, credential-redacted provider-neutral Agent trace and fails rather than claiming success when that trace is unavailable | SKMB-2026-07-24-027 |
+| I96 | The declared Rhino schema, mounted root graph, Extensions settings, and Skill field references derive from one closed Java capability catalog; documentation cannot advertise an unavailable field as mounted | SKMB-2026-07-25-028 |
+| I97 | Trusted recipe and item Rich UI is selected from Java-owned result type metadata and same-request references; field-name resemblance alone never grants a native view | SKMB-2026-07-25-028 |
+| I98 | When experimental commands are disabled, their object, schema, catalog, and matching Skill are absent from future requests rather than represented as an authoritative empty capability | SKMB-2026-07-25-028 |
+| I99 | When experimental commands are enabled, discovery projects the complete active player-visible Brigadier tree, including mod registrations, and execution preserves the initiating player's identity and Minecraft permissions without an OpenAllay command allowlist, argument filter, or call cap | SKMB-2026-07-25-028 |
+| I100 | Command execution is serialized per player and non-transactional: cancellation or later script failure prevents only not-yet-submitted calls and never rolls back already submitted Minecraft commands; the result contains only client-visible feedback observed while that call owned the player's feedback window | SKMB-2026-07-25-028 |
 
 ## Fail Semantics
 
@@ -388,6 +403,8 @@ graphical evidence review all passed. Phase 4 is closed.
 | F58 | A managed Skill candidate is malformed, escapes its root, conflicts, or cannot publish atomically | Fail `skill_invalid` or `skill_write_failed`, retain the previous package/catalog, and leave unrelated Skills unchanged | SKMB-2026-07-24-025 |
 | F59 | JavaScript source/result, workspace admission/selection, Skill cursor, or post-Tool provider context exceeds its accepted budget | Fail with the matching stable `javascript_*`, `workspace_*`, `skill_cursor_invalid`, or `context_compaction_failed` code; publish no partial result and do not dispatch an oversized provider request | SKMB-2026-07-24-025 |
 | F60 | A direct host value is unsupported, a map key is not a String, or script code attempts to mutate/delete a host property | Fail with `javascript_host_type_unsupported`, `javascript_host_map_key_unsupported`, or `javascript_host_read_only`; mutate no request data and publish no handle | SKMB-2026-07-24-026 |
+| F61 | A bundled JavaScript module is unknown, cyclic, or fails evaluation | Fail `javascript_module_unavailable` or `javascript_module_error`, publish no partial result, and retain the request for a corrected call | SKMB-2026-07-24-027 |
+| F62 | A terminal real-client request has no complete local trace or trace persistence fails | Fail E2E acceptance and publish no unredacted or partial trace artifact | SKMB-2026-07-24-027 |
 
 ## Reviewed Statistical Defaults
 

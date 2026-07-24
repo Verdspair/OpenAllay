@@ -1,7 +1,6 @@
 package dev.openallay.settings;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 import dev.openallay.OpenAllayRuntime;
 import dev.openallay.agent.tool.AgentToolExecutor;
 import dev.openallay.client.ClientEventDispatcher;
@@ -24,35 +23,24 @@ import dev.openallay.model.metadata.ModelMetadataUpdate;
 import dev.openallay.settings.model.ModelConnectionProbe;
 import dev.openallay.settings.model.ModelSettingsBackend;
 import dev.openallay.recipe.config.RecipeClientRuntime;
-import dev.openallay.recipe.config.RecipeClientConfig;
 import dev.openallay.settings.capability.CapabilitySettingsBackend;
 import dev.openallay.settings.capability.CapabilitySettingsView;
 import dev.openallay.settings.capability.RecipeSettingsBackend;
 import dev.openallay.settings.capability.RecipeSettingsView;
 import dev.openallay.settings.skill.SkillSettingsBackend;
+import dev.openallay.settings.extension.ExtensionSettingsView;
 import dev.openallay.skill.AgentSkillManager;
 import dev.openallay.skill.BundledSkillLoader;
 import dev.openallay.skill.ManageSkillTool;
 import dev.openallay.skill.SkillParser;
-import dev.openallay.settings.tool.ToolSettingsBackend;
-import dev.openallay.tool.config.ToolConfigException;
-import dev.openallay.tool.config.ToolFamilyConfig;
-import dev.openallay.tool.config.ToolFamilyId;
-import dev.openallay.tool.config.ToolFamilySettingsStore;
-import dev.openallay.tool.config.ToolSourceDefinition;
-import dev.openallay.tool.config.ToolSourceKind;
-import dev.openallay.tool.config.ToolSourceKindRegistry;
-import dev.openallay.tool.config.LocalMarkdownKnowledgeProvider;
-import dev.openallay.knowledge.KnowledgeSourceProvider;
 import dev.openallay.tool.ToolResult;
+import dev.openallay.script.command.CommandCapabilityConfig;
+import dev.openallay.script.command.CommandCapabilityConfigStore;
 import java.net.URI;
 import java.nio.file.Path;
-import java.nio.file.Files;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
-import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -237,6 +225,24 @@ public record ClientSettingsRuntime(
             if (configDirectory == null) {
                 throw new IllegalArgumentException("Model profiles require a configuration directory");
             }
+            CommandCapabilityConfigStore commandStore = new CommandCapabilityConfigStore(
+                    configDirectory.resolve("experimental-commands.json"));
+            ToolResult<CommandCapabilityConfig> loadedCommands = commandStore.reload();
+            CommandCapabilityConfig initialCommands;
+            if (loadedCommands instanceof ToolResult.Success<CommandCapabilityConfig> success) {
+                initialCommands = success.value();
+            } else {
+                ToolResult.Failure<CommandCapabilityConfig> failure =
+                        (ToolResult.Failure<CommandCapabilityConfig>) loadedCommands;
+                initialCommands = CommandCapabilityConfig.defaults();
+                if (startupNotice == null) {
+                    startupNotice = SettingsNotice.failure(failure.code(), failure.message());
+                }
+            }
+            product.commands().replace(initialCommands);
+            product.skills().setRuntimeDisabledSkills(initialCommands.enabled()
+                    ? Set.of()
+                    : Set.of("run-game-commands"));
             Set<String> installedSkillMods = product.platform().isModLoaded("ftbquests")
                     ? Set.of("ftbquests")
                     : Set.of();
@@ -260,121 +266,30 @@ public record ClientSettingsRuntime(
                     product, initial, gson, dispatcher, extension);
             CapabilitySettingsBackend capabilities = new CapabilitySettingsBackend(
                     capabilitiesPath, product, registry);
+            ClientSettingsService.CommandActions commandActions =
+                    new ClientSettingsService.CommandActions() {
+                        @Override
+                        public ToolResult<CommandCapabilityConfig> save(
+                                CommandCapabilityConfig candidate) {
+                            return publishCommandConfig(
+                                    commandStore.save(candidate),
+                                    commandStore,
+                                    product,
+                                    capabilities);
+                        }
+
+                        @Override
+                        public ToolResult<CommandCapabilityConfig> reload() {
+                            return publishCommandConfig(
+                                    commandStore.reload(),
+                                    commandStore,
+                                    product,
+                                    capabilities);
+                        }
+            };
             RecipeSettingsBackend recipes = new RecipeSettingsBackend(recipesPath, recipeRuntime);
             RecipeSettingsView initialRecipes = recipes.currentView();
-            ToolSourceKindRegistry sourceKinds = sourceKinds();
-            EnumMap<ToolFamilyId, ToolFamilySettingsStore> toolStores = toolStores(
-                    configDirectory.resolve("tools"), sourceKinds, initialRecipes);
-            for (ToolFamilySettingsStore store : toolStores.values()) {
-                ToolResult<ToolFamilyConfig> loadedTool = store.load();
-                if (startupNotice == null
-                        && loadedTool instanceof ToolResult.Failure<ToolFamilyConfig> failure) {
-                    startupNotice = SettingsNotice.failure(failure.code(), failure.message());
-                }
-            }
-            ToolSettingsBackend toolSettings = new ToolSettingsBackend(
-                    toolStores,
-                    sourceKinds,
-                    capabilities::currentView,
-                    recipes::currentView,
-                    product.tools().registrations());
-            for (ToolFamilyId family : List.of(ToolFamilyId.RECIPES, ToolFamilyId.GUIDES)) {
-                ToolResult<Boolean> applied = applyToolRuntime(
-                        toolSettings.current(family), recipes, product, configDirectory);
-                if (startupNotice == null && applied instanceof ToolResult.Failure<Boolean> failure) {
-                    startupNotice = SettingsNotice.failure(failure.code(), failure.message());
-                }
-            }
-            ToolSettingsBackend.State initialToolState = toolSettings.currentState();
-            ToolResult<CapabilitySettingsView> publishedCapabilities =
-                    capabilities.publishCapabilities(initialToolState.capabilityPolicy());
-            CapabilitySettingsView initialCapabilities = publishedCapabilities
-                    instanceof ToolResult.Success<CapabilitySettingsView> success
-                            ? success.value()
-                            : capabilities.currentView();
-            initialToolState = new ToolSettingsBackend.State(
-                    toolSettings.currentView(), initialCapabilities.policy());
-            ClientSettingsService.ToolActions toolActions = new ClientSettingsService.ToolActions() {
-                @Override
-                public ToolResult<ToolSettingsBackend.State> save(ToolFamilyConfig candidate) {
-                    ToolFamilyConfig prior = toolSettings.current(candidate.toolId());
-                    ToolResult<ToolSettingsBackend.State> saved = toolSettings.save(candidate);
-                    if (saved instanceof ToolResult.Failure<ToolSettingsBackend.State> failure) {
-                        return failure;
-                    }
-                    ToolResult<Boolean> applied =
-                            applyToolRuntime(candidate, recipes, product, configDirectory);
-                    if (applied instanceof ToolResult.Failure<Boolean> failure) {
-                        rollbackToolRuntime(toolSettings, prior, recipes, product, configDirectory);
-                        return new ToolResult.Failure<>(failure.code(), failure.message());
-                    }
-                    ToolSettingsBackend.State state = toolSettings.currentState();
-                    ToolResult<CapabilitySettingsView> published =
-                            capabilities.publishCapabilities(state.capabilityPolicy());
-                    if (published instanceof ToolResult.Failure<CapabilitySettingsView> failure) {
-                        rollbackToolRuntime(toolSettings, prior, recipes, product, configDirectory);
-                        return new ToolResult.Failure<>(failure.code(), failure.message());
-                    }
-                    CapabilitySettingsView capabilityView =
-                            ((ToolResult.Success<CapabilitySettingsView>) published).value();
-                    return new ToolResult.Success<>(new ToolSettingsBackend.State(
-                            toolSettings.currentView(), capabilityView.policy()));
-                }
-
-                @Override
-                public ToolResult<ToolSettingsBackend.State> restore(ToolFamilyId family) {
-                    ToolFamilyConfig prior = toolSettings.current(family);
-                    ToolResult<ToolSettingsBackend.State> restored = toolSettings.restoreDefaults(family);
-                    if (restored instanceof ToolResult.Failure<ToolSettingsBackend.State> failure) {
-                        return failure;
-                    }
-                    ToolFamilyConfig candidate = toolSettings.current(family);
-                    ToolResult<Boolean> applied =
-                            applyToolRuntime(candidate, recipes, product, configDirectory);
-                    if (applied instanceof ToolResult.Failure<Boolean> failure) {
-                        rollbackToolRuntime(toolSettings, prior, recipes, product, configDirectory);
-                        return new ToolResult.Failure<>(failure.code(), failure.message());
-                    }
-                    ToolSettingsBackend.State state = toolSettings.currentState();
-                    ToolResult<CapabilitySettingsView> published =
-                            capabilities.publishCapabilities(state.capabilityPolicy());
-                    if (published instanceof ToolResult.Failure<CapabilitySettingsView> failure) {
-                        rollbackToolRuntime(toolSettings, prior, recipes, product, configDirectory);
-                        return new ToolResult.Failure<>(failure.code(), failure.message());
-                    }
-                    CapabilitySettingsView capabilityView =
-                            ((ToolResult.Success<CapabilitySettingsView>) published).value();
-                    return new ToolResult.Success<>(new ToolSettingsBackend.State(
-                            toolSettings.currentView(), capabilityView.policy()));
-                }
-
-                @Override
-                public ToolResult<ToolSettingsBackend.State> reload(ToolFamilyId family) {
-                    ToolFamilyConfig prior = toolSettings.current(family);
-                    ToolResult<ToolSettingsBackend.State> loaded = toolSettings.reload(family);
-                    if (loaded instanceof ToolResult.Failure<ToolSettingsBackend.State> failure) {
-                        return failure;
-                    }
-                    ToolFamilyConfig candidate = toolSettings.current(family);
-                    ToolResult<Boolean> applied =
-                            applyToolRuntime(candidate, recipes, product, configDirectory);
-                    if (applied instanceof ToolResult.Failure<Boolean> failure) {
-                        rollbackToolRuntime(toolSettings, prior, recipes, product, configDirectory);
-                        return new ToolResult.Failure<>(failure.code(), failure.message());
-                    }
-                    ToolSettingsBackend.State state = toolSettings.currentState();
-                    ToolResult<CapabilitySettingsView> published =
-                            capabilities.publishCapabilities(state.capabilityPolicy());
-                    if (published instanceof ToolResult.Failure<CapabilitySettingsView> failure) {
-                        rollbackToolRuntime(toolSettings, prior, recipes, product, configDirectory);
-                        return new ToolResult.Failure<>(failure.code(), failure.message());
-                    }
-                    CapabilitySettingsView capabilityView =
-                            ((ToolResult.Success<CapabilitySettingsView>) published).value();
-                    return new ToolResult.Success<>(new ToolSettingsBackend.State(
-                            toolSettings.currentView(), capabilityView.policy()));
-                }
-            };
+            CapabilitySettingsView initialCapabilities = capabilities.currentView();
             ModelConnectionProbe probe = new ModelConnectionProbe(
                     config -> ProviderModelClients.create(config, gson),
                     clock,
@@ -429,10 +344,11 @@ public record ClientSettingsRuntime(
                     capabilities,
                     initialRecipes,
                     recipes,
-                    initialToolState.view(),
-                    toolActions,
                     skills.currentView(),
                     skills,
+                    ExtensionSettingsView.from(product.javascriptModules()),
+                    initialCommands,
+                    commandActions,
                     historyActions,
                     dispatcher,
                     command -> Thread.startVirtualThread(command),
@@ -455,6 +371,36 @@ public record ClientSettingsRuntime(
         return settings.closeAsync();
     }
 
+    private static ToolResult<CommandCapabilityConfig> publishCommandConfig(
+            ToolResult<CommandCapabilityConfig> loaded,
+            CommandCapabilityConfigStore store,
+            OpenAllayRuntime product,
+            CapabilitySettingsBackend capabilities) {
+        if (loaded instanceof ToolResult.Failure<CommandCapabilityConfig> failure) {
+            return failure;
+        }
+        CommandCapabilityConfig candidate =
+                ((ToolResult.Success<CommandCapabilityConfig>) loaded).value();
+        CommandCapabilityConfig prior = new CommandCapabilityConfig(
+                CommandCapabilityConfig.SCHEMA_VERSION, product.commands().enabled());
+        product.commands().replace(candidate);
+        product.skills().setRuntimeDisabledSkills(candidate.enabled()
+                ? Set.of()
+                : Set.of("run-game-commands"));
+        ToolResult<CapabilitySettingsView> published =
+                capabilities.publishCapabilities(capabilities.currentView().policy());
+        if (published instanceof ToolResult.Failure<CapabilitySettingsView> failure) {
+            product.commands().replace(prior);
+            product.skills().setRuntimeDisabledSkills(prior.enabled()
+                    ? Set.of()
+                    : Set.of("run-game-commands"));
+            store.save(prior);
+            capabilities.publishCapabilities(capabilities.currentView().policy());
+            return new ToolResult.Failure<>(failure.code(), failure.message());
+        }
+        return new ToolResult.Success<>(candidate);
+    }
+
     private static ClientSettingsService.DisplayActions unavailableDisplayActions() {
         return new ClientSettingsService.DisplayActions() {
             @Override
@@ -469,187 +415,6 @@ public record ClientSettingsRuntime(
                         "display_settings_unavailable", "Display settings are unavailable");
             }
         };
-    }
-
-    private static ToolSourceKindRegistry sourceKinds() {
-        return ToolSourceKindRegistry.builder()
-                .register(emptySourceKind("recipe_catalog", ToolFamilyId.RECIPES))
-                .register(emptySourceKind("recipe_viewer", ToolFamilyId.RECIPES))
-                .register(emptySourceKind("patchouli_books", ToolFamilyId.GUIDES))
-                .register(emptySourceKind("ftb_quests", ToolFamilyId.GUIDES))
-                .register(ToolSourceKind.localMarkdown())
-                .build();
-    }
-
-    private static ToolSourceKind emptySourceKind(String kind, ToolFamilyId owner) {
-        return new ToolSourceKind(
-                kind,
-                owner,
-                Set.of(ToolSourceDefinition.Lifecycle.BUILT_IN),
-                false,
-                List.of(),
-                config -> {
-                    if (!config.keySet().isEmpty()) {
-                        throw new ToolConfigException(
-                                "invalid_source_config", kind + " config must be empty");
-                    }
-                    return new JsonObject();
-                });
-    }
-
-    private static EnumMap<ToolFamilyId, ToolFamilySettingsStore> toolStores(
-            Path toolsDirectory,
-            ToolSourceKindRegistry registry,
-            RecipeSettingsView recipes) {
-        EnumMap<ToolFamilyId, ToolFamilySettingsStore> stores =
-                new EnumMap<>(ToolFamilyId.class);
-        for (ToolFamilyId family : ToolFamilyId.values()) {
-            ToolFamilyConfig defaults = switch (family) {
-                case RECIPES -> new ToolFamilyConfig(
-                        ToolFamilyConfig.SCHEMA_VERSION,
-                        family,
-                        true,
-                        recipeSources(recipes));
-                case GUIDES -> new ToolFamilyConfig(
-                        ToolFamilyConfig.SCHEMA_VERSION,
-                        family,
-                        true,
-                        List.of(
-                                builtInSource(
-                                        "openallay:patchouli",
-                                        "patchouli_books",
-                                        "Patchouli books",
-                                        true),
-                                builtInSource(
-                                        "openallay:ftbquests",
-                                        "ftb_quests",
-                                        "FTB Quests",
-                                        true)));
-                default -> ToolFamilyConfig.empty(family);
-            };
-            stores.put(
-                    family,
-                    new ToolFamilySettingsStore(toolsDirectory, family, registry, defaults));
-        }
-        return stores;
-    }
-
-    private static List<ToolSourceDefinition> recipeSources(RecipeSettingsView recipes) {
-        List<ToolSourceDefinition> sources = new ArrayList<>();
-        for (RecipeSettingsView.Source source : recipes.sources()) {
-            sources.add(builtInSource(
-                    source.id(),
-                    source.viewer() ? "recipe_viewer" : "recipe_catalog",
-                    recipeSourceName(source.id()),
-                    source.enabled()));
-        }
-        return List.copyOf(sources);
-    }
-
-    private static ToolSourceDefinition builtInSource(
-            String id, String kind, String displayName, boolean enabled) {
-        return new ToolSourceDefinition(
-                id,
-                kind,
-                displayName,
-                enabled,
-                new JsonObject(),
-                ToolSourceDefinition.Lifecycle.BUILT_IN);
-    }
-
-    private static String recipeSourceName(String sourceId) {
-        return switch (sourceId) {
-            case "minecraft:client_recipe_book" -> "Minecraft recipes";
-            case "viewer:jei" -> "JEI";
-            case "viewer:rei" -> "REI";
-            case "viewer:emi" -> "EMI";
-            default -> sourceId;
-        };
-    }
-
-    private static ToolResult<Boolean> applyToolRuntime(
-            ToolFamilyConfig candidate,
-            RecipeSettingsBackend recipes,
-            OpenAllayRuntime product,
-            Path configDirectory) {
-        if (candidate.toolId() == ToolFamilyId.RECIPES) {
-            RecipeClientConfig current = recipes.currentView().config();
-            Set<String> known = candidate.sources().stream()
-                    .map(ToolSourceDefinition::sourceId)
-                    .collect(java.util.stream.Collectors.toSet());
-            java.util.TreeSet<String> disabled = new java.util.TreeSet<>(current.disabledSources());
-            disabled.removeAll(known);
-            candidate.sources().stream()
-                    .filter(source -> !source.enabled())
-                    .map(ToolSourceDefinition::sourceId)
-                    .forEach(disabled::add);
-            if (disabled.equals(current.disabledSources())) {
-                return new ToolResult.Success<>(Boolean.TRUE);
-            }
-            ToolResult<RecipeSettingsView> saved = recipes.saveRecipes(new RecipeClientConfig(
-                    RecipeClientConfig.SCHEMA_VERSION,
-                    current.visibility(),
-                    current.preferredViewer(),
-                    disabled));
-            if (saved instanceof ToolResult.Failure<RecipeSettingsView> failure) {
-                return new ToolResult.Failure<>(failure.code(), failure.message());
-            }
-            return new ToolResult.Success<>(Boolean.TRUE);
-        }
-        if (candidate.toolId() != ToolFamilyId.GUIDES) {
-            return new ToolResult.Success<>(Boolean.TRUE);
-        }
-
-        Path managedRoot = configDirectory.resolve("knowledge").toAbsolutePath().normalize();
-        List<KnowledgeSourceProvider> supplemental = new ArrayList<>();
-        Set<String> disabledPrimary = new java.util.TreeSet<>();
-        try {
-            for (ToolSourceDefinition source : candidate.sources()) {
-                if (source.sourceKind().equals("patchouli_books")) {
-                    if (!source.enabled()) {
-                        disabledPrimary.add("patchouli");
-                    }
-                    continue;
-                }
-                if (source.sourceKind().equals("ftb_quests")) {
-                    if (!source.enabled()) {
-                        disabledPrimary.add("ftbquests");
-                    }
-                    continue;
-                }
-                if (!source.enabled() || !source.sourceKind().equals("local_markdown")) {
-                    continue;
-                }
-                JsonObject config = LocalMarkdownKnowledgeProvider.validateConfig(source.config());
-                Files.createDirectories(managedRoot);
-                Files.createDirectories(managedRoot.resolve(config.get("directory").getAsString()));
-                supplemental.add(new LocalMarkdownKnowledgeProvider(
-                        source,
-                        managedRoot,
-                        product.platform().gameVersion(),
-                        product.platform().platformName()));
-            }
-            if (!product.knowledge().replaceProviderConfiguration(disabledPrimary, supplemental)) {
-                return new ToolResult.Failure<>(
-                        "knowledge_source_reload_failed",
-                        "Unable to publish Guide sources");
-            }
-            return new ToolResult.Success<>(Boolean.TRUE);
-        } catch (Exception failure) {
-            return new ToolResult.Failure<>(
-                    "knowledge_source_reload_failed",
-                    "Unable to publish Guide sources");
-        }
-    }
-
-    private static void rollbackToolRuntime(
-            ToolSettingsBackend toolSettings,
-            ToolFamilyConfig prior,
-            RecipeSettingsBackend recipes,
-            OpenAllayRuntime product,
-            Path configDirectory) {
-        toolSettings.save(prior);
-        applyToolRuntime(prior, recipes, product, configDirectory);
     }
 
     private static ModelProfilesConfigLoader.Load unconfigured() {

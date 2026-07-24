@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -69,6 +70,15 @@ final class GuideHistoryCodecTest {
         GuideHistoryCodec codec = new GuideHistoryCodec();
         JsonObject normalized = new JsonObject();
         normalized.addProperty("secretRawField", "must-not-persist");
+        JsonObject invocationArguments = new JsonObject();
+        invocationArguments.addProperty(
+                "source", "return 'debug-source-must-not-persist';");
+        invocationArguments.add(
+                "roots", JsonParser.parseString("[\"items\",\"recipes\"]"));
+        invocationArguments.add(
+                "handles", JsonParser.parseString("[\"r_previous\"]"));
+        normalized.add("value", JsonParser.parseString(
+                "{\"modules\":[\"openallay:crafting\"]}"));
         GuideSource source = new GuideSource(
                 "openallay:get_recipe", GroundedTestFixtures.serverEvidence());
         List<GuideTimelineEntry> timeline = List.of(
@@ -76,15 +86,16 @@ final class GuideHistoryCodecTest {
                 new GuideTimelineEntry.Tool(1, new GuideToolActivity(
                         "call-7",
                         0,
-                        "openallay:get_recipe",
+                        "openallay:run_javascript",
                         GuideToolStatus.SUCCEEDED,
+                        invocationArguments,
                         normalized,
                         List.of(
                                 GuideToolMessage.of(
-                                        GuideToolMessage.Key.RECIPE_DETAIL,
+                                        GuideToolMessage.Key.RESULT_COMPLETED,
                                         "minecraft:iron_block"),
                                 GuideToolMessage.of(
-                                        GuideToolMessage.Key.RECIPE_OUTPUT,
+                                        GuideToolMessage.Key.RESULT_COMPLETED,
                                         "minecraft:iron_block",
                                         "1")),
                         List.of(source))),
@@ -98,18 +109,25 @@ final class GuideHistoryCodecTest {
                 .map(GuideTimelineEntry::ordinal).toList());
         GuideToolActivity tool = ((GuideTimelineEntry.Tool) restored.get(1)).activity();
         assertNull(tool.normalized());
+        assertNull(tool.invocationArguments());
+        assertEquals(List.of("items", "recipes"), tool.invocation().roots());
+        assertEquals(List.of("r_previous"), tool.invocation().handles());
+        assertEquals(List.of("openallay:crafting"), tool.invocation().modules());
+        assertFalse(tool.invocation().liveArgumentsAvailable());
         assertEquals(List.of(
                         GuideToolMessage.of(
-                                GuideToolMessage.Key.RECIPE_DETAIL,
+                                GuideToolMessage.Key.RESULT_COMPLETED,
                                 "minecraft:iron_block"),
                         GuideToolMessage.of(
-                                GuideToolMessage.Key.RECIPE_OUTPUT,
+                                GuideToolMessage.Key.RESULT_COMPLETED,
                                 "minecraft:iron_block",
                                 "1")),
                 tool.presentationMessages());
         assertEquals(List.of(source), tool.sources());
         assertFalse(encoded.contains("secretRawField"));
         assertFalse(encoded.contains("must-not-persist"));
+        assertFalse(encoded.contains("debug-source-must-not-persist"));
+        assertTrue(encoded.contains("\"invocation\""));
     }
 
     @Test

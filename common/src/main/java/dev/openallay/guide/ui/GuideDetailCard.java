@@ -8,6 +8,8 @@ public sealed interface GuideDetailCard permits
         GuideDetailCard.Recipe,
         GuideDetailCard.ItemGrid,
         GuideDetailCard.Requirements,
+        GuideDetailCard.Table,
+        GuideDetailCard.KeyValue,
         GuideDetailCard.DataPreview,
         GuideDetailCard.Text,
         GuideDetailCard.Error {
@@ -69,6 +71,42 @@ public sealed interface GuideDetailCard permits
         }
     }
 
+    record Table(
+            String titleKey,
+            List<String> columns,
+            List<List<String>> rows,
+            boolean complete,
+            int omittedRows,
+            int omittedFields) implements GuideDetailCard {
+        public Table {
+            titleKey = requireText(titleKey, "titleKey");
+            columns = List.copyOf(columns);
+            rows = rows.stream().map(List::copyOf).toList();
+            int columnCount = columns.size();
+            if (columns.isEmpty()
+                    || columns.stream().anyMatch(value -> value == null || value.isBlank())
+                    || rows.stream().anyMatch(row -> row.size() != columnCount)
+                    || omittedRows < 0
+                    || omittedFields < 0) {
+                throw new IllegalArgumentException("structured table is invalid");
+            }
+        }
+    }
+
+    record KeyValue(
+            String titleKey,
+            List<DataCell> entries,
+            boolean complete,
+            int omittedFields) implements GuideDetailCard {
+        public KeyValue {
+            titleKey = requireText(titleKey, "titleKey");
+            entries = List.copyOf(entries);
+            if (entries.isEmpty() || omittedFields < 0) {
+                throw new IllegalArgumentException("key/value card is invalid");
+            }
+        }
+    }
+
     record DataPreview(
             String titleKey,
             String resultType,
@@ -85,17 +123,14 @@ public sealed interface GuideDetailCard permits
                 throw new IllegalArgumentException("preview counts must not be negative");
             }
             rows = List.copyOf(rows);
-            if (rows.size() > 6) {
-                throw new IllegalArgumentException("preview must contain at most six rows");
-            }
         }
     }
 
     record DataRow(List<DataCell> cells) {
         public DataRow {
             cells = List.copyOf(cells);
-            if (cells.isEmpty() || cells.size() > 16) {
-                throw new IllegalArgumentException("preview row must contain 1..16 cells");
+            if (cells.isEmpty()) {
+                throw new IllegalArgumentException("preview row must contain cells");
             }
         }
     }

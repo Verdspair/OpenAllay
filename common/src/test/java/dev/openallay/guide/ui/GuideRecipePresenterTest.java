@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test;
 final class GuideRecipePresenterTest {
     @Test
     void projectsGroundedSearchResultIntoNativeCardReferences() {
-        var normalized = JsonParser.parseString("""
-                {"status":"success","value":{"recipes":[{
+        var recipes = JsonParser.parseString("""
+                [{
                   "reference":{"sourceId":"minecraft:client_recipe_book","generation":"%s","recipeId":"test:iron"},
                   "references":[
                     {"sourceId":"minecraft:client_recipe_book","generation":"%s","recipeId":"test:iron"},
@@ -23,11 +23,11 @@ final class GuideRecipePresenterTest {
                     {"kind":"item","id":"minecraft:hammer","resolvedItems":["minecraft:hammer"]}]}],
                   "byproducts":[{"stack":{"itemId":"minecraft:nugget","count":2,"displayName":"Nugget"},"chance":1.0}],
                   "processing":{"durationTicks":40,"energy":120,"temperature":300.0}
-                }]}}
+                }]
                 """.formatted("0".repeat(64), "0".repeat(64), "1".repeat(64)))
-                .getAsJsonObject();
+                .getAsJsonArray();
 
-        var cards = GuideRecipePresenter.cards("openallay:search_recipes", normalized);
+        var cards = GuideRecipePresenter.cards(recipes);
 
         assertEquals(1, cards.size());
         assertEquals("minecraft:iron_block", cards.getFirst().outputs().getFirst().itemId());
@@ -43,14 +43,14 @@ final class GuideRecipePresenterTest {
 
     @Test
     void malformedSemanticCardFailsClosedToTextFallback() {
-        var normalized = JsonParser.parseString("""
-                {"status":"success","value":{"recipe":{
+        var recipes = JsonParser.parseString("""
+                [{
                   "reference":{"sourceId":"viewer:jei","generation":"bad","recipeId":"test:iron"},
                   "id":"test:iron","type":"minecraft:crafting",
                   "outputs":[{"stack":{"itemId":"minecraft:iron_block","count":1}}]
-                }}}
-                """).getAsJsonObject();
+                }]
+                """).getAsJsonArray();
 
-        assertTrue(GuideRecipePresenter.cards("openallay:get_recipe", normalized).isEmpty());
+        assertTrue(GuideRecipePresenter.cards(recipes).isEmpty());
     }
 }

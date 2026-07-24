@@ -16,6 +16,8 @@ import dev.latvian.mods.rhino.Undefined;
 import dev.latvian.mods.rhino.Wrapper;
 import dev.openallay.script.host.HostListView;
 import dev.openallay.script.host.HostObjectView;
+import dev.openallay.script.result.JavascriptResultShape;
+import dev.openallay.script.result.JavascriptSemanticKind;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
@@ -26,11 +28,11 @@ final class RhinoJsonNormalizer {
         this.limits = java.util.Objects.requireNonNull(limits, "limits");
     }
 
-    JsonElement normalize(Object value, Context context) {
+    Result normalize(Object value, Context context) {
         return normalize(value, context, new IdentityHashMap<>(), 0, new Budget());
     }
 
-    private JsonElement normalize(
+    private Result normalize(
             Object value,
             Context context,
             IdentityHashMap<Object, Boolean> ancestors,
@@ -41,25 +43,25 @@ final class RhinoJsonNormalizer {
         }
         budget.node();
         if (value == null) {
-            return JsonNull.INSTANCE;
+            return ordinary(JsonNull.INSTANCE, JavascriptSemanticKind.SCALAR);
         }
         if (value == Undefined.INSTANCE || value == Undefined.SCRIPTABLE_INSTANCE) {
             throw invalid("JavaScript result is undefined");
         }
         if (value instanceof Boolean booleanValue) {
-            return new JsonPrimitive(booleanValue);
+            return ordinary(new JsonPrimitive(booleanValue), JavascriptSemanticKind.SCALAR);
         }
         if (value instanceof CharSequence sequence) {
             String text = sequence.toString();
             budget.string(text.length());
-            return new JsonPrimitive(text);
+            return ordinary(new JsonPrimitive(text), JavascriptSemanticKind.SCALAR);
         }
         if (value instanceof Number number) {
             double numeric = number.doubleValue();
             if (!Double.isFinite(numeric)) {
                 throw invalid("JavaScript result contains a non-finite number");
             }
-            return new JsonPrimitive(number);
+            return ordinary(new JsonPrimitive(number), JavascriptSemanticKind.SCALAR);
         }
         if (value instanceof BaseFunction
                 || value instanceof NativePromise
@@ -75,12 +77,15 @@ final class RhinoJsonNormalizer {
             enter(value, ancestors);
             try {
                 JsonArray result = new JsonArray();
+                JavascriptResultShape aggregate = null;
                 for (Object item : array) {
-                    result.add(item == Undefined.INSTANCE
-                            ? JsonNull.INSTANCE
-                            : normalize(item, context, ancestors, depth + 1, budget));
+                    Result child = item == Undefined.INSTANCE
+                            ? ordinary(JsonNull.INSTANCE, JavascriptSemanticKind.SCALAR)
+                            : normalize(item, context, ancestors, depth + 1, budget);
+                    result.add(child.value());
+                    aggregate = aggregate(aggregate, child.shape());
                 }
-                return result;
+                return new Result(result, arrayShape(aggregate));
             } finally {
                 ancestors.remove(value);
             }
@@ -100,10 +105,10 @@ final class RhinoJsonNormalizer {
                     if (child != Undefined.INSTANCE) {
                         result.add(
                                 key,
-                                normalize(child, context, ancestors, depth + 1, budget));
+                                normalize(child, context, ancestors, depth + 1, budget).value());
                     }
                 }
-                return result;
+                return ordinary(result, JavascriptSemanticKind.KEY_VALUE);
             } finally {
                 ancestors.remove(value);
             }
@@ -115,15 +120,18 @@ final class RhinoJsonNormalizer {
             enter(value, ancestors);
             try {
                 JsonArray result = new JsonArray();
+                JavascriptResultShape aggregate = null;
                 for (int index = 0; index < list.length(); index++) {
-                    result.add(normalize(
+                    Result child = normalize(
                             list.get(context, index, list),
                             context,
                             ancestors,
                             depth + 1,
-                            budget));
+                            budget);
+                    result.add(child.value());
+                    aggregate = aggregate(aggregate, child.shape());
                 }
-                return result;
+                return new Result(result, arrayShape(aggregate));
             } finally {
                 ancestors.remove(value);
             }
@@ -142,10 +150,10 @@ final class RhinoJsonNormalizer {
                     Object child = object.get(context, key, object);
                     if (child != Undefined.INSTANCE) {
                         result.add(key, normalize(
-                                child, context, ancestors, depth + 1, budget));
+                                child, context, ancestors, depth + 1, budget).value());
                     }
                 }
-                return result;
+                return new Result(result, object.resultShape());
             } finally {
                 ancestors.remove(value);
             }
@@ -154,6 +162,30 @@ final class RhinoJsonNormalizer {
             throw invalid("JavaScript result contains an unsupported script object");
         }
         throw invalid("JavaScript result contains an unsupported value");
+    }
+
+    private static Result ordinary(JsonElement value, JavascriptSemanticKind kind) {
+        return new Result(value, JavascriptResultShape.ordinary(kind));
+    }
+
+    private static JavascriptResultShape aggregate(
+            JavascriptResultShape current, JavascriptResultShape next) {
+        if (current == null) {
+            return next;
+        }
+        if (current.trusted() && next.trusted() && current.kind() == next.kind()) {
+            return current;
+        }
+        return JavascriptResultShape.ordinary(JavascriptSemanticKind.GENERIC);
+    }
+
+    private static JavascriptResultShape arrayShape(JavascriptResultShape elements) {
+        if (elements != null && elements.trusted()
+                && (elements.kind() == JavascriptSemanticKind.RECIPE
+                        || elements.kind() == JavascriptSemanticKind.ITEM)) {
+            return elements;
+        }
+        return JavascriptResultShape.ordinary(JavascriptSemanticKind.GENERIC);
     }
 
     private static void enter(Object value, IdentityHashMap<Object, Boolean> ancestors) {
@@ -193,5 +225,12 @@ final class RhinoJsonNormalizer {
 
     private static long saturatedAdd(long left, long right) {
         return left > Long.MAX_VALUE - right ? Long.MAX_VALUE : left + right;
+    }
+
+    record Result(JsonElement value, JavascriptResultShape shape) {
+        Result {
+            value = java.util.Objects.requireNonNull(value, "value");
+            shape = java.util.Objects.requireNonNull(shape, "shape");
+        }
     }
 }

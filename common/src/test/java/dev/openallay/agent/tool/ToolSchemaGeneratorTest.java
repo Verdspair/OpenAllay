@@ -47,12 +47,12 @@ final class ToolSchemaGeneratorTest {
 
     @Test
     void mapsNamespacedNamesAndRejectsUnknownValues() {
-        ToolNameCodec names = new ToolNameCodec(List.of("openallay:find_recipes"));
-        assertEquals("openallay__find_recipes", names.encode("openallay:find_recipes"));
-        assertEquals("openallay:find_recipes", names.decode("openallay__find_recipes"));
-        assertEquals("openallay:find_recipes", names.decode("openallay:find_recipes"));
+        ToolNameCodec names = new ToolNameCodec(List.of("openallay:run_javascript"));
+        assertEquals("openallay__run_javascript", names.encode("openallay:run_javascript"));
+        assertEquals("openallay:run_javascript", names.decode("openallay__run_javascript"));
+        assertEquals("openallay:run_javascript", names.decode("openallay:run_javascript"));
         assertThrows(IllegalArgumentException.class, () -> names.decode("unknown"));
-        assertThrows(IllegalArgumentException.class, () -> names.decode("other:find_recipes"));
+        assertThrows(IllegalArgumentException.class, () -> names.decode("other:run_javascript"));
     }
 
     @Test
@@ -85,21 +85,12 @@ final class ToolSchemaGeneratorTest {
     }
 
     @Test
-    void everyPlayerFacingBuiltInResultHasACompleteDebugSchema() {
+    void everyCurrentModelToolResultHasACompleteDebugSchema() {
         ToolSchemaGenerator generator = new ToolSchemaGenerator();
         List.of(
-                dev.openallay.tool.builtin.ResolveResourceTool.Output.class,
-                dev.openallay.tool.builtin.SearchRecipesTool.Output.class,
-                dev.openallay.tool.builtin.GetRecipeTool.Output.class,
-                dev.openallay.tool.builtin.FindItemUsagesTool.Output.class,
-                dev.openallay.tool.builtin.InspectInventoryTool.Output.class,
-                dev.openallay.tool.builtin.CalculateCraftabilityTool.Output.class,
-                dev.openallay.tool.builtin.FindRecipesTool.Output.class,
-                dev.openallay.tool.builtin.InspectGameStateTool.Output.class,
-                dev.openallay.tool.builtin.ListKnowledgeSourcesTool.Output.class,
-                dev.openallay.tool.builtin.SearchKnowledgeTool.Output.class,
-                dev.openallay.tool.builtin.GetKnowledgeDocumentTool.Output.class,
-                dev.openallay.tool.builtin.GetPatchouliMultiblockTool.Output.class)
+                dev.openallay.tool.builtin.RunJavascriptTool.Output.class,
+                dev.openallay.skill.LoadSkillTool.Output.class,
+                dev.openallay.skill.ManageSkillTool.Output.class)
                 .forEach(type -> assertEquals(
                         "object", generator.generateOutput(type).get("type").getAsString(),
                         type.getName()));

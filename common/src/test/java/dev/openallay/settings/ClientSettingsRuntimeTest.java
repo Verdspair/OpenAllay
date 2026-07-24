@@ -21,9 +21,6 @@ import dev.openallay.skill.SkillParser;
 import dev.openallay.skill.SkillRepository;
 import dev.openallay.tool.ToolRegistry;
 import dev.openallay.tool.ToolResult;
-import dev.openallay.tool.config.ToolFamilyConfig;
-import dev.openallay.tool.config.ToolFamilyId;
-import dev.openallay.tool.config.ToolSourceDefinition;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -277,63 +274,6 @@ final class ClientSettingsRuntimeTest {
             settings.closeAsync().join();
             server.stop(0);
         }
-    }
-
-    @Test
-    void toolOwnedLocalDocumentsPersistAndReloadIntoKnowledge(@TempDir Path directory)
-            throws Exception {
-        OpenAllayRuntime product = runtime();
-        ClientSettingsRuntime settings = success(ClientSettingsRuntime.create(
-                product,
-                directory.resolve("models.json"),
-                directory.resolve("model.json"),
-                directory.resolve("model-metadata.json"),
-                Map.of(),
-                Runnable::run,
-                null,
-                Clock.systemUTC(),
-                GuideDisplayConfig.defaults()));
-        var guides = settings.settings().snapshot().tools()
-                .find(ToolFamilyId.GUIDES)
-                .orElseThrow();
-        com.google.gson.JsonObject config = new com.google.gson.JsonObject();
-        config.addProperty("directory", "notes");
-        config.addProperty("locale", "en_us");
-        java.util.ArrayList<ToolSourceDefinition> sources = new java.util.ArrayList<>();
-        guides.sources().forEach(source -> sources.add(new ToolSourceDefinition(
-                source.id(),
-                source.kind(),
-                source.displayName(),
-                source.enabled(),
-                source.config(),
-                source.lifecycle())));
-        sources.add(new ToolSourceDefinition(
-                "user:notes",
-                "local_markdown",
-                "Notes",
-                true,
-                config,
-                ToolSourceDefinition.Lifecycle.USER));
-
-        ToolResult<Boolean> savedTool = settings.settings()
-                .saveToolSettings(new ToolFamilyConfig(
-                        ToolFamilyConfig.SCHEMA_VERSION,
-                        ToolFamilyId.GUIDES,
-                        true,
-                        sources))
-                .join();
-        assertTrue(savedTool instanceof ToolResult.Success<Boolean>, savedTool.toString());
-        Path document = directory.resolve("knowledge/notes/iron.md");
-        Files.writeString(document, "# Iron\nUse a furnace.\n");
-        assertInstanceOf(ToolResult.Success.class, settings.settings()
-                .reloadToolSettings(ToolFamilyId.GUIDES, true)
-                .join());
-
-        assertTrue(Files.exists(directory.resolve("tools/guides.json")));
-        assertEquals("Iron", product.knowledge().snapshot().documents().getFirst().title());
-        assertEquals(3, settings.settings().snapshot().tools()
-                .find(ToolFamilyId.GUIDES).orElseThrow().sources().size());
-        settings.closeAsync().join();
     }
 
     @SuppressWarnings("unchecked")

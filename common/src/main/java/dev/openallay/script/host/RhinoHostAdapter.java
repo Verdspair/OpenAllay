@@ -6,6 +6,10 @@ import com.google.gson.JsonPrimitive;
 import dev.latvian.mods.rhino.Context;
 import dev.latvian.mods.rhino.Scriptable;
 import dev.latvian.mods.rhino.Undefined;
+import dev.openallay.script.result.JavascriptResultShape;
+import dev.openallay.script.schema.HostSchema;
+import dev.openallay.script.schema.RhinoTypeSchema;
+import java.lang.reflect.Type;
 import java.time.temporal.TemporalAmount;
 import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
@@ -33,6 +37,11 @@ public final class RhinoHostAdapter {
     public RhinoHostAdapter(Context context, Scriptable scope) {
         this.context = Objects.requireNonNull(context, "context");
         this.scope = Objects.requireNonNull(scope, "scope");
+    }
+
+    /** Declared-type verdict used by extension registration and schema discovery. */
+    public static HostSchema declaredSchema(Type type) {
+        return RhinoTypeSchema.require(type);
     }
 
     public Object adapt(Object value) {
@@ -85,6 +94,22 @@ public final class RhinoHostAdapter {
             return cached(value, () -> HostObjectView.record(context, scope, this, value));
         }
         throw HostAccessException.unsupported(value.getClass());
+    }
+
+    public Object adaptWorkspace(Object value, JavascriptResultShape shape) {
+        Objects.requireNonNull(shape, "shape");
+        if (!(value instanceof JsonElement json) || !shape.trusted()) {
+            return adapt(value);
+        }
+        if (json.isJsonArray()) {
+            return cached(json, () -> HostListView.json(
+                    context, scope, this, json.getAsJsonArray(), shape));
+        }
+        if (json.isJsonObject()) {
+            return cached(json, () -> HostObjectView.json(
+                    context, scope, this, json.getAsJsonObject(), shape));
+        }
+        return adapt(value);
     }
 
     private Object adaptJson(JsonElement value) {

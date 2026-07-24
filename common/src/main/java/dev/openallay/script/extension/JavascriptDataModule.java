@@ -2,6 +2,7 @@ package dev.openallay.script.extension;
 
 import dev.openallay.context.EvidenceMetadata;
 import dev.openallay.context.ToolInvocationContext;
+import java.lang.reflect.Type;
 import java.util.List;
 
 /**
@@ -16,6 +17,14 @@ import java.util.List;
  */
 public interface JavascriptDataModule {
     String id();
+
+    /** Stable detached value type used for discovery without capturing the module. */
+    Type valueType();
+
+    /** Player-facing summary of the data contributed by this module. */
+    default String summary() {
+        return id();
+    }
 
     Snapshot capture(ToolInvocationContext context);
 

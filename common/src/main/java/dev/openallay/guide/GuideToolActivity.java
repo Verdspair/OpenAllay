@@ -8,6 +8,8 @@ public record GuideToolActivity(
         int index,
         String toolId,
         GuideToolStatus status,
+        JsonObject invocationArguments,
+        GuideToolInvocationView invocation,
         JsonObject normalized,
         List<GuideToolMessage> presentationMessages,
         List<GuideSource> sources) {
@@ -17,9 +19,58 @@ public record GuideToolActivity(
             throw new IllegalArgumentException("tool activity identity is invalid");
         }
         java.util.Objects.requireNonNull(status, "status");
+        invocationArguments =
+                invocationArguments == null ? null : invocationArguments.deepCopy();
+        invocation = java.util.Objects.requireNonNull(invocation, "invocation");
         normalized = normalized == null ? null : normalized.deepCopy();
         presentationMessages = List.copyOf(presentationMessages);
         sources = List.copyOf(sources);
+    }
+
+    public GuideToolActivity(
+            String invocationId,
+            int index,
+            String toolId,
+            GuideToolStatus status,
+            JsonObject invocationArguments,
+            JsonObject normalized,
+            List<GuideToolMessage> presentationMessages,
+            List<GuideSource> sources) {
+        this(
+                invocationId,
+                index,
+                toolId,
+                status,
+                invocationArguments,
+                GuideToolInvocationView.from(toolId, invocationArguments, normalized),
+                normalized,
+                presentationMessages,
+                sources);
+    }
+
+    public GuideToolActivity(
+            String invocationId,
+            int index,
+            String toolId,
+            GuideToolStatus status,
+            JsonObject normalized,
+            List<GuideToolMessage> presentationMessages,
+            List<GuideSource> sources) {
+        this(
+                invocationId,
+                index,
+                toolId,
+                status,
+                null,
+                GuideToolInvocationView.from(toolId, null, normalized),
+                normalized,
+                presentationMessages,
+                sources);
+    }
+
+    @Override
+    public JsonObject invocationArguments() {
+        return invocationArguments == null ? null : invocationArguments.deepCopy();
     }
 
     @Override

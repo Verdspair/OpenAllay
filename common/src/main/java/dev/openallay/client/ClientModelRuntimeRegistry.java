@@ -130,6 +130,19 @@ public final class ClientModelRuntimeRegistry implements GuideLocalEndpoint {
         return capabilities.get();
     }
 
+    /** Returns one complete redacted local Agent trace without exposing model credentials. */
+    public java.util.Optional<String> encodedTrace(String profileId, UUID requestId) {
+        Objects.requireNonNull(requestId, "requestId");
+        ClientGuideRuntime runtime;
+        try {
+            runtime = runtime(state.get(), profileId);
+        } catch (GuideModelProfileException unavailable) {
+            return java.util.Optional.empty();
+        }
+        return runtime.traces().find(requestId)
+                .map(ignored -> runtime.traces().encoded(requestId));
+    }
+
     Object endpointIdentity(String profileId) {
         return runtime(state.get(), profileId).endpointIdentity();
     }

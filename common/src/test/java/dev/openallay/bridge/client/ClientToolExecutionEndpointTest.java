@@ -14,12 +14,19 @@ import dev.openallay.bridge.protocol.ClientToolCancelPayload;
 import dev.openallay.bridge.protocol.ClientToolResultChunkPayload;
 import dev.openallay.bridge.protocol.ResultChunker;
 import dev.openallay.context.ToolInvocationContext;
+import dev.openallay.script.RhinoJavascriptRuntime;
+import dev.openallay.script.command.CommandCapabilityConfig;
+import dev.openallay.script.command.CommandCapabilityRuntime;
+import dev.openallay.script.data.MinecraftAgentHostGraph;
+import dev.openallay.script.workspace.AgentResultWorkspaceRegistry;
+import dev.openallay.script.workspace.JavascriptResultPresenter;
 import dev.openallay.tool.Tool;
 import dev.openallay.tool.ToolAccess;
 import dev.openallay.tool.ToolDescriptor;
 import dev.openallay.tool.ToolRegistry;
 import dev.openallay.tool.ToolResult;
 import dev.openallay.tool.RequestScopeParticipant;
+import dev.openallay.tool.builtin.RunJavascriptTool;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -201,6 +208,50 @@ final class ClientToolExecutionEndpointTest {
 
             assertEquals("client-tool-test-worker", responseThread.get(5, TimeUnit.SECONDS));
         }
+    }
+
+    @Test
+    void advertisesExperimentalCommandsOnlyForRequestsFrozenWhileEnabled() {
+        CommandCapabilityRuntime commands = new CommandCapabilityRuntime();
+        ToolRegistry registry = new ToolRegistry();
+        registry.register(
+                "test",
+                List.of(new RunJavascriptTool(
+                        new RhinoJavascriptRuntime(),
+                        MinecraftAgentHostGraph::new,
+                        new AgentResultWorkspaceRegistry(),
+                        new JavascriptResultPresenter(),
+                        commands)));
+        ClientToolExecutionEndpoint endpoint = new ClientToolExecutionEndpoint(
+                (capabilities, correlation) -> CompletableFuture.completedFuture(
+                        ToolInvocationContext.developmentConsole(correlation)),
+                chunk -> {},
+                new Gson(),
+                128,
+                Runnable::run);
+        ToolRuntimeCatalog catalog =
+                ToolRuntimeCatalog.from(registry.registrations(), java.util.Set.of());
+
+        UUID disabledRequest = UUID.randomUUID();
+        var disabled = (ToolResult.Success<ClientToolExecutionEndpoint.OpenedRequest>)
+                endpoint.open(disabledRequest, "main", catalog);
+        assertFalse(disabled.value()
+                .clientToolIds()
+                .contains(ClientToolExecutionEndpoint.EXPERIMENTAL_COMMANDS_CAPABILITY));
+
+        commands.replace(new CommandCapabilityConfig(
+                CommandCapabilityConfig.SCHEMA_VERSION, true));
+        UUID enabledRequest = UUID.randomUUID();
+        var enabled = (ToolResult.Success<ClientToolExecutionEndpoint.OpenedRequest>)
+                endpoint.open(enabledRequest, "main", catalog);
+        assertTrue(enabled.value()
+                .clientToolIds()
+                .contains(ClientToolExecutionEndpoint.EXPERIMENTAL_COMMANDS_CAPABILITY));
+
+        commands.replace(CommandCapabilityConfig.defaults());
+        assertTrue(commands.enabledFor(enabledRequest.toString()));
+        endpoint.close(disabledRequest);
+        endpoint.close(enabledRequest);
     }
 
     private static ToolRegistry registry() {

@@ -13,6 +13,7 @@ public record GuideClientE2EConfig(
         String question,
         GuideModelMode modelMode,
         Path reportPath,
+        Path tracePath,
         boolean shutdownAfterReport,
         int historySeedRequests) {
     public static final String ENABLED = "openallay.e2e.enabled";
@@ -25,6 +26,7 @@ public record GuideClientE2EConfig(
         if (question == null || question.isBlank()) throw new IllegalArgumentException("question is required");
         java.util.Objects.requireNonNull(modelMode, "modelMode");
         java.util.Objects.requireNonNull(reportPath, "reportPath");
+        java.util.Objects.requireNonNull(tracePath, "tracePath");
         if (historySeedRequests < 0) {
             throw new IllegalArgumentException("historySeedRequests must not be negative");
         }
@@ -40,6 +42,25 @@ public record GuideClientE2EConfig(
         this(scenario, sessionId, question, modelMode, reportPath, shutdownAfterReport, 0);
     }
 
+    public GuideClientE2EConfig(
+            String scenario,
+            String sessionId,
+            String question,
+            GuideModelMode modelMode,
+            Path reportPath,
+            boolean shutdownAfterReport,
+            int historySeedRequests) {
+        this(
+                scenario,
+                sessionId,
+                question,
+                modelMode,
+                reportPath,
+                Path.of(reportPath.toString() + ".trace.json"),
+                shutdownAfterReport,
+                historySeedRequests);
+    }
+
     public static Optional<GuideClientE2EConfig> from(Properties properties) {
         if (!Boolean.parseBoolean(properties.getProperty(ENABLED, "false"))) {
             return Optional.empty();
@@ -52,6 +73,9 @@ public record GuideClientE2EConfig(
                 required(properties, "openallay.e2e.question"),
                 GuideModelMode.valueOf(mode),
                 Path.of(required(properties, "openallay.e2e.report")),
+                Path.of(properties.getProperty(
+                        "openallay.e2e.trace",
+                        required(properties, "openallay.e2e.report") + ".trace.json")),
                 Boolean.parseBoolean(properties.getProperty("openallay.e2e.shutdown", "true")),
                 nonNegativeInteger(properties, "openallay.e2e.historySeedRequests", 0)));
     }

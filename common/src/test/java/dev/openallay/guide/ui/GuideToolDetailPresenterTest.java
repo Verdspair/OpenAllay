@@ -14,104 +14,42 @@ import org.junit.jupiter.api.Test;
 
 final class GuideToolDetailPresenterTest {
     @Test
-    void projectsInventoryAndCraftabilityAsPlayerCards() {
-        GuideToolDetailView inventory = GuideToolDetailPresenter.project(activity(
-                "openallay:inspect_inventory", """
-                {"status":"success","value":{"counts":{
-                  "minecraft:apple":3,"minecraft:iron_ingot":12},
-                  "inventory":{"complete":true}}}
-                """), false);
-        GuideDetailCard.ItemGrid grid = assertInstanceOf(
-                GuideDetailCard.ItemGrid.class, inventory.cards().getFirst());
-        assertEquals(List.of("minecraft:apple", "minecraft:iron_ingot"),
-                grid.items().stream().map(GuideItemView::itemId).toList());
-        assertTrue(inventory.debug().isEmpty());
-
-        GuideToolDetailView craftability = GuideToolDetailPresenter.project(activity(
-                "openallay:calculate_craftability", """
-                {"status":"success","value":{"result":{"craftable":false,"conclusive":true,
-                  "requestedCrafts":1,"maximumCrafts":0,
-                  "allocations":[{"requirementKey":"iron","itemId":"minecraft:iron_ingot","count":4}],
-                  "missing":[{"requirementKey":"iron","required":9,"allocated":4,"missing":5,
-                    "alternatives":["minecraft:iron_ingot"]}]}}}
-                """), false);
-        GuideDetailCard.Requirements requirements = assertInstanceOf(
-                GuideDetailCard.Requirements.class, craftability.cards().getFirst());
-        assertFalse(requirements.craftable());
-        assertEquals(4, requirements.requirements().getFirst().allocatedItems().getFirst().count());
-        assertEquals(5, requirements.requirements().getFirst().missing());
-    }
-
-    @Test
-    void normalProjectionExcludesTechnicalDetailsWhileDebugKeepsSeparateCopy() {
-        GuideToolActivity activity = activity("openallay:search_recipes", """
-                {"status":"success","value":{"recipes":[],"catalog":{
-                  "completeness":"PARTIAL","recipeCount":0,"semanticGroupCount":0,
-                  "providers":[{"sourceId":"viewer:rei","generation":"%s",
-                    "state":"UNAVAILABLE","completeness":"UNKNOWN","recipeCount":0,
-                    "diagnostics":[{"code":"mod_not_loaded","message":"REI is not installed"}]}]}}}
-                """.formatted("0".repeat(64)));
-
-        GuideToolDetailView normal = GuideToolDetailPresenter.project(activity, false);
-        String visibleArguments = normal.narration().stream()
-                .flatMap(message -> message.arguments().stream())
-                .reduce("", (left, right) -> left + " " + right);
-        assertTrue(normal.debug().isEmpty());
-        assertTrue(normal.narration().stream().anyMatch(message ->
-                message.key() == GuideToolMessage.Key.CATALOG_PARTIAL));
-        assertFalse(visibleArguments.contains("UNAVAILABLE"));
-        assertFalse(visibleArguments.contains("mod_not_loaded"));
-        assertFalse(visibleArguments.contains("0".repeat(64)));
-        assertFalse(visibleArguments.contains("call-secret"));
-
-        GuideToolDetailView debug = GuideToolDetailPresenter.project(activity, true);
-        assertEquals("openallay:search_recipes", debug.debug().orElseThrow().toolId());
-        assertEquals("PARTIAL", debug.debug().orElseThrow().normalized()
-                .getAsJsonObject("value").getAsJsonObject("catalog")
-                .get("completeness").getAsString());
-    }
-
-    @Test
-    void failuresUseClosedFriendlyMessagesAndUnknownToolsNeverShowRawJson() {
+    void failuresUseFriendlyMessagesAndGenericToolsNeverShowRawJson() {
         GuideToolDetailView failure = GuideToolDetailPresenter.project(activity(
-                "openallay:get_recipe",
+                "openallay:run_javascript",
                 "{\"status\":\"failure\",\"code\":\"stale_reference\",\"message\":\"generation deadbeef\"}"),
                 false);
         assertTrue(failure.cards().isEmpty());
-        assertEquals(List.of(GuideToolMessage.of(
-                GuideToolMessage.Key.FAILURE_STALE_REFERENCE)), failure.narration());
+        assertEquals(
+                List.of(GuideToolMessage.of(
+                        GuideToolMessage.Key.FAILURE_STALE_REFERENCE)),
+                failure.narration());
 
-        GuideToolDetailView unknown = GuideToolDetailPresenter.project(activity(
+        GuideToolDetailView generic = GuideToolDetailPresenter.project(activity(
                 "openallay:future_tool",
                 "{\"status\":\"success\",\"value\":{\"secretInternalId\":\"abc\"}}"), false);
-        String visible = unknown.cards() + " " + unknown.narration();
+        String visible = generic.cards() + " " + generic.narration();
         assertFalse(visible.contains("secretInternalId"));
         assertFalse(visible.contains("abc"));
-    }
-
-    @Test
-    void knownTextToolsExposeUsefulFriendlyDetails() {
-        GuideToolDetailView resolved = GuideToolDetailPresenter.project(activity(
-                "openallay:resolve_resource",
-                """
-                {"status":"success","value":{"requestedQuery":"apple cider","exists":true,
-                  "matches":[{"id":"farmersdelight:apple_cider","kind":"item",
-                    "displayName":"Apple Cider","namespace":"farmersdelight",
-                    "provenance":"minecraft:item_registry"}]}}
-                """), false);
-
-        assertTrue(resolved.cards().isEmpty());
-        assertEquals(GuideToolMessage.Key.RESOLVE_ONE, resolved.narration().getFirst().key());
-        assertEquals(
-                List.of("Apple Cider", "farmersdelight:apple_cider", "item"),
-                resolved.narration().get(1).arguments());
+        assertEquals("screen.openallay.tool.result", generic.titleKey());
     }
 
     @Test
     void javascriptResultsUseBoundedStructuredPlayerPreview() {
-        GuideToolDetailView view = GuideToolDetailPresenter.project(activity(
+        var arguments = JsonParser.parseString("""
+                {
+                  "source":"return mc.items.filter(item => item.id.includes('sword'));",
+                  "roots":["items"],
+                  "handles":[]
+                }
+                """).getAsJsonObject();
+        GuideToolActivity activity = new GuideToolActivity(
+                "call-secret",
+                0,
                 "openallay:run_javascript",
-                """
+                GuideToolStatus.SUCCEEDED,
+                arguments,
+                JsonParser.parseString("""
                 {"status":"success","value":{
                   "handle":"r_secret","resultType":"array","cardinality":9,
                   "fields":["damage","itemId"],
@@ -119,26 +57,99 @@ final class GuideToolDetailPresenterTest {
                     {"itemId":"example:obsidian_sword","damage":14},
                     {"itemId":"minecraft:diamond_sword","damage":7}
                   ],
-                  "modelText":"internal projection","complete":false,
+                  "modelText":"internal projection","viewKind":"TABLE","complete":false,
                   "omittedRows":7,"omittedFields":0,"elapsedMillis":12,
+                  "modules":["openallay:crafting"],
                   "evidence":[{"authority":"CLIENT_VISIBLE"}]}}
-                """), false);
+                """).getAsJsonObject(),
+                List.of(GuideToolMessage.of(GuideToolMessage.Key.RESULT_COMPLETED)),
+                List.of());
+        GuideToolDetailView view = GuideToolDetailPresenter.project(activity, false);
 
-        GuideDetailCard.DataPreview preview = assertInstanceOf(
-                GuideDetailCard.DataPreview.class, view.cards().getFirst());
-        assertEquals(9, preview.cardinality());
+        GuideDetailCard.Table preview = assertInstanceOf(
+                GuideDetailCard.Table.class, view.cards().getFirst());
+        assertEquals(List.of("damage", "itemId"), preview.columns());
         assertEquals(2, preview.rows().size());
-        assertEquals("example:obsidian_sword", preview.rows().getFirst()
-                .cells().stream()
-                .filter(cell -> cell.key().equals("itemId"))
-                .findFirst()
-                .orElseThrow()
-                .value());
+        assertEquals(
+                "example:obsidian_sword",
+                preview.rows().getFirst().get(preview.columns().indexOf("itemId")));
+        assertEquals(List.of("items"), view.invocation().roots());
+        assertEquals(List.of("openallay:crafting"), view.invocation().modules());
         assertFalse(view.toString().contains("r_secret"));
         assertFalse(view.toString().contains("internal projection"));
+        assertFalse(view.toString().contains("return mc.items"));
         assertEquals(
                 GuideToolMessage.Key.ANALYSIS_PREVIEW,
                 view.narration().getFirst().key());
+
+        GuideToolDetailView debug = GuideToolDetailPresenter.project(activity, true);
+        assertEquals(
+                "return mc.items.filter(item => item.id.includes('sword'));",
+                debug.debug().orElseThrow().invocationArguments().get("source").getAsString());
+    }
+
+    @Test
+    void trustedJavascriptRecipeAndItemViewsUseNativeCards() {
+        GuideToolDetailView recipe = GuideToolDetailPresenter.project(activity(
+                "openallay:run_javascript", """
+                {"status":"success","value":{
+                  "resultType":"array","cardinality":1,
+                  "fields":["id","outputs"],"viewKind":"RECIPE",
+                  "preview":[{
+                    "reference":{"sourceId":"minecraft:recipe_manager",
+                      "generation":"%s","recipeId":"minecraft:iron_block"},
+                    "id":"minecraft:iron_block","type":"minecraft:crafting",
+                    "workstation":"minecraft:crafting_table",
+                    "ingredients":[],"catalysts":[],"byproducts":[],
+                    "outputs":[{"stack":{"itemId":"minecraft:iron_block","count":1,
+                      "displayName":"Block of Iron"},"probability":1.0}]
+                  }],
+                  "complete":true,"omittedRows":0,"omittedFields":0}}
+                """.formatted("0".repeat(64))), false);
+        assertInstanceOf(GuideDetailCard.Recipe.class, recipe.cards().getFirst());
+
+        GuideToolDetailView items = GuideToolDetailPresenter.project(activity(
+                "openallay:run_javascript", """
+                {"status":"success","value":{
+                  "resultType":"array","cardinality":2,
+                  "fields":["id","displayName"],"viewKind":"ITEM",
+                  "preview":[
+                    {"id":"minecraft:apple","displayName":"Apple","kind":"item"},
+                    {"id":"minecraft:bread","displayName":"Bread","kind":"item"}],
+                  "complete":true,"omittedRows":0,"omittedFields":0}}
+                """), false);
+        GuideDetailCard.ItemGrid grid = assertInstanceOf(
+                GuideDetailCard.ItemGrid.class, items.cards().getFirst());
+        assertEquals(
+                List.of("minecraft:apple", "minecraft:bread"),
+                grid.items().stream().map(GuideItemView::itemId).toList());
+    }
+
+    @Test
+    void keyValueCommandResultShowsStateAndSmallMessageArray() {
+        GuideToolDetailView view = GuideToolDetailPresenter.project(activity(
+                "openallay:run_javascript", """
+                {"status":"success","value":{
+                  "resultType":"object","cardinality":1,"viewKind":"KEY_VALUE",
+                  "preview":{"state":"completed","messages":[
+                    "Set own game mode to Creative Mode",
+                    "Made OpenAllay ride a Minecart"]},
+                  "complete":true,"omittedRows":0,"omittedFields":0}}
+                """), false);
+
+        GuideDetailCard.KeyValue card = assertInstanceOf(
+                GuideDetailCard.KeyValue.class, view.cards().getFirst());
+        assertEquals("completed", value(card, "state"));
+        assertTrue(value(card, "messages").contains("Creative Mode"));
+        assertTrue(value(card, "messages").contains("Minecart"));
+    }
+
+    private static String value(GuideDetailCard.KeyValue card, String key) {
+        return card.entries().stream()
+                .filter(entry -> entry.key().equals(key))
+                .findFirst()
+                .orElseThrow()
+                .value();
     }
 
     private static GuideToolActivity activity(String toolId, String json) {

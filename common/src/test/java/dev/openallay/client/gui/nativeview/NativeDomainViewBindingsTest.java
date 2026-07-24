@@ -28,20 +28,20 @@ final class NativeDomainViewBindingsTest {
         RecipeReference reference = new RecipeReference(
                 "minecraft:recipe_manager", generation, "minecraft:apple");
         GuideToolActivity activity = new GuideToolActivity(
-                "call-exact", 0, "openallay:get_recipe", GuideToolStatus.SUCCEEDED,
+                "call-exact", 0, "openallay:run_javascript", GuideToolStatus.SUCCEEDED,
                 JsonParser.parseString("""
-                        {"status":"success","value":{"recipe":{
+                        {"status":"success","value":{"viewKind":"RECIPE","preview":[{
                           "reference":{"sourceId":"minecraft:recipe_manager","generation":"%s","recipeId":"minecraft:apple"},
                           "references":[],"id":"minecraft:apple","type":"minecraft:crafting",
                           "workstation":"minecraft:crafting_table",
                           "outputs":[{"stack":{"itemId":"minecraft:apple","count":1,"displayName":"Apple"}}],
-                          "ingredients":[],"catalysts":[],"byproducts":[]}}}
+                          "ingredients":[],"catalysts":[],"byproducts":[]}]}}
                         """.formatted(generation)).getAsJsonObject(),
                 List.of(), List.of());
         GuideUiRow.Tool tool = new GuideUiRow.Tool(
                 requestId, 0, activity,
                 new GuideToolDetailView(
-                        "screen.openallay.tool.get_recipe", GuideToolStatus.SUCCEEDED,
+                        "screen.openallay.tool.run_javascript", GuideToolStatus.SUCCEEDED,
                         List.of(), List.of(), Optional.empty()));
         GuideUiRow.Assistant assistant = new GuideUiRow.Assistant(
                 requestId, 1, "answer", SemanticDocument.empty(), false, List.of());

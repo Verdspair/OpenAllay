@@ -1,6 +1,8 @@
 package dev.openallay.client.gui;
 
 import com.google.gson.JsonObject;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import dev.openallay.guide.GuideModelSelection;
 import dev.openallay.guide.GuideFailure;
 import dev.openallay.guide.GuideRequestSnapshot;
@@ -79,6 +81,7 @@ public final class OpenAllayScreen extends Screen {
     private static final int TEXT = 0xFFE8EDF2;
     private static final int MUTED = 0xFFA9B3BE;
     private static final int ERROR = 0xFFFF7D7D;
+    private static final Gson DEBUG_GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Executor EXPORT_EXECUTOR = command -> Thread.ofVirtual()
             .name("openallay-session-export")
             .start(command);
@@ -102,6 +105,7 @@ public final class OpenAllayScreen extends Screen {
     private int scroll;
     private int detailScroll;
     private int detailContentHeight;
+    private final Map<String, CodeLayout> detailCodeLayouts = new LinkedHashMap<>();
     private int activeProgressRenderFrames;
     private boolean sessionOverlay;
     private boolean modelSelectorOpen;
@@ -984,6 +988,37 @@ public final class OpenAllayScreen extends Screen {
             graphics.text(font, Component.translatable(toolDetail.titleKey()),
                     detail.x() + 8, y, TEXT, false);
             y += 16;
+            if (!toolDetail.invocation().empty()) {
+                y = detailLine(
+                        graphics,
+                        Component.translatable("screen.openallay.detail.input").getString(),
+                        detail,
+                        y);
+                y = detailValues(
+                        graphics,
+                        "screen.openallay.detail.input.roots",
+                        toolDetail.invocation().roots(),
+                        detail,
+                        y);
+                y = detailValues(
+                        graphics,
+                        "screen.openallay.detail.input.handles",
+                        toolDetail.invocation().handles(),
+                        detail,
+                        y);
+                y = detailValues(
+                        graphics,
+                        "screen.openallay.detail.input.modules",
+                        toolDetail.invocation().modules(),
+                        detail,
+                        y);
+                y += 2;
+            }
+            y = detailLine(
+                    graphics,
+                    Component.translatable("screen.openallay.detail.output").getString(),
+                    detail,
+                    y);
             for (GuideDetailCard card : toolDetail.cards()) {
                 y = detailCard(graphics, card, detail, y, mouseX, mouseY);
             }
@@ -998,6 +1033,38 @@ public final class OpenAllayScreen extends Screen {
                         Component.translatable("screen.openallay.debug.section").getString(), detail, y + 4);
                 y = detailLine(graphics, "invocationId: " + debug.invocationId(), detail, y);
                 y = detailLine(graphics, "toolId: " + debug.toolId(), detail, y);
+                JsonObject invocation = debug.invocationArguments();
+                if (debug.toolId().endsWith(":run_javascript") && invocation != null) {
+                    if (invocation.has("source") && invocation.get("source").isJsonPrimitive()) {
+                        y = detailLine(
+                                graphics,
+                                Component.translatable(
+                                                "screen.openallay.debug.javascript_source")
+                                        .getString(),
+                                detail,
+                                y + 4);
+                        y = detailCode(
+                                graphics,
+                                invocation.get("source").getAsString(),
+                                detail,
+                                y,
+                                "javascript-source");
+                    }
+                    y = debugArray(
+                            graphics,
+                            invocation,
+                            "roots",
+                            "screen.openallay.debug.javascript_roots",
+                            detail,
+                            y);
+                    y = debugArray(
+                            graphics,
+                            invocation,
+                            "handles",
+                            "screen.openallay.debug.javascript_handles",
+                            detail,
+                            y);
+                }
                 if (!debug.validationDiagnostic().isBlank()) {
                     y = detailLine(graphics,
                             "validation: " + debug.validationDiagnostic(), detail, y);
@@ -1026,7 +1093,27 @@ public final class OpenAllayScreen extends Screen {
                                         y);
                             }
                         }
+                        y = debugArray(
+                                graphics,
+                                value,
+                                "modules",
+                                "screen.openallay.debug.javascript_modules",
+                                detail,
+                                y);
                     }
+                    y = detailLine(
+                            graphics,
+                            Component.translatable(
+                                            "screen.openallay.debug.normalized_result")
+                                    .getString(),
+                            detail,
+                            y + 4);
+                    y = detailCode(
+                            graphics,
+                            DEBUG_GSON.toJson(normalized),
+                            detail,
+                            y,
+                            "normalized-result");
                 }
             }
         } else if (selectedSource != null) {
@@ -1057,11 +1144,65 @@ public final class OpenAllayScreen extends Screen {
                     itemGridCard(graphics, grid, detail, y, mouseX, mouseY);
             case GuideDetailCard.Requirements requirements ->
                     requirementsCard(graphics, requirements, detail, y, mouseX, mouseY);
+            case GuideDetailCard.Table table ->
+                    tableCard(graphics, table, detail, y);
+            case GuideDetailCard.KeyValue keyValue ->
+                    keyValueCard(graphics, keyValue, detail, y);
             case GuideDetailCard.DataPreview preview ->
                     dataPreviewCard(graphics, preview, detail, y);
             case GuideDetailCard.Text text -> textCard(graphics, text, detail, y);
             case GuideDetailCard.Error error -> errorCard(graphics, error, detail, y);
         };
+    }
+
+    private int tableCard(
+            GuiGraphicsExtractor graphics,
+            GuideDetailCard.Table card,
+            GuideUiLayout.Rect detail,
+            int y) {
+        int start = y;
+        y = detailLine(graphics, Component.translatable(card.titleKey()).getString(), detail, y);
+        String header = String.join("  │  ", card.columns());
+        y = detailLine(graphics, header, detail, y);
+        for (List<String> row : card.rows()) {
+            y = detailLine(graphics, String.join("  │  ", row), detail, y);
+        }
+        if (!card.complete()) {
+            y = detailLine(
+                    graphics,
+                    Component.translatable(
+                                    "screen.openallay.detail.analysis.more",
+                                    card.omittedRows(),
+                                    card.omittedFields())
+                            .getString(),
+                    detail,
+                    y);
+        }
+        return Math.max(y, start + 25);
+    }
+
+    private int keyValueCard(
+            GuiGraphicsExtractor graphics,
+            GuideDetailCard.KeyValue card,
+            GuideUiLayout.Rect detail,
+            int y) {
+        int start = y;
+        y = detailLine(graphics, Component.translatable(card.titleKey()).getString(), detail, y);
+        for (GuideDetailCard.DataCell entry : card.entries()) {
+            y = detailLine(graphics, entry.key() + ": " + entry.value(), detail, y);
+        }
+        if (!card.complete()) {
+            y = detailLine(
+                    graphics,
+                    Component.translatable(
+                                    "screen.openallay.detail.analysis.more",
+                                    0,
+                                    card.omittedFields())
+                            .getString(),
+                    detail,
+                    y);
+        }
+        return Math.max(y, start + 25);
     }
 
     private int dataPreviewCard(
@@ -1403,11 +1544,90 @@ public final class OpenAllayScreen extends Screen {
         return y + 2;
     }
 
+    private int detailCode(
+            GuiGraphicsExtractor graphics,
+            String source,
+            GuideUiLayout.Rect detail,
+            int y,
+            String cacheId) {
+        int width = detail.width() - 16;
+        CodeLayout cached = detailCodeLayouts.get(cacheId);
+        if (cached == null || cached.width() != width || !cached.source().equals(source)) {
+            String[] sourceLines = source.split("\\R", -1);
+            int digits = Integer.toString(Math.max(1, sourceLines.length)).length();
+            List<FormattedCharSequence> wrapped = new ArrayList<>();
+            for (int index = 0; index < sourceLines.length; index++) {
+                String prefix = String.format("%" + digits + "d │ ", index + 1);
+                wrapped.addAll(font.split(Component.literal(prefix + sourceLines[index]), width));
+            }
+            cached = new CodeLayout(source, width, List.copyOf(wrapped));
+            detailCodeLayouts.put(cacheId, cached);
+        }
+        int first = Math.max(0, (detail.y() + 21 - y) / 10);
+        int last = Math.min(
+                cached.lines().size(),
+                Math.max(first, (detail.y() + detail.height() - y + 9) / 10));
+        for (int index = first; index < last; index++) {
+            int lineY = y + index * 10;
+            if (lineY >= detail.y() + 21 && lineY < detail.y() + detail.height() - 10) {
+                graphics.text(
+                        font,
+                        cached.lines().get(index),
+                        detail.x() + 8,
+                        lineY,
+                        TEXT,
+                        false);
+            }
+        }
+        return y + cached.lines().size() * 10 + 2;
+    }
+
+    private int detailValues(
+            GuiGraphicsExtractor graphics,
+            String labelKey,
+            List<String> values,
+            GuideUiLayout.Rect detail,
+            int y) {
+        if (values.isEmpty()) {
+            return y;
+        }
+        return detailLine(
+                graphics,
+                Component.translatable(labelKey).getString() + ": " + String.join(", ", values),
+                detail,
+                y);
+    }
+
+    private int debugArray(
+            GuiGraphicsExtractor graphics,
+            JsonObject object,
+            String field,
+            String labelKey,
+            GuideUiLayout.Rect detail,
+            int y) {
+        if (object == null || !object.has(field) || !object.get(field).isJsonArray()) {
+            return y;
+        }
+        String values = object.getAsJsonArray(field).asList().stream()
+                .filter(value -> value != null && value.isJsonPrimitive())
+                .map(value -> value.getAsString())
+                .collect(java.util.stream.Collectors.joining(", "));
+        if (values.isBlank()) {
+            values = Component.translatable("screen.openallay.debug.none").getString();
+        }
+        return detailLine(
+                graphics,
+                Component.translatable(labelKey).getString() + ": " + values,
+                detail,
+                y);
+    }
+
     private void open(GuideUiRow.Tool tool) {
         selectedTool = tool;
         selectedSource = null;
         selectedSourceFocusId = null;
         detailScroll = 0;
+        detailCodeLayouts.clear();
         rebuildForDetail();
     }
 
@@ -1420,8 +1640,12 @@ public final class OpenAllayScreen extends Screen {
         selectedSourceFocusId = Objects.requireNonNull(focusId, "focusId");
         selectedTool = null;
         detailScroll = 0;
+        detailCodeLayouts.clear();
         rebuildForDetail();
     }
+
+    private record CodeLayout(
+            String source, int width, List<FormattedCharSequence> lines) {}
 
     private void rebuildForDetail() {
         GuideViewportAnchor anchor = layout == null ? null : virtualizer.anchorAt(scroll);
@@ -1903,25 +2127,7 @@ public final class OpenAllayScreen extends Screen {
         int separator = id.indexOf(':');
         String name = separator >= 0 ? id.substring(separator + 1) : id;
         return switch (name) {
-            case "search_recipes" -> Component.translatable("screen.openallay.tool.search_recipes");
-            case "get_recipe" -> Component.translatable("screen.openallay.tool.get_recipe");
-            case "find_item_usages" -> Component.translatable("screen.openallay.tool.find_item_usages");
-            case "inspect_inventory" -> Component.translatable("screen.openallay.tool.inspect_inventory");
-            case "calculate_craftability" -> Component.translatable(
-                    "screen.openallay.tool.calculate_craftability");
-            case "resolve_resource" -> Component.translatable("screen.openallay.tool.resolve_resource");
-            case "search_knowledge" -> Component.translatable("screen.openallay.tool.search_knowledge");
-            case "load_knowledge", "get_knowledge_document" ->
-                    Component.translatable("screen.openallay.tool.load_knowledge");
-            case "list_knowledge_sources" ->
-                    Component.translatable("screen.openallay.tool.list_knowledge_sources");
-            case "get_patchouli_multiblock" ->
-                    Component.translatable("screen.openallay.tool.get_patchouli_multiblock");
             case "load_skill" -> Component.translatable("screen.openallay.tool.load_skill");
-            case "platform_info" -> Component.translatable("screen.openallay.tool.platform_info");
-            case "player_context" -> Component.translatable("screen.openallay.tool.player_context");
-            case "inspect_game_state" -> Component.translatable(
-                    "screen.openallay.tool.inspect_game_state");
             case "run_javascript" -> Component.translatable("screen.openallay.tool.run_javascript");
             default -> Component.literal(name);
         };

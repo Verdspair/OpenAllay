@@ -22,7 +22,6 @@ import dev.openallay.tool.ToolAccess;
 import dev.openallay.tool.ToolDescriptor;
 import dev.openallay.tool.ToolRegistry;
 import dev.openallay.tool.ToolResult;
-import dev.openallay.tool.builtin.ResolveResourceTool;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -174,97 +173,6 @@ final class PlayerClientToolRouterTest {
     }
 
     @Test
-    void serverAuthoritativeWorldQueryPlacementStaysLocalWithoutFallback() {
-        ToolRegistry registry = registry();
-        registry.register("game", List.of(new InspectTool()));
-        List<SentCall> calls = new ArrayList<>();
-        PlayerClientToolRouter router = new PlayerClientToolRouter(
-                registry, new Gson(), transport(calls, new ArrayList<>()));
-        UUID actor = UUID.randomUUID();
-        UUID requestId = UUID.randomUUID();
-        AgentToolExecutor tools = success(router.open(
-                actor,
-                requestId,
-                "main",
-                List.of("openallay:inspect_game_state")));
-        JsonObject input = new JsonObject();
-        input.addProperty("section", "WORLD_QUERY");
-
-        AgentToolResult result = tools.execute(
-                        "openallay:inspect_game_state",
-                        input,
-                        ToolInvocationContext.developmentConsole(requestId.toString()),
-                        new CancellationSignal())
-                .join();
-
-        assertTrue(calls.isEmpty());
-        assertFalse(result.failure());
-        assertEquals(
-                "server",
-                result.normalized().getAsJsonObject("value").get("placement").getAsString());
-    }
-
-    @Test
-    void playerVisibleGameStatePlacementRoutesToTheRequestingClient() {
-        ToolRegistry registry = registry();
-        registry.register("game", List.of(new InspectTool()));
-        List<SentCall> calls = new ArrayList<>();
-        PlayerClientToolRouter router = new PlayerClientToolRouter(
-                registry, new Gson(), transport(calls, new ArrayList<>()));
-        UUID actor = UUID.randomUUID();
-        UUID requestId = UUID.randomUUID();
-        AgentToolExecutor tools = success(router.open(
-                actor,
-                requestId,
-                "main",
-                List.of("openallay:inspect_game_state")));
-        JsonObject input = new JsonObject();
-        input.addProperty("section", "OPTIONS");
-
-        CompletableFuture<AgentToolResult> result = tools.execute(
-                "openallay:inspect_game_state",
-                input,
-                ToolInvocationContext.developmentConsole(requestId.toString()),
-                new CancellationSignal());
-
-        assertEquals(1, calls.size());
-        assertEquals(actor, calls.getFirst().actorId());
-        assertEquals("openallay:inspect_game_state", calls.getFirst().payload().toolId());
-        assertTrue(router.close(actor, requestId));
-        assertTrue(result.isCompletedExceptionally());
-    }
-
-    @Test
-    void gameContentCatalogPlacementRoutesToTheRequestingClient() {
-        ToolRegistry registry = registry();
-        registry.register("catalog", List.of(new ResolveResourceTool()));
-        List<SentCall> calls = new ArrayList<>();
-        PlayerClientToolRouter router = new PlayerClientToolRouter(
-                registry, new Gson(), transport(calls, new ArrayList<>()));
-        UUID actor = UUID.randomUUID();
-        UUID requestId = UUID.randomUUID();
-        AgentToolExecutor tools = success(router.open(
-                actor,
-                requestId,
-                "main",
-                List.of("openallay:resolve_resource")));
-        JsonObject input = new JsonObject();
-        input.addProperty("query", "中毒");
-
-        CompletableFuture<AgentToolResult> result = tools.execute(
-                "openallay:resolve_resource",
-                input,
-                ToolInvocationContext.developmentConsole(requestId.toString()),
-                new CancellationSignal());
-
-        assertEquals(1, calls.size());
-        assertEquals(actor, calls.getFirst().actorId());
-        assertEquals("openallay:resolve_resource", calls.getFirst().payload().toolId());
-        assertTrue(router.close(actor, requestId));
-        assertTrue(result.isCompletedExceptionally());
-    }
-
-    @Test
     void lostClientResultBecomesAToolFailureInsteadOfHangingTheAgent() throws Exception {
         List<SentCall> calls = new ArrayList<>();
         List<SentCancel> cancels = new ArrayList<>();
@@ -370,25 +278,6 @@ final class PlayerClientToolRouterTest {
         @Override
         public ToolResult<Output> invoke(ToolInvocationContext context, Input input) {
             return new ToolResult.Success<>(new Output(input.value()));
-        }
-    }
-
-    private static final class InspectTool implements Tool<InspectTool.Input, InspectTool.Output> {
-        record Input(String section) {}
-        record Output(String placement) {}
-
-        private static final ToolDescriptor<Input, Output> DESCRIPTOR = new ToolDescriptor<>(
-                "openallay:inspect_game_state",
-                "Inspect game state",
-                Input.class,
-                Output.class,
-                ToolAccess.READ_ONLY);
-
-        @Override public ToolDescriptor<Input, Output> descriptor() { return DESCRIPTOR; }
-
-        @Override
-        public ToolResult<Output> invoke(ToolInvocationContext context, Input input) {
-            return new ToolResult.Success<>(new Output("server"));
         }
     }
 

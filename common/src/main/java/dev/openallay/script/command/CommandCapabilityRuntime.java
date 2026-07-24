@@ -1,0 +1,305 @@
+package dev.openallay.script.command;
+
+import dev.openallay.model.CancellationSignal;
+import dev.openallay.script.JavascriptExecutionException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * Owns the default-off setting and immutable per-request command capability captures.
+ *
+ * <p>Captures, not the current toggle, determine active-request behavior.
+ */
+public final class CommandCapabilityRuntime {
+    private static final long DEFAULT_FEEDBACK_QUIET_MILLIS = 200;
+    private static final long DEFAULT_FEEDBACK_DEADLINE_MILLIS = 3_000;
+
+    @FunctionalInterface
+    public interface Submitter {
+        CompletableFuture<Void> submit(
+                UUID actorId, String command, CancellationSignal cancellation);
+    }
+
+    private final AtomicBoolean enabled = new AtomicBoolean();
+    private final long feedbackQuietMillis;
+    private final long feedbackDeadlineMillis;
+    private final Map<String, Boolean> requestSettings = new ConcurrentHashMap<>();
+    private final Map<String, RequestCapability> requests = new ConcurrentHashMap<>();
+    private final Map<UUID, Object> actorLocks = new ConcurrentHashMap<>();
+    private final Map<UUID, PendingFeedback> pendingFeedback = new ConcurrentHashMap<>();
+
+    public CommandCapabilityRuntime() {
+        this(DEFAULT_FEEDBACK_QUIET_MILLIS, DEFAULT_FEEDBACK_DEADLINE_MILLIS);
+    }
+
+    CommandCapabilityRuntime(long feedbackQuietMillis, long feedbackDeadlineMillis) {
+        if (feedbackQuietMillis < 1 || feedbackDeadlineMillis < feedbackQuietMillis) {
+            throw new IllegalArgumentException("Invalid command feedback timing");
+        }
+        this.feedbackQuietMillis = feedbackQuietMillis;
+        this.feedbackDeadlineMillis = feedbackDeadlineMillis;
+    }
+
+    public boolean enabled() {
+        return enabled.get();
+    }
+
+    public void replace(CommandCapabilityConfig config) {
+        enabled.set(Objects.requireNonNull(config, "config").enabled());
+    }
+
+    public void capture(
+            String correlationId,
+            UUID actorId,
+            CommandCatalogSnapshot catalog,
+            Submitter submitter) {
+        requireCorrelation(correlationId);
+        freezeRequest(correlationId);
+        if (!enabledFor(correlationId)) {
+            requests.remove(correlationId);
+            return;
+        }
+        requests.put(
+                correlationId,
+                new RequestCapability(
+                        this, actorId, catalog, submitter, new AtomicLong()));
+    }
+
+    public Optional<JavascriptCommandBridge> bridge(
+            String correlationId, CancellationSignal cancellation) {
+        requireCorrelation(correlationId);
+        RequestCapability capability = requests.get(correlationId);
+        return capability == null
+                ? Optional.empty()
+                : Optional.of(new JavascriptCommandBridge(capability, cancellation));
+    }
+
+    /** Freezes the current toggle once for a future request. */
+    public boolean freezeRequest(String correlationId) {
+        requireCorrelation(correlationId);
+        return requestSettings.computeIfAbsent(correlationId, ignored -> enabled());
+    }
+
+    public boolean enabledFor(String correlationId) {
+        requireCorrelation(correlationId);
+        return requestSettings.getOrDefault(correlationId, enabled());
+    }
+
+    public void closeRequest(String correlationId) {
+        if (correlationId != null) {
+            requests.remove(correlationId);
+            requestSettings.remove(correlationId);
+        }
+    }
+
+    /**
+     * Accepts one non-overlay game message on the owning client thread.
+     *
+     * <p>The loader adapter supplies the current local player identity. Messages are retained only
+     * while one command for that actor is awaiting feedback.
+     */
+    public void acceptFeedback(UUID actorId, String message) {
+        if (actorId == null || message == null || message.isBlank()) {
+            return;
+        }
+        PendingFeedback pending = pendingFeedback.get(actorId);
+        if (pending != null) {
+            pending.accept(message);
+        }
+    }
+
+    static final class RequestCapability {
+        private final CommandCapabilityRuntime owner;
+        private final UUID actorId;
+        private final CommandCatalogSnapshot catalog;
+        private final Submitter submitter;
+        private final AtomicLong sequences;
+
+        private RequestCapability(
+                CommandCapabilityRuntime owner,
+                UUID actorId,
+                CommandCatalogSnapshot catalog,
+                Submitter submitter,
+                AtomicLong sequences) {
+            this.owner = Objects.requireNonNull(owner, "owner");
+            this.actorId = Objects.requireNonNull(actorId, "actorId");
+            this.catalog = Objects.requireNonNull(catalog, "catalog");
+            this.submitter = Objects.requireNonNull(submitter, "submitter");
+            this.sequences = Objects.requireNonNull(sequences, "sequences");
+        }
+
+        CommandCatalogSnapshot catalog() {
+            return catalog;
+        }
+
+        CommandExecutionResult submit(String source, CancellationSignal cancellation) {
+            cancellation.throwIfCancelled();
+            String command = normalize(source);
+            long sequence = sequences.incrementAndGet();
+            return owner.executeAndAwait(
+                    sequence, actorId, command, submitter, cancellation);
+        }
+
+        private static String normalize(String source) {
+            if (source == null) {
+                throw new JavascriptExecutionException(
+                        "command_invalid", "commands.run requires one command string");
+            }
+            String command = source.strip();
+            if (command.startsWith("/")) {
+                command = command.substring(1);
+            }
+            if (command.isBlank()) {
+                throw new JavascriptExecutionException(
+                        "command_invalid", "commands.run requires one command string");
+            }
+            return command;
+        }
+    }
+
+    private CommandExecutionResult executeAndAwait(
+            long sequence,
+            UUID actorId,
+            String command,
+            Submitter submitter,
+            CancellationSignal cancellation) {
+        Object actorLock = actorLocks.computeIfAbsent(actorId, ignored -> new Object());
+        synchronized (actorLock) {
+            cancellation.throwIfCancelled();
+            PendingFeedback pending =
+                    new PendingFeedback(feedbackQuietMillis, feedbackDeadlineMillis);
+            if (pendingFeedback.putIfAbsent(actorId, pending) != null) {
+                throw new JavascriptExecutionException(
+                        "command_feedback_busy",
+                        "Another command is already awaiting feedback for this player");
+            }
+            long started = System.nanoTime();
+            try {
+                awaitSubmission(submitter.submit(actorId, command, cancellation), cancellation);
+                pending.beginWait();
+                List<String> messages = pending.await(cancellation);
+                long durationMillis = TimeUnit.NANOSECONDS.toMillis(
+                        System.nanoTime() - started);
+                return new CommandExecutionResult(
+                        sequence,
+                        actorId,
+                        command,
+                        messages.isEmpty() ? "no_feedback" : "feedback",
+                        messages,
+                        !messages.isEmpty(),
+                        durationMillis);
+            } finally {
+                pendingFeedback.remove(actorId, pending);
+            }
+        }
+    }
+
+    private static void awaitSubmission(
+            CompletableFuture<Void> submitted,
+            CancellationSignal cancellation) {
+        try {
+            while (!submitted.isDone()) {
+                cancellation.throwIfCancelled();
+                try {
+                    submitted.get(50, TimeUnit.MILLISECONDS);
+                } catch (java.util.concurrent.TimeoutException ignored) {
+                    // Poll cancellation without blocking a Minecraft-owned thread.
+                }
+            }
+            submitted.join();
+        } catch (dev.openallay.model.ModelClientException failure) {
+            throw failure;
+        } catch (RuntimeException | java.util.concurrent.ExecutionException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof dev.openallay.model.ModelClientException cancelled) {
+                throw cancelled;
+            }
+            if (cause instanceof JavascriptExecutionException rejected) {
+                throw rejected;
+            }
+            if (failure instanceof JavascriptExecutionException rejected) {
+                throw rejected;
+            }
+            throw new JavascriptExecutionException(
+                    "command_submission_failed",
+                    "Minecraft rejected command submission",
+                    failure);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new JavascriptExecutionException(
+                    "command_submission_failed",
+                    "Command feedback wait was interrupted",
+                    interrupted);
+        }
+    }
+
+    private static final class PendingFeedback {
+        private final List<String> messages = new ArrayList<>();
+        private final long quietNanos;
+        private final long deadlineDurationNanos;
+        private long deadlineNanos;
+        private long lastMessageNanos;
+
+        private PendingFeedback(long quietMillis, long deadlineMillis) {
+            quietNanos = TimeUnit.MILLISECONDS.toNanos(quietMillis);
+            deadlineDurationNanos = TimeUnit.MILLISECONDS.toNanos(deadlineMillis);
+        }
+
+        synchronized void beginWait() {
+            if (deadlineNanos == 0) {
+                deadlineNanos = System.nanoTime() + deadlineDurationNanos;
+            }
+        }
+
+        synchronized void accept(String message) {
+            messages.add(message);
+            lastMessageNanos = System.nanoTime();
+            notifyAll();
+        }
+
+        synchronized List<String> await(CancellationSignal cancellation) {
+            while (true) {
+                cancellation.throwIfCancelled();
+                long now = System.nanoTime();
+                if (!messages.isEmpty()
+                        && now - lastMessageNanos >= quietNanos) {
+                    return List.copyOf(messages);
+                }
+                if (now >= deadlineNanos) {
+                    return List.copyOf(messages);
+                }
+                long remainingNanos = messages.isEmpty()
+                        ? deadlineNanos - now
+                        : Math.min(
+                                deadlineNanos - now,
+                                quietNanos - (now - lastMessageNanos));
+                long waitMillis = Math.max(
+                        1, Math.min(50, TimeUnit.NANOSECONDS.toMillis(remainingNanos)));
+                try {
+                    wait(waitMillis);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new JavascriptExecutionException(
+                            "command_submission_failed",
+                            "Command feedback wait was interrupted",
+                            interrupted);
+                }
+            }
+        }
+    }
+
+    private static void requireCorrelation(String correlationId) {
+        if (correlationId == null || correlationId.isBlank()) {
+            throw new IllegalArgumentException("correlationId must not be blank");
+        }
+    }
+}
