@@ -1,0 +1,100 @@
+package dev.openallay.benchmark;
+
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import java.io.Reader;
+import java.util.ArrayList;
+import java.util.Set;
+
+/** Strict schema-1 benchmark corpus codec. */
+public final class BenchmarkCorpusCodec {
+    private static final Set<String> ROOT_FIELDS =
+            Set.of("schemaVersion", "version", "cases");
+    private static final Set<String> CASE_FIELDS =
+            Set.of("id", "category", "prompt", "attempts", "maxModelTurns", "verifier");
+    private static final Set<String> VERIFIER_FIELDS =
+            Set.of("kind", "path", "expected", "contains");
+
+    public BenchmarkCorpus decode(Reader reader) {
+        JsonElement parsed = JsonParser.parseReader(reader);
+        if (!(parsed instanceof JsonObject root)) {
+            throw invalid("Benchmark corpus root must be an object");
+        }
+        exactFields(root, ROOT_FIELDS, "corpus");
+        int schemaVersion = integer(root, "schemaVersion");
+        String version = string(root, "version");
+        if (!root.get("cases").isJsonArray()) {
+            throw invalid("cases must be an array");
+        }
+        ArrayList<BenchmarkCase> cases = new ArrayList<>();
+        root.getAsJsonArray("cases").forEach(element -> {
+            if (!(element instanceof JsonObject object)) {
+                throw invalid("case must be an object");
+            }
+            exactFields(object, CASE_FIELDS, "case");
+            cases.add(new BenchmarkCase(
+                    string(object, "id"),
+                    string(object, "category"),
+                    string(object, "prompt"),
+                    integer(object, "attempts"),
+                    integer(object, "maxModelTurns"),
+                    verifier(object.getAsJsonObject("verifier"))));
+        });
+        return new BenchmarkCorpus(schemaVersion, version, cases);
+    }
+
+    private static BenchmarkCase.Verifier verifier(JsonObject object) {
+        if (object == null) {
+            throw invalid("verifier must be an object");
+        }
+        exactFields(object, VERIFIER_FIELDS, "verifier");
+        BenchmarkCase.Kind kind;
+        try {
+            kind = BenchmarkCase.Kind.valueOf(string(object, "kind"));
+        } catch (IllegalArgumentException failure) {
+            throw invalid("Unknown verifier kind");
+        }
+        return new BenchmarkCase.Verifier(
+                kind,
+                optionalString(object, "path"),
+                object.has("expected") ? object.get("expected") : null,
+                optionalString(object, "contains"));
+    }
+
+    private static void exactFields(JsonObject object, Set<String> allowed, String owner) {
+        for (String field : object.keySet()) {
+            if (!allowed.contains(field)) {
+                throw invalid("Unknown " + owner + " field " + field);
+            }
+        }
+    }
+
+    private static String string(JsonObject object, String name) {
+        if (!object.has(name) || !object.get(name).isJsonPrimitive()
+                || !object.getAsJsonPrimitive(name).isString()) {
+            throw invalid(name + " must be a string");
+        }
+        return object.get(name).getAsString();
+    }
+
+    private static String optionalString(JsonObject object, String name) {
+        return object.has(name) ? string(object, name) : "";
+    }
+
+    private static int integer(JsonObject object, String name) {
+        if (!object.has(name) || !object.get(name).isJsonPrimitive()
+                || !object.getAsJsonPrimitive(name).isNumber()) {
+            throw invalid(name + " must be an integer");
+        }
+        try {
+            return object.get(name).getAsInt();
+        } catch (NumberFormatException failure) {
+            throw invalid(name + " must be an integer");
+        }
+    }
+
+    private static IllegalArgumentException invalid(String message) {
+        return new IllegalArgumentException(message);
+    }
+}
