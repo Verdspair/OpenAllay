@@ -123,6 +123,8 @@ public final class ClientSettingsService implements AutoCloseable {
 
         ToolResult<SkillSettingsView> reloadSkills();
 
+        SkillSettingsView currentView();
+
         default SkillCommunityView communityView() {
             return SkillCommunityView.unavailable();
         }
@@ -297,6 +299,7 @@ public final class ClientSettingsService implements AutoCloseable {
     private CapabilitySettingsView capabilityState;
     private RecipeSettingsView recipeState;
     private SkillSettingsView skillState;
+    private SkillCommunityView skillCommunityState;
     private CommandCapabilityConfig commandState;
     private HistoryRuntimeState historyState;
     private long modelGeneration;
@@ -458,6 +461,8 @@ public final class ClientSettingsService implements AutoCloseable {
         this.recipeActions = Objects.requireNonNull(recipeActions, "recipeActions");
         this.skillState = Objects.requireNonNull(initialSkills, "initialSkills");
         this.skillActions = Objects.requireNonNull(skillActions, "skillActions");
+        this.skillCommunityState = Objects.requireNonNull(
+                skillActions.communityView(), "initial Skill community view");
         this.extensionState = Objects.requireNonNull(initialExtensions, "initialExtensions");
         this.commandState = Objects.requireNonNull(initialCommands, "initialCommands");
         this.commandActions = Objects.requireNonNull(commandActions, "commandActions");
@@ -686,26 +691,86 @@ public final class ClientSettingsService implements AutoCloseable {
     }
 
     public SkillCommunityView skillCommunity() {
-        return skillActions.communityView();
+        synchronized (lock) {
+            return skillCommunityState;
+        }
     }
 
-    public CompletableFuture<ToolResult<SkillCommunityView>> refreshSkillCommunity(
-            CancellationSignal cancellation) {
-        return skillActions.refreshCommunity(Objects.requireNonNull(cancellation, "cancellation"));
+    public CompletableFuture<ToolResult<Boolean>> refreshSkillCommunity() {
+        Reservation reservation = reserve(SettingsOperation.domain(
+                SettingsOperation.Kind.REFRESHING_SKILL_CATALOG));
+        if (!reservation.accepted()) {
+            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
+        }
+        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
+        CompletableFuture<ToolResult<SkillCommunityView>> refresh;
+        try {
+            refresh = Objects.requireNonNull(
+                    skillActions.refreshCommunity(new CancellationSignal()),
+                    "Skill catalog refresh future");
+        } catch (RuntimeException failure) {
+            refresh = CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "catalog_refresh_failed", "Unable to refresh the Skill community catalog"));
+        }
+        refresh.whenComplete((completed, thrown) -> dispatcher.execute(() ->
+                finishSkillCommunity(
+                        reservation.id(),
+                        completed,
+                        thrown,
+                        result,
+                        "skill_catalog_refreshed")));
+        return result;
     }
 
-    public CompletableFuture<ToolResult<SkillCommunityView>> installCommunitySkill(
-            String id, CancellationSignal cancellation) {
-        return skillActions.installCommunity(
-                Objects.requireNonNull(id, "id"),
-                Objects.requireNonNull(cancellation, "cancellation"));
+    public CompletableFuture<ToolResult<Boolean>> installCommunitySkill(String id) {
+        Objects.requireNonNull(id, "id");
+        Reservation reservation = reserve(new SettingsOperation(
+                SettingsOperation.Kind.INSTALLING_COMMUNITY_SKILL, id, false));
+        if (!reservation.accepted()) {
+            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
+        }
+        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
+        CompletableFuture<ToolResult<SkillCommunityView>> install;
+        try {
+            install = Objects.requireNonNull(
+                    skillActions.installCommunity(id, new CancellationSignal()),
+                    "Skill package install future");
+        } catch (RuntimeException failure) {
+            install = CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "skill_install_failed", "Unable to install the selected Skill"));
+        }
+        install.whenComplete((completed, thrown) -> dispatcher.execute(() ->
+                finishSkillCommunity(
+                        reservation.id(),
+                        completed,
+                        thrown,
+                        result,
+                        "community_skill_installed")));
+        return result;
     }
 
-    public CompletableFuture<ToolResult<SkillCommunityView>> importLocalSkillPackage(
+    public CompletableFuture<ToolResult<Boolean>> importLocalSkillPackage(
             java.nio.file.Path source) {
         Objects.requireNonNull(source, "source");
-        return CompletableFuture.supplyAsync(
-                () -> skillActions.importLocalPackage(source), worker);
+        Reservation reservation = reserve(SettingsOperation.domain(
+                SettingsOperation.Kind.IMPORTING_SKILL_PACKAGE));
+        if (!reservation.accepted()) {
+            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
+        }
+        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
+        worker.execute(() -> {
+            ToolResult<SkillCommunityView> imported = safely(
+                    () -> skillActions.importLocalPackage(source),
+                    "skill_import_failed",
+                    "Unable to import the selected Skill package");
+            dispatcher.execute(() -> finishSkillCommunity(
+                    reservation.id(),
+                    imported,
+                    null,
+                    result,
+                    "skill_package_imported"));
+        });
+        return result;
     }
 
     public CompletableFuture<ToolResult<Boolean>> saveDisplay(GuideDisplayConfig candidate) {
@@ -1255,6 +1320,62 @@ public final class ClientSettingsService implements AutoCloseable {
         outward.complete(result);
     }
 
+    private void finishSkillCommunity(
+            long operationId,
+            ToolResult<SkillCommunityView> completed,
+            Throwable thrown,
+            CompletableFuture<ToolResult<Boolean>> outward,
+            String successCode) {
+        ToolResult<Boolean> result;
+        synchronized (lock) {
+            if (!isCurrentLocked(operationId)) {
+                return;
+            }
+            operation = SettingsOperation.idle();
+            if (thrown == null && completed instanceof ToolResult.Success<SkillCommunityView>) {
+                try {
+                    SkillCommunityView updatedCommunity = Objects.requireNonNull(
+                            ((ToolResult.Success<SkillCommunityView>) completed).value(),
+                            "updated Skill community projection");
+                    SkillSettingsView updatedSkills = Objects.requireNonNull(
+                            skillActions.currentView(), "current Skill projection");
+                    skillCommunityState = updatedCommunity;
+                    skillState = updatedSkills;
+                    notice = SettingsNotice.success(successCode, switch (successCode) {
+                        case "skill_catalog_refreshed" -> "Skill community catalog refreshed";
+                        case "skill_package_imported" -> "Skill package imported";
+                        default -> "Community Skill installed";
+                    });
+                    result = new ToolResult.Success<>(Boolean.TRUE);
+                } catch (RuntimeException failure) {
+                    notice = SettingsNotice.failure(
+                            "skill_projection_unavailable",
+                            "Unable to reload installed Skills");
+                    result = new ToolResult.Failure<>(
+                            "skill_projection_unavailable",
+                            "Unable to reload installed Skills");
+                }
+            } else {
+                try {
+                    skillCommunityState = Objects.requireNonNull(
+                            skillActions.communityView(), "current Skill community view");
+                } catch (RuntimeException ignored) {
+                    // Preserve the last immutable catalog projection when refresh recovery fails.
+                }
+                ToolResult.Failure<SkillCommunityView> failure =
+                        thrown == null && completed instanceof ToolResult.Failure<SkillCommunityView> value
+                                ? value
+                                : new ToolResult.Failure<>(
+                                        "skill_community_operation_failed",
+                                        "Unable to update Skills");
+                notice = SettingsNotice.failure(failure.code(), failure.message());
+                result = new ToolResult.Failure<>(failure.code(), failure.message());
+            }
+            publishLocked();
+        }
+        outward.complete(result);
+    }
+
     private void finishDisplay(
             long operationId,
             ToolResult<GuideDisplayConfig> completed,
@@ -1513,6 +1634,7 @@ public final class ClientSettingsService implements AutoCloseable {
                 capabilityState,
                 recipeState,
                 skillState,
+                skillCommunityState,
                 extensionState,
                 commandState,
                 historyView,
@@ -1724,6 +1846,11 @@ public final class ClientSettingsService implements AutoCloseable {
             public ToolResult<SkillSettingsView> reloadSkills() {
                 return new ToolResult.Failure<>(
                         "settings_unavailable", "Skill settings are unavailable");
+            }
+
+            @Override
+            public SkillSettingsView currentView() {
+                return SkillSettingsView.empty();
             }
         };
     }

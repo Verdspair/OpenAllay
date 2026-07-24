@@ -33,8 +33,15 @@ import dev.openallay.settings.model.ModelProfileSettingsView;
 import dev.openallay.settings.capability.CapabilitySettingsView;
 import dev.openallay.settings.capability.RecipeSettingsView;
 import dev.openallay.settings.diagnostics.SettingsDiagnosticsAggregator;
+import dev.openallay.settings.extension.ExtensionSettingsView;
+import dev.openallay.settings.skill.SkillCommunityView;
+import dev.openallay.settings.skill.SkillSettingsView;
+import dev.openallay.skill.SkillMetadata;
+import dev.openallay.skill.SkillSource;
+import dev.openallay.script.command.CommandCapabilityConfig;
 import dev.openallay.tool.ToolResult;
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -322,6 +329,29 @@ final class ClientSettingsServiceTest {
     }
 
     @Test
+    void communitySkillInstallPublishesTheReloadedSkillProjection() {
+        FakeModels models = new FakeModels(state(config("alpha")));
+        FakeDomains domains = new FakeDomains();
+        FakeDisplay display = new FakeDisplay(GuideDisplayConfig.defaults());
+        FakeSkills skills = new FakeSkills();
+        ClientSettingsService service = service(
+                models,
+                domains,
+                display,
+                skills,
+                new FakeHistory(),
+                Runnable::run);
+
+        ToolResult<Boolean> installed = service.installCommunitySkill("demo").join();
+
+        assertSuccess(installed);
+        assertEquals("demo", service.snapshot().skills().skills().getFirst().metadata().name());
+        assertEquals("community_skill_installed", service.snapshot().notice().code());
+        assertEquals(SettingsOperation.Kind.IDLE, service.snapshot().operation().kind());
+        assertTrue(service.snapshot().skillCommunity().packages().getFirst().installed());
+    }
+
+    @Test
     void displaySavePublishesDebugProjectionOnlyAfterBackendSuccess() {
         FakeModels models = new FakeModels(state(config("alpha")));
         FakeDomains domains = new FakeDomains();
@@ -529,6 +559,48 @@ final class ClientSettingsServiceTest {
                 domains,
                 domains.recipes,
                 domains,
+                history,
+                Runnable::run,
+                worker,
+                null);
+    }
+
+    private static ClientSettingsService service(
+            FakeModels models,
+            FakeDomains domains,
+            FakeDisplay display,
+            FakeSkills skills,
+            FakeHistory history,
+            Executor worker) {
+        ClientSettingsService.CommandActions commands =
+                new ClientSettingsService.CommandActions() {
+                    @Override
+                    public ToolResult<CommandCapabilityConfig> save(
+                            CommandCapabilityConfig candidate) {
+                        return new ToolResult.Success<>(candidate);
+                    }
+
+                    @Override
+                    public ToolResult<CommandCapabilityConfig> reload() {
+                        return new ToolResult.Success<>(CommandCapabilityConfig.defaults());
+                    }
+                };
+        return new ClientSettingsService(
+                display.current,
+                display,
+                models.current,
+                Set.of("ALPHA_KEY"),
+                models,
+                models,
+                domains.capabilities,
+                domains,
+                domains.recipes,
+                domains,
+                SkillSettingsView.empty(),
+                skills,
+                ExtensionSettingsView.defaults(),
+                CommandCapabilityConfig.defaults(),
+                commands,
                 history,
                 Runnable::run,
                 worker,
@@ -789,6 +861,90 @@ final class ClientSettingsServiceTest {
         @Override
         public ToolResult<GuideDisplayConfig> reloadDisplay() {
             return new ToolResult.Success<>(current);
+        }
+    }
+
+    private static final class FakeSkills implements ClientSettingsService.SkillActions {
+        private SkillSettingsView current = SkillSettingsView.empty();
+        private SkillCommunityView community = new SkillCommunityView(
+                true,
+                Optional.of(Instant.EPOCH),
+                List.of(new SkillCommunityView.Package(
+                        "demo",
+                        "1.0.0",
+                        false,
+                        false,
+                        true,
+                        "https://example.test/demo",
+                        "https://example.test/demo.zip",
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")),
+                Optional.empty());
+
+        @Override
+        public ToolResult<SkillSettingsView> saveOverride(String name, String markdown) {
+            return new ToolResult.Failure<>("unsupported", "unsupported");
+        }
+
+        @Override
+        public ToolResult<SkillSettingsView> deleteOverride(String name) {
+            return new ToolResult.Failure<>("unsupported", "unsupported");
+        }
+
+        @Override
+        public ToolResult<SkillSettingsView> reloadSkills() {
+            return new ToolResult.Success<>(current);
+        }
+
+        @Override
+        public SkillSettingsView currentView() {
+            return current;
+        }
+
+        @Override
+        public SkillCommunityView communityView() {
+            return community;
+        }
+
+        @Override
+        public CompletableFuture<ToolResult<SkillCommunityView>> installCommunity(
+                String id,
+                CancellationSignal cancellation) {
+            current = new SkillSettingsView(List.of(new SkillSettingsView.Skill(
+                    new SkillMetadata(
+                            id,
+                            "Installed from the community",
+                            Optional.empty(),
+                            Optional.empty(),
+                            Map.of(),
+                            Set.of(),
+                            Set.of(),
+                            List.of(),
+                            "community:" + id,
+                            SkillSource.Origin.LOCAL),
+                    "Use this Skill.",
+                    "---\nname: " + id
+                            + "\ndescription: Installed from the community\n---\nUse this Skill.",
+                    false)), List.of());
+            SkillCommunityView.Package prior = community.packages().getFirst();
+            community = new SkillCommunityView(
+                    true,
+                    community.generatedAt(),
+                    List.of(new SkillCommunityView.Package(
+                            prior.id(),
+                            prior.availableVersion(),
+                            true,
+                            false,
+                            true,
+                            prior.source(),
+                            prior.archive(),
+                            prior.sha256())),
+                    Optional.empty());
+            return CompletableFuture.completedFuture(new ToolResult.Success<>(community));
+        }
+
+        @Override
+        public ToolResult<SkillCommunityView> importLocalPackage(Path source) {
+            return new ToolResult.Success<>(community);
         }
     }
 

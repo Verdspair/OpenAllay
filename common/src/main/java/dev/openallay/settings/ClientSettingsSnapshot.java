@@ -7,6 +7,7 @@ import dev.openallay.settings.capability.RecipeSettingsView;
 import dev.openallay.settings.diagnostics.SettingsDiagnosticsSnapshot;
 import dev.openallay.settings.extension.ExtensionSettingsView;
 import dev.openallay.settings.history.HistorySettingsView;
+import dev.openallay.settings.skill.SkillCommunityView;
 import dev.openallay.settings.skill.SkillSettingsView;
 import dev.openallay.script.command.CommandCapabilityConfig;
 import java.util.List;
@@ -21,6 +22,7 @@ public record ClientSettingsSnapshot(
         CapabilitySettingsView capabilities,
         RecipeSettingsView recipes,
         SkillSettingsView skills,
+        SkillCommunityView skillCommunity,
         ExtensionSettingsView extensions,
         CommandCapabilityConfig experimentalCommands,
         HistorySettingsView history,
@@ -36,6 +38,7 @@ public record ClientSettingsSnapshot(
         Objects.requireNonNull(capabilities, "capabilities");
         Objects.requireNonNull(recipes, "recipes");
         Objects.requireNonNull(skills, "skills");
+        Objects.requireNonNull(skillCommunity, "skillCommunity");
         Objects.requireNonNull(extensions, "extensions");
         Objects.requireNonNull(experimentalCommands, "experimentalCommands");
         Objects.requireNonNull(history, "history");
@@ -58,6 +61,7 @@ public record ClientSettingsSnapshot(
                 capabilities,
                 recipes,
                 SkillSettingsView.empty(),
+                SkillCommunityView.unavailable(),
                 ExtensionSettingsView.defaults(),
                 CommandCapabilityConfig.defaults(),
                 HistorySettingsView.disconnected(),
@@ -79,6 +83,7 @@ public record ClientSettingsSnapshot(
                 CapabilitySettingsView.defaults(),
                 RecipeSettingsView.defaults(),
                 SkillSettingsView.empty(),
+                SkillCommunityView.unavailable(),
                 ExtensionSettingsView.defaults(),
                 CommandCapabilityConfig.defaults(),
                 HistorySettingsView.disconnected(),

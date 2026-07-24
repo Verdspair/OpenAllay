@@ -116,6 +116,7 @@ public final class SkillSettingsBackend implements ClientSettingsService.SkillAc
         community = buildCommunity(Optional.empty());
     }
 
+    @Override
     public SkillSettingsView currentView() {
         return current;
     }

@@ -25,6 +25,8 @@ import dev.openallay.settings.diagnostics.SettingsDiagnosticsSnapshot;
 import dev.openallay.settings.model.ModelConnectionResult;
 import dev.openallay.settings.model.ModelProfileSettingsView;
 import dev.openallay.tool.ToolResult;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -66,10 +68,14 @@ public final class OpenAllaySettingsScreen extends Screen {
     private ModelProtocol draftProtocol;
     private int editorScroll;
     private String selectedSkillName;
+    private String selectedCommunitySkillId;
+    private SkillTab skillTab = SkillTab.INSTALLED;
     private boolean skillEditing;
     private boolean narrowSkillDetail;
     private String skillDraftMarkdown = "";
+    private String skillImportPathDraft = "";
     private MultiLineEditBox skillEditor;
+    private EditBox skillImportPath;
     private int pageScroll;
     private int pageContentHeight;
     private ClientSettingsService.HistoryConfirmationToken historyConfirmation;
@@ -101,6 +107,9 @@ public final class OpenAllaySettingsScreen extends Screen {
         selectedSkillName = snapshot.skills().skills().isEmpty()
                 ? null
                 : snapshot.skills().skills().getFirst().metadata().name();
+        selectedCommunitySkillId = snapshot.skillCommunity().packages().isEmpty()
+                ? null
+                : snapshot.skillCommunity().packages().getFirst().id();
         select(snapshot.models().config().defaultProfileId());
     }
 
@@ -163,6 +172,13 @@ public final class OpenAllaySettingsScreen extends Screen {
                 }
                 skillEditing = false;
                 skillDraftMarkdown = "";
+            }
+            SkillSettingsProjection.Community community = skillProjection().community();
+            if (selectedCommunitySkillId == null
+                    || community.find(selectedCommunitySkillId).isEmpty()) {
+                selectedCommunitySkillId = community.packages().isEmpty()
+                        ? null
+                        : community.packages().getFirst().id();
             }
             if (layout != null) {
                 rebuildWidgets();
@@ -232,10 +248,13 @@ public final class OpenAllaySettingsScreen extends Screen {
             rebuildWidgets();
             return true;
         }
-        boolean scrollablePage = (section == SettingsSection.DIAGNOSTICS
+        boolean skillList = section == SettingsSection.SKILLS
+                && (layout.wide() ? layout.list() : layout.content()).contains(mouseX, mouseY)
+                && (layout.wide() || !narrowSkillDetail);
+        boolean scrollablePage = ((section == SettingsSection.DIAGNOSTICS
                         || section == SettingsSection.HISTORY
                         || section == SettingsSection.EXTENSIONS)
-                && layout.content().contains(mouseX, mouseY);
+                && layout.content().contains(mouseX, mouseY)) || skillList;
         if (scrollablePage) {
             int maximum = Math.max(0, pageContentHeight - layout.content().height() + 18);
             int replacement = net.minecraft.util.Mth.clamp(
@@ -483,28 +502,77 @@ public final class OpenAllaySettingsScreen extends Screen {
         SkillSettingsProjection projection = skillProjection();
         SettingsLayout.Rect listArea = layout.wide() ? layout.list() : layout.content();
         int x = listArea.x() + 7;
-        int y = listArea.y() + 28;
+        int y = listArea.y() + 7;
         int width = listArea.width() - 14;
-        if (layout.wide() || !narrowSkillDetail) for (SkillSettingsProjection.Skill skill : projection.skills()) {
-            Component label = Component.literal(skill.name()).copy().append(" · ")
-                    .append(Component.translatable(skill.localOverride()
-                            ? "screen.openallay.settings.skills.local"
-                            : "screen.openallay.settings.skills.bundled"));
-            Button button = addRenderableWidget(OpenAllayButton.create(label, ignored -> {
-                        selectedSkillName = skill.name();
-                        narrowSkillDetail = true;
-                        skillEditing = false;
-                        skillDraftMarkdown = "";
-                        rebuildWidgets();
-                    })
-                    .selected(skill.name().equals(selectedSkillName))
-                    .bounds(x, y, width, 22)
+        boolean showList = layout.wide() || !narrowSkillDetail;
+        if (showList) {
+            int tabWidth = Math.max(40, (width - 4) / 2);
+            Button installedTab = addRenderableWidget(OpenAllayButton.create(
+                            Component.translatable(
+                                    "screen.openallay.settings.skills.tab.installed"),
+                            ignored -> selectSkillTab(SkillTab.INSTALLED))
+                    .selected(skillTab == SkillTab.INSTALLED)
+                    .bounds(x, y, tabWidth, 20)
                     .build());
-            button.active = !skill.name().equals(selectedSkillName);
-            y += 26;
+            installedTab.active = skillTab != SkillTab.INSTALLED;
+            Button communityTab = addRenderableWidget(OpenAllayButton.create(
+                            Component.translatable(
+                                    "screen.openallay.settings.skills.tab.community"),
+                            ignored -> selectSkillTab(SkillTab.COMMUNITY))
+                    .selected(skillTab == SkillTab.COMMUNITY)
+                    .bounds(x + tabWidth + 4, y, Math.max(40, width - tabWidth - 4), 20)
+                    .build());
+            communityTab.active = skillTab != SkillTab.COMMUNITY;
+            y += 28 - pageScroll;
         }
 
-        if (layout.wide() || narrowSkillDetail) selectedSkill().ifPresent(skill -> {
+        if (showList && skillTab == SkillTab.INSTALLED) {
+            for (SkillSettingsProjection.Skill skill : projection.skills()) {
+                Component label = Component.literal(skill.name()).copy().append(" · ")
+                        .append(Component.translatable(skill.localOverride()
+                                ? "screen.openallay.settings.skills.local"
+                                : "screen.openallay.settings.skills.bundled"));
+                Button button = addRenderableWidget(OpenAllayButton.create(label, ignored -> {
+                            selectedSkillName = skill.name();
+                            narrowSkillDetail = true;
+                            skillEditing = false;
+                            skillDraftMarkdown = "";
+                            rebuildWidgets();
+                        })
+                        .selected(skill.name().equals(selectedSkillName))
+                        .bounds(x, y, width, 22)
+                        .build());
+                button.active = !skill.name().equals(selectedSkillName);
+                button.visible = y >= listArea.y() + 31 && y + 22 <= listArea.bottom() - 4;
+                y += 26;
+            }
+            pageContentHeight = 28 + projection.skills().size() * 26;
+        }
+        if (showList && skillTab == SkillTab.COMMUNITY) {
+            for (SkillSettingsProjection.Package skill : projection.community().packages()) {
+                Component label = Component.literal(skill.id()).copy().append(" · ")
+                        .append(Component.translatable(skillStateKey(skill.state())));
+                Button button = addRenderableWidget(OpenAllayButton.create(label, ignored -> {
+                            selectedCommunitySkillId = skill.id();
+                            narrowSkillDetail = true;
+                            rebuildWidgets();
+                        })
+                        .selected(skill.id().equals(selectedCommunitySkillId))
+                        .bounds(x, y, width, 22)
+                        .build());
+                button.active = !skill.id().equals(selectedCommunitySkillId);
+                int listBottomInset = layout.wide() ? 4 : 60;
+                button.visible = y >= listArea.y() + 31
+                        && y + 22 <= listArea.bottom() - listBottomInset;
+                y += 26;
+            }
+            pageContentHeight = 28
+                    + projection.community().packages().size() * 26
+                    + (layout.wide() ? 0 : 56);
+        }
+
+        if ((layout.wide() || narrowSkillDetail) && skillTab == SkillTab.INSTALLED) {
+            selectedSkill().ifPresent(skill -> {
             SettingsLayout.Rect area = layout.editor();
             int editorX = area.x() + 9;
             int editorY = area.y() + 58;
@@ -566,7 +634,69 @@ public final class OpenAllaySettingsScreen extends Screen {
                             .build());
                 }
             }
-        });
+            });
+        }
+        if ((layout.wide() || narrowSkillDetail) && skillTab == SkillTab.COMMUNITY) {
+            addCommunitySkillActions(true);
+        } else if (!layout.wide() && skillTab == SkillTab.COMMUNITY) {
+            addCommunitySkillActions(false);
+        }
+    }
+
+    private void addCommunitySkillActions(boolean includeInstall) {
+        SettingsLayout.Rect area = layout.editor();
+        int x = area.x() + 9;
+        int width = area.width() - 18;
+        int actionY = area.bottom() - 54;
+        SkillSettingsProjection.Package selected = selectedCommunitySkill().orElse(null);
+        int refreshX = x;
+        int refreshWidth = width;
+        if (includeInstall && selected != null && selected.installable()) {
+            int installWidth = Math.max(60, (width - 4) / 2);
+            Button install = addRenderableWidget(OpenAllayButton.create(
+                            Component.translatable(
+                                    selected.state()
+                                                    == SkillSettingsProjection.PackageState.UPDATE_AVAILABLE
+                                            ? "screen.openallay.settings.skills.community.update"
+                                            : "screen.openallay.settings.skills.community.install"),
+                            ignored -> accept(service.installCommunitySkill(selected.id())))
+                    .bounds(x, actionY, installWidth, 20)
+                    .build());
+            install.active = snapshot.operation().kind() == SettingsOperation.Kind.IDLE;
+            refreshX = x + installWidth + 4;
+            refreshWidth = Math.max(60, width - installWidth - 4);
+        }
+        Button refresh = addRenderableWidget(OpenAllayButton.create(
+                        Component.translatable(
+                                "screen.openallay.settings.skills.community.refresh"),
+                        ignored -> accept(service.refreshSkillCommunity()))
+                .bounds(refreshX, actionY, refreshWidth, 20)
+                .build());
+        refresh.active = snapshot.operation().kind() == SettingsOperation.Kind.IDLE;
+
+        int importWidth = Math.min(84, Math.max(56, width / 4));
+        skillImportPath = new EditBox(
+                font,
+                x,
+                area.bottom() - 27,
+                Math.max(50, width - importWidth - 4),
+                20,
+                Component.translatable(
+                        "screen.openallay.settings.skills.community.import_path"));
+        skillImportPath.setValue(skillImportPathDraft);
+        skillImportPath.setMaxLength(Integer.MAX_VALUE);
+        skillImportPath.setResponder(value -> skillImportPathDraft = value);
+        skillImportPath.setHint(Component.translatable(
+                "screen.openallay.settings.skills.community.import_hint"));
+        addRenderableWidget(skillImportPath);
+        Button importButton = addRenderableWidget(OpenAllayButton.create(
+                        Component.translatable(
+                                "screen.openallay.settings.skills.community.import"),
+                        ignored -> importLocalSkill())
+                .bounds(x + width - importWidth, area.bottom() - 27, importWidth, 20)
+                .build());
+        importButton.active = snapshot.operation().kind() == SettingsOperation.Kind.IDLE
+                && !skillImportPathDraft.isBlank();
     }
 
     private void addEditor() {
@@ -1473,6 +1603,13 @@ public final class OpenAllaySettingsScreen extends Screen {
 
     private void renderSkills(GuiGraphicsExtractor graphics) {
         SettingsLayout.Rect area = layout.editor();
+        if (!layout.wide() && !narrowSkillDetail) {
+            return;
+        }
+        if (skillTab == SkillTab.COMMUNITY) {
+            renderCommunitySkills(graphics, area);
+            return;
+        }
         Optional<SkillSettingsProjection.Skill> selected = selectedSkill();
         graphics.text(
                 font,
@@ -1530,6 +1667,105 @@ public final class OpenAllaySettingsScreen extends Screen {
                     MUTED,
                     false);
         }
+    }
+
+    private void renderCommunitySkills(
+            GuiGraphicsExtractor graphics,
+            SettingsLayout.Rect area) {
+        SkillSettingsProjection.Community community = skillProjection().community();
+        graphics.text(
+                font,
+                Component.translatable("screen.openallay.settings.skills.community.title"),
+                area.x() + 10,
+                area.y() + 12,
+                ACCENT,
+                false);
+        if (!community.available()) {
+            renderWrapped(
+                    graphics,
+                    Component.translatable(
+                            "screen.openallay.settings.skills.community.unavailable"),
+                    area.x() + 10,
+                    area.y() + 31,
+                    Math.max(80, area.width() - 20),
+                    MUTED,
+                    10);
+            return;
+        }
+        SkillSettingsProjection.Package skill = selectedCommunitySkill().orElse(null);
+        if (skill == null) {
+            graphics.text(
+                    font,
+                    Component.translatable("screen.openallay.settings.skills.community.empty"),
+                    area.x() + 10,
+                    area.y() + 31,
+                    MUTED,
+                    false);
+            return;
+        }
+        int x = area.x() + 10;
+        int width = Math.max(80, area.width() - 20);
+        int y = area.y() + 31;
+        graphics.text(font, skill.id(), x, y, TEXT, false);
+        y += 14;
+        graphics.text(
+                font,
+                Component.translatable("screen.openallay.settings.skills.community.version",
+                        skill.version()),
+                x,
+                y,
+                MUTED,
+                false);
+        y += 13;
+        graphics.text(
+                font,
+                Component.translatable(skillStateKey(skill.state())),
+                x,
+                y,
+                skill.installable() ? ACCENT : MUTED,
+                false);
+        y += 18;
+        y = renderWrapped(
+                graphics,
+                Component.translatable(
+                        "screen.openallay.settings.skills.community.source", skill.source()),
+                x,
+                y,
+                width,
+                TEXT,
+                10);
+        if (skillProjection().debugMode()) {
+            y += 7;
+            y = renderWrapped(
+                    graphics,
+                    Component.translatable(
+                            "screen.openallay.settings.skills.community.archive",
+                            skill.archive()),
+                    x,
+                    y,
+                    width,
+                    MUTED,
+                    10);
+            renderWrapped(
+                    graphics,
+                    Component.translatable(
+                            "screen.openallay.settings.skills.community.sha256",
+                            skill.sha256()),
+                    x,
+                    y + 3,
+                    width,
+                    MUTED,
+                    10);
+        }
+        int noticeY = Math.min(y + 18, area.bottom() - 72);
+        community.notice().ifPresent(value -> renderWrapped(
+                graphics,
+                Component.literal(value.message()),
+                x,
+                noticeY,
+                width,
+                ERROR,
+                10));
     }
 
     private void renderNotice(GuiGraphicsExtractor graphics) {
@@ -1678,13 +1914,61 @@ public final class OpenAllaySettingsScreen extends Screen {
     }
 
     private SkillSettingsProjection skillProjection() {
-        return SkillSettingsProjection.from(snapshot.skills(), snapshot.display().debugMode());
+        return SkillSettingsProjection.from(
+                snapshot.skills(),
+                snapshot.skillCommunity(),
+                snapshot.display().debugMode());
     }
 
     private Optional<SkillSettingsProjection.Skill> selectedSkill() {
         return selectedSkillName == null
                 ? Optional.empty()
                 : skillProjection().find(selectedSkillName);
+    }
+
+    private Optional<SkillSettingsProjection.Package> selectedCommunitySkill() {
+        return selectedCommunitySkillId == null
+                ? Optional.empty()
+                : skillProjection().community().find(selectedCommunitySkillId);
+    }
+
+    private static String skillStateKey(SkillSettingsProjection.PackageState state) {
+        return switch (state) {
+            case AVAILABLE -> "screen.openallay.settings.skills.community.available";
+            case INSTALLED -> "screen.openallay.settings.skills.community.installed";
+            case UPDATE_AVAILABLE ->
+                    "screen.openallay.settings.skills.community.update_available";
+            case INCOMPATIBLE -> "screen.openallay.settings.skills.community.incompatible";
+        };
+    }
+
+    private void selectSkillTab(SkillTab replacement) {
+        if (skillTab == replacement) {
+            return;
+        }
+        captureDraft();
+        skillTab = replacement;
+        pageScroll = 0;
+        narrowSkillDetail = false;
+        skillEditing = false;
+        skillDraftMarkdown = "";
+        localNotice = "";
+        rebuildWidgets();
+    }
+
+    private void importLocalSkill() {
+        captureDraft();
+        if (skillImportPathDraft.isBlank()) {
+            localNotice = Component.translatable(
+                    "screen.openallay.settings.skills.community.import_required").getString();
+            return;
+        }
+        try {
+            accept(service.importLocalSkillPackage(Path.of(skillImportPathDraft)));
+        } catch (InvalidPathException failure) {
+            localNotice = Component.translatable(
+                    "screen.openallay.settings.skills.community.import_invalid").getString();
+        }
     }
 
     private void saveSkillOverride() {
@@ -2026,6 +2310,9 @@ public final class OpenAllaySettingsScreen extends Screen {
         if (section == SettingsSection.GENERAL && assistantName != null) {
             assistantNameDraft = assistantName.getValue();
         }
+        if (section == SettingsSection.SKILLS && skillImportPath != null) {
+            skillImportPathDraft = skillImportPath.getValue();
+        }
     }
 
     private void cycleProtocol() {
@@ -2171,7 +2458,9 @@ public final class OpenAllaySettingsScreen extends Screen {
                         snapshot.recipes().config(),
                         snapshot.display().debugMode()),
                 SkillSettingsProjection.from(
-                        snapshot.skills(), snapshot.display().debugMode()),
+                        snapshot.skills(),
+                        snapshot.skillCommunity(),
+                        snapshot.display().debugMode()),
                 ExtensionSettingsProjection.from(
                         snapshot.extensions(),
                         snapshot.experimentalCommands(),
@@ -2219,6 +2508,10 @@ public final class OpenAllaySettingsScreen extends Screen {
 
     private record Action(String translationKey, Runnable action) {}
 
+    private enum SkillTab {
+        INSTALLED,
+        COMMUNITY
+    }
 
     private enum Confirmation {
         NONE,
