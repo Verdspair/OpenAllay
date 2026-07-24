@@ -9,6 +9,10 @@ import net.minecraft.resources.Identifier;
 /** NeoForge-root JEI discovery adapter for the common integration. */
 @JeiPlugin
 public final class OpenAllayNeoForgeJeiPlugin implements IModPlugin {
+    public OpenAllayNeoForgeJeiPlugin() {
+        OpenAllayJeiBridge.registerExtension();
+    }
+
     @Override
     public Identifier getPluginUid() {
         return Identifier.fromNamespaceAndPath("openallay", "jei_plugin");

@@ -9,6 +9,10 @@ import net.minecraft.resources.Identifier;
 /** Fabric-root JEI discovery adapter for the common integration. */
 @JeiPlugin
 public final class OpenAllayFabricJeiPlugin implements IModPlugin {
+    public OpenAllayFabricJeiPlugin() {
+        OpenAllayJeiBridge.registerExtension();
+    }
+
     @Override
     public Identifier getPluginUid() {
         return Identifier.fromNamespaceAndPath("openallay", "jei_plugin");

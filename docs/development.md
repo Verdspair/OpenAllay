@@ -590,6 +590,22 @@ remain isolated to the property that attempts to read them. Ordinary model
 JavaScript receives component values, never Java methods, `Class`, generic
 wrappers, or reflection authority.
 
+JEI and REI are loader-discovered first-party `OpenAllayExtension`
+implementations. Their existing public-API recipe captures remain the factual
+providers; the Extension projection exposes detached provider availability,
+completeness, generation-bearing recipe references, categories, diagnostics,
+and focus/navigation capabilities at `mc.extensions["openallay:jei"]` or
+`mc.extensions["openallay:rei"]`. JEI advertises exact durable-reference
+navigation and native layouts. REI advertises item-focused recipe/usage
+navigation but explicitly reports that exact durable-reference navigation is
+unsupported. Losing either runtime degrades only that provider projection.
+
+EMI is not registered as a 26.2 Extension. Its official project and artifact
+catalog currently publish through Minecraft 1.21.x rather than a compatible
+26.2 public API artifact, so OpenAllay does not compile against, advertise, or
+pretend to support it. A future adapter must first verify a real 26.2 public API
+on both target loaders.
+
 Reviewed JavaScript modules are the reusable domain layer—the equivalent of
 prebuilt, composable operations rather than additional one-purpose Tools.
 `require("openallay:crafting")` exposes recipe-cost and deterministic global

@@ -1,5 +1,6 @@
 package dev.openallay.integration.rei;
 
+import dev.openallay.OpenAllayBootstrap;
 import dev.openallay.recipe.RecipeViewerNavigatorRegistry;
 import dev.openallay.recipe.RecipeViewerProviderRegistry;
 import dev.openallay.client.gui.nativeview.NativeDomainViewProviderRegistry;
@@ -12,5 +13,6 @@ public class OpenAllayReiClientPlugin implements REIClientPlugin {
                 (capturedAt, platform) -> new ReiRecipeProvider(capturedAt, platform));
         RecipeViewerNavigatorRegistry.register(new ReiRecipeNavigator());
         NativeDomainViewProviderRegistry.register(new ReiNativeRecipeViewProvider());
+        OpenAllayBootstrap.registerExtension(ReiOpenAllayExtension.instance());
     }
 }
