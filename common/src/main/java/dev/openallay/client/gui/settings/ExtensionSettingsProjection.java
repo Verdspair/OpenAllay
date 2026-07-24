@@ -14,6 +14,7 @@ public record ExtensionSettingsProjection(
         List<RootCard> roots,
         List<ModuleCard> modules,
         List<AdapterCard> adapters,
+        List<ExtensionCard> extensions,
         boolean experimentalCommands,
         boolean debugMode) {
     public ExtensionSettingsProjection {
@@ -21,6 +22,7 @@ public record ExtensionSettingsProjection(
         roots = List.copyOf(roots);
         modules = List.copyOf(modules);
         adapters = List.copyOf(adapters);
+        extensions = List.copyOf(extensions);
     }
 
     public static ExtensionSettingsProjection from(
@@ -61,13 +63,34 @@ public record ExtensionSettingsProjection(
                                         : renderSchema(adapter.schema(), 0),
                                 adapter.diagnostic()))
                         .toList(),
+                view.extensions().stream()
+                        .map(extension -> new ExtensionCard(
+                                extension.id(),
+                                extension.name(),
+                                extension.version(),
+                                extension.state().name(),
+                                extension.provider(),
+                                extension.summary(),
+                                extension.loaders(),
+                                extension.minecraftVersionRange(),
+                                extension.openAllayApiVersionRange(),
+                                extension.source(),
+                                extension.contributions(),
+                                extension.diagnostic()))
+                        .toList(),
                 commands.enabled(),
                 debugMode);
     }
 
     public ExtensionSettingsProjection toggleExperimentalCommands() {
         return new ExtensionSettingsProjection(
-                runtime, roots, modules, adapters, !experimentalCommands, debugMode);
+                runtime,
+                roots,
+                modules,
+                adapters,
+                extensions,
+                !experimentalCommands,
+                debugMode);
     }
 
     public record RuntimeCard(
@@ -99,6 +122,24 @@ public record ExtensionSettingsProjection(
             boolean available,
             String schema,
             String diagnostic) {}
+
+    public record ExtensionCard(
+            String id,
+            String name,
+            String version,
+            String state,
+            String provider,
+            String summary,
+            List<String> loaders,
+            String minecraftVersionRange,
+            String openAllayApiVersionRange,
+            String source,
+            ExtensionSettingsView.Contributions contributions,
+            String diagnostic) {
+        public ExtensionCard {
+            loaders = List.copyOf(loaders);
+        }
+    }
 
     private static String renderSchema(HostSchema schema, int depth) {
         if (depth >= 5) {

@@ -29,6 +29,11 @@ final class ExtensionSettingsProjectionTest {
                 java.util.List.of("openallay:crafting"),
                 projection.modules().stream().map(ExtensionSettingsProjection.ModuleCard::id).toList());
         assertTrue(projection.adapters().isEmpty());
+        assertEquals(
+                java.util.List.of("openallay:core"),
+                projection.extensions().stream()
+                        .map(ExtensionSettingsProjection.ExtensionCard::id)
+                        .toList());
         assertFalse(projection.experimentalCommands());
         assertTrue(projection.debugMode());
     }
@@ -47,5 +52,6 @@ final class ExtensionSettingsProjectionTest {
         assertEquals(original.roots(), toggled.roots());
         assertEquals(original.modules(), toggled.modules());
         assertEquals(original.adapters(), toggled.adapters());
+        assertEquals(original.extensions(), toggled.extensions());
     }
 }

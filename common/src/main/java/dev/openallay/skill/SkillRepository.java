@@ -58,6 +58,48 @@ public final class SkillRepository implements SkillCatalog {
     }
 
     /**
+     * Validates an Extension-owned Skill batch against the current immutable catalog without
+     * changing it. Loader registration uses this before publishing any contribution kind.
+     */
+    public synchronized void validateExternal(
+            Collection<SkillSource> sources, Set<String> installedMods) {
+        Map<String, SkillDocument> candidate = new TreeMap<>(skills);
+        List<SkillDiagnostic> ignoredDiagnostics = new ArrayList<>();
+        for (SkillSource source : List.copyOf(sources)) {
+            SkillDocument document = validated(source, installedMods, ignoredDiagnostics);
+            if (document == null) {
+                throw new IllegalArgumentException(
+                        "Extension Skill requires unavailable mod: " + source.entryPath());
+            }
+            if (candidate.putIfAbsent(document.metadata().name(), document) != null) {
+                throw new IllegalArgumentException(
+                        "Duplicate Skill name: " + document.metadata().name());
+            }
+        }
+    }
+
+    /**
+     * Atomically overlays a previously validated Extension Skill batch. Existing Skills remain
+     * available when validation fails.
+     */
+    public synchronized void registerExternal(
+            Collection<SkillSource> sources, Set<String> installedMods) {
+        validateExternal(sources, installedMods);
+        Map<String, SkillDocument> candidate = new TreeMap<>(skills);
+        List<SkillDiagnostic> nextDiagnostics = new ArrayList<>(diagnostics);
+        for (SkillSource source : List.copyOf(sources)) {
+            SkillDocument document = validated(source, installedMods, nextDiagnostics);
+            if (document == null) {
+                throw new IllegalStateException(
+                        "Validated Extension Skill became unavailable: " + source.entryPath());
+            }
+            candidate.put(document.metadata().name(), document);
+        }
+        skills = Map.copyOf(candidate);
+        diagnostics = List.copyOf(nextDiagnostics);
+    }
+
+    /**
      * Reloads trusted bundled Skills and overlays isolated local filesystem packages. A bad local
      * package never removes a bundled or previously validated local document with the same name.
      */

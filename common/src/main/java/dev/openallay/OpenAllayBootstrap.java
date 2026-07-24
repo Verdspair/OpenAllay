@@ -6,6 +6,9 @@ import dev.openallay.capability.CapabilitySettingsCatalog;
 import dev.openallay.capability.CapabilitySettingsDescriptor;
 import dev.openallay.context.minecraft.MinecraftContextCapture;
 import dev.openallay.devmode.DevelopmentToolInspector;
+import dev.openallay.extension.OpenAllayExtension;
+import dev.openallay.extension.OpenAllayExtensionEnvironment;
+import dev.openallay.extension.OpenAllayExtensionRegistry;
 import dev.openallay.knowledge.KnowledgeRegistry;
 import dev.openallay.integration.patchouli.PatchouliMultiblockStore;
 import dev.openallay.platform.PlatformService;
@@ -18,6 +21,7 @@ import dev.openallay.tool.ToolRegistry;
 import dev.openallay.tool.Tool;
 import dev.openallay.tool.builtin.RunJavascriptTool;
 import dev.openallay.script.RhinoJavascriptRuntime;
+import dev.openallay.script.JavascriptModuleCatalog;
 import dev.openallay.script.data.MinecraftAgentHostGraph;
 import dev.openallay.script.workspace.AgentResultWorkspaceRegistry;
 import dev.openallay.script.workspace.JavascriptResultPresenter;
@@ -34,8 +38,30 @@ import java.util.Set;
 
 public final class OpenAllayBootstrap {
     private static OpenAllayRuntime runtime;
+    private static final List<OpenAllayExtension> pendingExtensions = new ArrayList<>();
 
     private OpenAllayBootstrap() {}
+
+    /**
+     * Ordinary Fabric/NeoForge mod entrypoints call this during loader initialization.
+     *
+     * <p>Registration remains loader-owned; OpenAllay does not scan classes or hot-load JARs.
+     */
+    public static synchronized void registerExtension(OpenAllayExtension extension) {
+        java.util.Objects.requireNonNull(extension, "extension");
+        if (runtime == null) {
+            pendingExtensions.add(extension);
+            return;
+        }
+        OpenAllayExtensionRegistry.Registration registration =
+                runtime.extensions().register(extension);
+        if (registration.state() != dev.openallay.extension.OpenAllayExtensionState.ACTIVE) {
+            OpenAllayConstants.LOGGER.warn(
+                    "Extension registration rejected: {} ({})",
+                    registration.extensionId(),
+                    registration.diagnostic());
+        }
+    }
 
     public static synchronized OpenAllayRuntime initialize() {
         if (runtime != null) {
@@ -49,6 +75,8 @@ public final class OpenAllayBootstrap {
         KnowledgeRegistry knowledge = new KnowledgeRegistry();
         JavascriptDataModuleRegistry javascriptModules =
                 new JavascriptDataModuleRegistry();
+        JavascriptModuleCatalog javascriptModuleCatalog =
+                JavascriptModuleCatalog.bundled();
         CommandCapabilityRuntime commands = new CommandCapabilityRuntime();
         WorldObservationRuntime worldObservations = new WorldObservationRuntime();
         ToolRegistry tools = new ToolRegistry();
@@ -61,7 +89,8 @@ public final class OpenAllayBootstrap {
                         knowledge,
                         javascriptModules,
                         commands,
-                        worldObservations));
+                        worldObservations,
+                        javascriptModuleCatalog));
         PatchouliMultiblockStore patchouliMultiblocks = new PatchouliMultiblockStore();
         SkillRepository skills = new SkillRepository(
                 new SkillParser(),
@@ -75,6 +104,26 @@ public final class OpenAllayBootstrap {
         }
         skills.setRuntimeDisabledSkills(Set.of("run-game-commands"));
         tools.register("openallay:skills", List.of(new LoadSkillTool(skills)));
+        Set<String> installedMods = installedMods(platform);
+        OpenAllayExtensionRegistry extensions = new OpenAllayExtensionRegistry(
+                new OpenAllayExtensionEnvironment(
+                        platform.platformName(),
+                        platform.gameVersion(),
+                        OpenAllayConstants.EXTENSION_API_VERSION),
+                javascriptModules,
+                javascriptModuleCatalog,
+                skills,
+                installedMods);
+        for (OpenAllayExtension extension : List.copyOf(pendingExtensions)) {
+            OpenAllayExtensionRegistry.Registration registration = extensions.register(extension);
+            if (registration.state() != dev.openallay.extension.OpenAllayExtensionState.ACTIVE) {
+                OpenAllayConstants.LOGGER.warn(
+                        "Extension registration rejected: {} ({})",
+                        registration.extensionId(),
+                        registration.diagnostic());
+            }
+        }
+        pendingExtensions.clear();
         TraceReplayService traceReplay = new TraceReplayService(
                 new TraceRepository(new TraceParser()),
                 new MinecraftContextCapture(gson),
@@ -91,7 +140,8 @@ public final class OpenAllayBootstrap {
                 skills,
                 new DevelopmentToolInspector(tools),
                 traceReplay,
-                capabilitySettings);
+                capabilitySettings,
+                extensions);
         OpenAllayConstants.LOGGER.info(
                 "Initialized OpenAllay on {} with {} tool(s)",
                 platform.platformName(),
@@ -186,7 +236,8 @@ public final class OpenAllayBootstrap {
                 knowledge,
                 javascriptModules,
                 commands,
-                new WorldObservationRuntime());
+                new WorldObservationRuntime(),
+                JavascriptModuleCatalog.bundled());
     }
 
     static List<Tool<?, ?>> builtinTools(
@@ -197,13 +248,65 @@ public final class OpenAllayBootstrap {
             JavascriptDataModuleRegistry javascriptModules,
             CommandCapabilityRuntime commands,
             WorldObservationRuntime worldObservations) {
+        return builtinTools(
+                platform,
+                gson,
+                javascriptWorkspaces,
+                knowledge,
+                javascriptModules,
+                commands,
+                worldObservations,
+                JavascriptModuleCatalog.bundled());
+    }
+
+    static List<Tool<?, ?>> builtinTools(
+            PlatformService platform,
+            Gson gson,
+            AgentResultWorkspaceRegistry javascriptWorkspaces,
+            KnowledgeRegistry knowledge,
+            JavascriptDataModuleRegistry javascriptModules,
+            CommandCapabilityRuntime commands,
+            JavascriptModuleCatalog javascriptModuleCatalog) {
+        return builtinTools(
+                platform,
+                gson,
+                javascriptWorkspaces,
+                knowledge,
+                javascriptModules,
+                commands,
+                new WorldObservationRuntime(),
+                javascriptModuleCatalog);
+    }
+
+    static List<Tool<?, ?>> builtinTools(
+            PlatformService platform,
+            Gson gson,
+            AgentResultWorkspaceRegistry javascriptWorkspaces,
+            KnowledgeRegistry knowledge,
+            JavascriptDataModuleRegistry javascriptModules,
+            CommandCapabilityRuntime commands,
+            WorldObservationRuntime worldObservations,
+            JavascriptModuleCatalog javascriptModuleCatalog) {
         return List.of(new RunJavascriptTool(
-                new RhinoJavascriptRuntime(),
+                new RhinoJavascriptRuntime(
+                        RhinoJavascriptRuntime.DEFAULT_TIMEOUT,
+                        dev.openallay.script.JavascriptRuntimeLimits.DEFAULT,
+                        javascriptModuleCatalog),
                 context -> new MinecraftAgentHostGraph(
                         context, knowledge::snapshot, javascriptModules),
                 javascriptWorkspaces,
                 new JavascriptResultPresenter(),
                 commands,
                 worldObservations));
+    }
+
+    private static Set<String> installedMods(PlatformService platform) {
+        try {
+            return platform.installedMods().stream()
+                    .map(dev.openallay.platform.InstalledModMetadata::id)
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        } catch (UnsupportedOperationException unavailable) {
+            return Set.of();
+        }
     }
 }

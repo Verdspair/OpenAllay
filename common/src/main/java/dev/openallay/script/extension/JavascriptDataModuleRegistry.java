@@ -22,6 +22,26 @@ public final class JavascriptDataModuleRegistry {
 
     public synchronized void register(
             String providerId, Collection<? extends JavascriptDataModule> additions) {
+        validateRegistration(providerId, additions);
+        String normalizedProvider = providerId.strip();
+        List<? extends JavascriptDataModule> candidates = List.copyOf(additions);
+        candidates.forEach(module -> {
+            HostSchema schema = null;
+            String schemaDiagnostic = null;
+            try {
+                schema = RhinoTypeSchema.require(module.valueType());
+            } catch (HostAccessException failure) {
+                schemaDiagnostic = failure.code();
+            }
+            modules.put(
+                    module.id(),
+                    new RegisteredModule(
+                            normalizedProvider, module, schema, schemaDiagnostic));
+        });
+    }
+
+    public synchronized void validateRegistration(
+            String providerId, Collection<? extends JavascriptDataModule> additions) {
         if (providerId == null || providerId.isBlank()) {
             throw new IllegalArgumentException("Module provider ID must not be blank");
         }
@@ -48,19 +68,6 @@ public final class JavascriptDataModuleRegistry {
                                 + " and " + normalizedProvider);
             }
         }
-        candidates.forEach(module -> {
-            HostSchema schema = null;
-            String schemaDiagnostic = null;
-            try {
-                schema = RhinoTypeSchema.require(module.valueType());
-            } catch (HostAccessException failure) {
-                schemaDiagnostic = failure.code();
-            }
-            modules.put(
-                    module.id(),
-                    new RegisteredModule(
-                            normalizedProvider, module, schema, schemaDiagnostic));
-        });
     }
 
     /** Returns immutable declarations without capturing any request value. */

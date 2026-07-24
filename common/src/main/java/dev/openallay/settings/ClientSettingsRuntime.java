@@ -346,7 +346,8 @@ public record ClientSettingsRuntime(
                     recipes,
                     skills.currentView(),
                     skills,
-                    ExtensionSettingsView.from(product.javascriptModules()),
+                    ExtensionSettingsView.from(
+                            product.javascriptModules(), product.extensions()),
                     initialCommands,
                     commandActions,
                     historyActions,
