@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.openallay.script.command.CommandCapabilityConfig;
 import dev.openallay.script.extension.JavascriptDataModuleRegistry;
 import dev.openallay.settings.extension.ExtensionSettingsView;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 final class ExtensionSettingsProjectionTest {
@@ -36,6 +39,9 @@ final class ExtensionSettingsProjectionTest {
                         .toList());
         assertFalse(projection.experimentalCommands());
         assertTrue(projection.debugMode());
+        assertEquals(1, projection.installed().size());
+        assertTrue(projection.community().isEmpty());
+        assertFalse(projection.catalog().configured());
     }
 
     @Test
@@ -53,5 +59,58 @@ final class ExtensionSettingsProjectionTest {
         assertEquals(original.modules(), toggled.modules());
         assertEquals(original.adapters(), toggled.adapters());
         assertEquals(original.extensions(), toggled.extensions());
+    }
+
+    @Test
+    void separatesInstalledAndCommunityCardsWithActionAndCatalogState() {
+        ExtensionSettingsView base =
+                ExtensionSettingsView.from(new JavascriptDataModuleRegistry());
+        ExtensionSettingsView.Extension community = new ExtensionSettingsView.Extension(
+                "community:sample",
+                "Sample",
+                "1.2.0",
+                "Community",
+                "Sample Extension",
+                ExtensionSettingsView.State.COMMUNITY,
+                List.of("fabric"),
+                "[26.2,26.3)",
+                "[0.2,0.3)",
+                "https://example.test/sample",
+                new ExtensionSettingsView.Contributions(
+                        List.of(), List.of(), List.of(), List.of(), List.of()),
+                "",
+                new ExtensionSettingsView.PackageInfo(
+                        true,
+                        "1.2.0",
+                        "https://example.test/sample.jar",
+                        "a".repeat(64),
+                        false,
+                        true));
+        ExtensionSettingsView view = new ExtensionSettingsView(
+                base.roots(),
+                base.bundledModules(),
+                base.adapters(),
+                List.of(base.extensions().getFirst(), community),
+                new ExtensionSettingsView.Catalog(
+                        true,
+                        true,
+                        Optional.of(Instant.parse("2026-07-25T00:00:00Z")),
+                        Optional.empty()));
+
+        ExtensionSettingsProjection projection = ExtensionSettingsProjection.from(
+                view, CommandCapabilityConfig.defaults(), false);
+
+        assertEquals(
+                List.of("openallay:core"),
+                projection.installed().stream()
+                        .map(ExtensionSettingsProjection.ExtensionCard::id)
+                        .toList());
+        assertEquals(
+                List.of("community:sample"),
+                projection.community().stream()
+                        .map(ExtensionSettingsProjection.ExtensionCard::id)
+                        .toList());
+        assertTrue(projection.community().getFirst().installable());
+        assertTrue(projection.catalog().available());
     }
 }

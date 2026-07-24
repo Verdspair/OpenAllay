@@ -78,6 +78,11 @@ public final class OpenAllaySettingsScreen extends Screen {
     private String skillImportPathDraft = "";
     private MultiLineEditBox skillEditor;
     private EditBox skillImportPath;
+    private String selectedExtensionId;
+    private ExtensionTab extensionTab = ExtensionTab.INSTALLED;
+    private boolean narrowExtensionDetail;
+    private String extensionImportPathDraft = "";
+    private EditBox extensionImportPath;
     private int pageScroll;
     private int pageContentHeight;
     private ClientSettingsService.HistoryConfirmationToken historyConfirmation;
@@ -112,6 +117,9 @@ public final class OpenAllaySettingsScreen extends Screen {
         selectedCommunitySkillId = snapshot.skillCommunity().packages().isEmpty()
                 ? null
                 : snapshot.skillCommunity().packages().getFirst().id();
+        selectedExtensionId = extensionProjection().installed().isEmpty()
+                ? null
+                : extensionProjection().installed().getFirst().id();
         select(snapshot.models().config().defaultProfileId());
     }
 
@@ -187,6 +195,15 @@ public final class OpenAllaySettingsScreen extends Screen {
                         ? null
                         : community.packages().getFirst().id();
             }
+            ExtensionSettingsProjection extensionProjection = extensionProjection();
+            if (selectedExtensionId == null
+                    || extensionProjection.find(selectedExtensionId).isEmpty()) {
+                List<ExtensionSettingsProjection.ExtensionCard> cards =
+                        extensionTab == ExtensionTab.INSTALLED
+                                ? extensionProjection.installed()
+                                : extensionProjection.community();
+                selectedExtensionId = cards.isEmpty() ? null : cards.getFirst().id();
+            }
             if (layout != null) {
                 rebuildWidgets();
             }
@@ -199,6 +216,7 @@ public final class OpenAllaySettingsScreen extends Screen {
         service.cancelModelCatalog();
         historyConfirmation = null;
         narrowSkillDetail = false;
+        narrowExtensionDetail = false;
         skillEditing = false;
         if (listener != null) {
             try {
@@ -258,10 +276,16 @@ public final class OpenAllaySettingsScreen extends Screen {
         boolean skillList = section == SettingsSection.SKILLS
                 && (layout.wide() ? layout.list() : layout.content()).contains(mouseX, mouseY)
                 && (layout.wide() || !narrowSkillDetail);
+        boolean extensionList = section == SettingsSection.EXTENSIONS
+                && (layout.wide() ? layout.list() : layout.content()).contains(mouseX, mouseY)
+                && (layout.wide() || !narrowExtensionDetail);
         boolean scrollablePage = ((section == SettingsSection.DIAGNOSTICS
                         || section == SettingsSection.HISTORY
-                        || section == SettingsSection.EXTENSIONS)
-                && layout.content().contains(mouseX, mouseY)) || skillList;
+                        || (section == SettingsSection.EXTENSIONS
+                                && (layout.wide() || narrowExtensionDetail)))
+                && layout.content().contains(mouseX, mouseY))
+                || skillList
+                || extensionList;
         if (scrollablePage) {
             int maximum = Math.max(0, pageContentHeight - layout.content().height() + 18);
             int replacement = net.minecraft.util.Mth.clamp(
@@ -486,29 +510,206 @@ public final class OpenAllaySettingsScreen extends Screen {
     }
 
     private void addExtensionsPage() {
-        SettingsLayout.Rect area = layout.editor();
-        int x = area.x() + 9;
-        int y = area.y() + 48;
-        int width = area.width() - 18;
-        ExtensionSettingsProjection extensions = extensionProjection();
+        ExtensionSettingsProjection projection = extensionProjection();
+        SettingsLayout.Rect listArea = layout.wide() ? layout.list() : layout.content();
+        boolean showList = layout.wide() || !narrowExtensionDetail;
+        int x = listArea.x() + 7;
+        int y = listArea.y() + 7;
+        int width = Math.max(80, listArea.width() - 14);
+        if (showList) {
+            int tabWidth = Math.max(40, (width - 4) / 2);
+            Button installedTab = addRenderableWidget(OpenAllayButton.create(
+                            Component.translatable(
+                                    "screen.openallay.settings.extensions.tab.installed"),
+                            ignored -> selectExtensionTab(ExtensionTab.INSTALLED))
+                    .selected(extensionTab == ExtensionTab.INSTALLED)
+                    .bounds(x, y, tabWidth, 20)
+                    .build());
+            installedTab.active = extensionTab != ExtensionTab.INSTALLED;
+            Button communityTab = addRenderableWidget(OpenAllayButton.create(
+                            Component.translatable(
+                                    "screen.openallay.settings.extensions.tab.community"),
+                            ignored -> selectExtensionTab(ExtensionTab.COMMUNITY))
+                    .selected(extensionTab == ExtensionTab.COMMUNITY)
+                    .bounds(x + tabWidth + 4, y, Math.max(40, width - tabWidth - 4), 20)
+                    .build());
+            communityTab.active = extensionTab != ExtensionTab.COMMUNITY;
+            y += 28 - pageScroll;
+        }
+
+        List<ExtensionSettingsProjection.ExtensionCard> cards =
+                extensionTab == ExtensionTab.INSTALLED
+                        ? projection.installed()
+                        : projection.community();
+        if (showList) {
+            for (ExtensionSettingsProjection.ExtensionCard extension : cards) {
+                Component label = Component.literal(extension.name()).copy()
+                        .append(" · ")
+                        .append(Component.translatable(extensionStateKey(extension)));
+                Button button = addRenderableWidget(OpenAllayButton.create(label, ignored -> {
+                            selectedExtensionId = extension.id();
+                            narrowExtensionDetail = true;
+                            localNotice = "";
+                            rebuildWidgets();
+                        })
+                        .selected(extension.id().equals(selectedExtensionId))
+                        .bounds(x, y, width, 22)
+                        .build());
+                button.active = !extension.id().equals(selectedExtensionId);
+                int bottomInset = !layout.wide() && extensionTab == ExtensionTab.COMMUNITY
+                        ? 80
+                        : 4;
+                button.visible = y >= listArea.y() + 31
+                        && y + 22 <= listArea.bottom() - bottomInset;
+                y += 26;
+            }
+            pageContentHeight = 28 + cards.size() * 26;
+        }
+
+        if (!layout.wide()
+                && showList
+                && extensionTab == ExtensionTab.COMMUNITY) {
+            addExtensionCommunityActions(
+                    projection,
+                    listArea.x() + 7,
+                    listArea.bottom() - 74,
+                    Math.max(80, listArea.width() - 14),
+                    false);
+        }
+        if (layout.wide() || narrowExtensionDetail) {
+            SettingsLayout.Rect detail = layout.editor();
+            int actionX = detail.x() + 9;
+            int actionWidth = Math.max(80, detail.width() - 18);
+            selectedExtension().ifPresent(extension -> pageContentHeight = Math.max(
+                    pageContentHeight,
+                    extensionDetailHeight(
+                            extension,
+                            Math.max(80, detail.width() - 20),
+                            projection.debugMode())));
+            int actionY = detail.bottom() - 76;
+            if (extensionTab == ExtensionTab.COMMUNITY
+                    || selectedExtension().map(
+                                    ExtensionSettingsProjection.ExtensionCard::installable)
+                            .orElse(false)) {
+                addExtensionCommunityActions(
+                        projection, actionX, actionY, actionWidth, true);
+            }
+            addExperimentalCommandAction(
+                    projection,
+                    actionX,
+                    detail.bottom() - 24,
+                    actionWidth);
+        }
+    }
+
+    private int extensionDetailHeight(
+            ExtensionSettingsProjection.ExtensionCard extension,
+            int width,
+            boolean debugMode) {
+        int height = 48
+                + wrappedHeight(Component.literal(extension.name()), width, 11)
+                + wrappedHeight(Component.literal(extension.summary()), width, 10)
+                + 7 * 12;
+        var contributions = extension.contributions();
+        for (List<String> values : List.of(
+                contributions.roots(),
+                contributions.dataModules(),
+                contributions.javascriptModules(),
+                contributions.skills(),
+                contributions.resultViews())) {
+            if (!values.isEmpty()) {
+                height += wrappedHeight(
+                        Component.literal(String.join(", ", values)), width, 10) + 2;
+            }
+        }
+        if (!extension.diagnostic().isBlank()) {
+            height += wrappedHeight(Component.literal(extension.diagnostic()), width, 10) + 7;
+        }
+        if (debugMode && extension.catalogListed()) {
+            height += wrappedHeight(Component.literal(extension.artifact()), width, 10)
+                    + wrappedHeight(Component.literal(extension.sha256()), width, 10)
+                    + 12;
+        }
+        return height + 82;
+    }
+
+    private void addExtensionCommunityActions(
+            ExtensionSettingsProjection projection,
+            int x,
+            int y,
+            int width,
+            boolean includeInstall) {
+        boolean idle = snapshot.operation().kind() == SettingsOperation.Kind.IDLE;
+        ExtensionSettingsProjection.ExtensionCard selected =
+                selectedExtension().orElse(null);
+        int half = Math.max(44, (width - 4) / 2);
+        if (includeInstall && selected != null && selected.installable()) {
+            Button install = addRenderableWidget(OpenAllayButton.create(
+                            Component.translatable(selected.updateAvailable()
+                                    ? "screen.openallay.settings.extensions.community.update"
+                                    : "screen.openallay.settings.extensions.community.install"),
+                            ignored -> accept(service.installCommunityExtension(selected.id())))
+                    .bounds(x, y, half, 20)
+                    .build());
+            install.active = idle;
+        }
+        Button refresh = addRenderableWidget(OpenAllayButton.create(
+                        Component.translatable(
+                                "screen.openallay.settings.extensions.community.refresh"),
+                        ignored -> accept(service.refreshExtensionCommunity()))
+                .bounds(
+                        includeInstall && selected != null && selected.installable()
+                                ? x + half + 4
+                                : x,
+                        y,
+                        includeInstall && selected != null && selected.installable()
+                                ? Math.max(44, width - half - 4)
+                                : width,
+                        20)
+                .build());
+        refresh.active = idle && projection.catalog().configured();
+
+        extensionImportPath = new EditBox(
+                font,
+                x,
+                y + 26,
+                Math.max(50, width - 72),
+                20,
+                Component.translatable(
+                        "screen.openallay.settings.extensions.community.import_path"));
+        extensionImportPath.setHint(Component.translatable(
+                "screen.openallay.settings.extensions.community.import_hint"));
+        extensionImportPath.setMaxLength(2048);
+        extensionImportPath.setValue(extensionImportPathDraft);
+        extensionImportPath.active = idle && selected != null && selected.catalogListed();
+        addRenderableWidget(extensionImportPath);
+        Button importButton = addRenderableWidget(OpenAllayButton.create(
+                        Component.translatable(
+                                "screen.openallay.settings.extensions.community.import"),
+                        ignored -> importLocalExtension())
+                .bounds(x + width - 68, y + 26, 68, 20)
+                .build());
+        importButton.active = idle && selected != null && selected.catalogListed();
+    }
+
+    private void addExperimentalCommandAction(
+            ExtensionSettingsProjection projection,
+            int x,
+            int y,
+            int width) {
         Button commands = OpenAllayButton.create(
                         Component.translatable(
-                                extensions.experimentalCommands()
+                                projection.experimentalCommands()
                                         ? "screen.openallay.settings.extensions.commands.disable"
                                         : "screen.openallay.settings.extensions.commands.enable"),
                         ignored -> accept(service.saveExperimentalCommands(
-                                !extensions.experimentalCommands())))
+                                !projection.experimentalCommands())))
                 .bounds(x, y, width, 20)
                 .build();
         commands.active = snapshot.operation().kind() == SettingsOperation.Kind.IDLE;
         commands.setTooltip(Tooltip.create(Component.translatable(
                 "screen.openallay.settings.extensions.commands.description")));
         addRenderableWidget(commands);
-        pageContentHeight = Math.max(
-                0,
-                82
-                        + extensionRuntimeHeight(extensions.runtime(), width)
-                        + extensionCatalogHeight(extensions, width));
     }
 
     private void addSkillsPage() {
@@ -1328,29 +1529,247 @@ public final class OpenAllaySettingsScreen extends Screen {
 
     private void renderExtensions(GuiGraphicsExtractor graphics) {
         SettingsLayout.Rect area = layout.editor();
+        if (!layout.wide() && !narrowExtensionDetail) {
+            return;
+        }
+        ExtensionSettingsProjection projection = extensionProjection();
         graphics.text(
                 font,
-                Component.translatable("screen.openallay.settings.extensions"),
+                Component.translatable(extensionTab == ExtensionTab.INSTALLED
+                        ? "screen.openallay.settings.extensions.installed.title"
+                        : "screen.openallay.settings.extensions.community.title"),
                 area.x() + 10,
                 area.y() + 12,
                 ACCENT,
                 false);
+        ExtensionSettingsProjection.ExtensionCard extension =
+                selectedExtension().orElse(null);
+        if (extension == null) {
+            Component empty = extensionTab == ExtensionTab.COMMUNITY
+                            && !projection.catalog().available()
+                    ? Component.translatable(
+                            "screen.openallay.settings.extensions.community.unavailable")
+                    : Component.translatable(
+                            "screen.openallay.settings.extensions.community.empty");
+            renderWrapped(
+                    graphics,
+                    empty,
+                    area.x() + 10,
+                    area.y() + 31,
+                    Math.max(80, area.width() - 20),
+                    MUTED,
+                    10);
+            return;
+        }
+
+        int x = area.x() + 10;
+        int width = Math.max(80, area.width() - 20);
+        int bottomInset = extensionTab == ExtensionTab.COMMUNITY
+                        || extension.installable()
+                ? 82
+                : 34;
+        graphics.enableScissor(
+                area.x(), area.y() + 28, area.right(), area.bottom() - bottomInset);
+        int y = area.y() + 32 - pageScroll;
+        y = renderWrapped(
+                graphics,
+                Component.literal(extension.name()).copy().append(" · ")
+                        .append(Component.translatable(extensionStateKey(extension))),
+                x,
+                y,
+                width,
+                TEXT,
+                11);
+        y = renderWrapped(
+                graphics,
+                Component.literal(extension.summary()),
+                x,
+                y + 4,
+                width,
+                MUTED,
+                10);
+        y += 7;
+        y = extensionDetailLine(
+                graphics,
+                "screen.openallay.settings.extensions.detail.version",
+                extension.version(),
+                x,
+                y,
+                width);
+        if (extension.updateAvailable()
+                || (extension.state() == dev.openallay.settings.extension.ExtensionSettingsView.State
+                        .RESTART_REQUIRED
+                        && !extension.availableVersion().equals(extension.version()))) {
+            y = extensionDetailLine(
+                    graphics,
+                    "screen.openallay.settings.extensions.detail.available_version",
+                    extension.availableVersion(),
+                    x,
+                    y,
+                    width);
+        }
+        y = extensionDetailLine(
+                graphics,
+                "screen.openallay.settings.extensions.detail.provider",
+                extension.provider(),
+                x,
+                y,
+                width);
+        y = extensionDetailLine(
+                graphics,
+                "screen.openallay.settings.extensions.detail.loaders",
+                String.join(", ", extension.loaders()),
+                x,
+                y,
+                width);
+        y = extensionDetailLine(
+                graphics,
+                "screen.openallay.settings.extensions.detail.minecraft",
+                extension.minecraftVersionRange(),
+                x,
+                y,
+                width);
+        y = extensionDetailLine(
+                graphics,
+                "screen.openallay.settings.extensions.detail.api",
+                extension.openAllayApiVersionRange(),
+                x,
+                y,
+                width);
+        y = extensionDetailLine(
+                graphics,
+                "screen.openallay.settings.extensions.detail.source",
+                extension.source(),
+                x,
+                y,
+                width);
+
+        y += 8;
+        y = renderExtensionContributions(
+                graphics, extension.contributions(), x, y, width);
+        if (!extension.diagnostic().isBlank()) {
+            y += 7;
+            y = renderWrapped(
+                    graphics,
+                    Component.translatable(
+                            "screen.openallay.settings.extensions.detail.diagnostic",
+                            extensionDiagnostic(extension.diagnostic())),
+                    x,
+                    y,
+                    width,
+                    extension.state()
+                                    == dev.openallay.settings.extension.ExtensionSettingsView.State
+                                            .ACTIVE
+                            ? MUTED
+                            : ERROR,
+                    10);
+        }
+        if (projection.debugMode() && extension.catalogListed()) {
+            y += 7;
+            y = extensionDetailLine(
+                    graphics,
+                    "screen.openallay.settings.extensions.detail.artifact",
+                    extension.artifact(),
+                    x,
+                    y,
+                    width);
+            extensionDetailLine(
+                    graphics,
+                    "screen.openallay.settings.extensions.detail.sha256",
+                    extension.sha256(),
+                    x,
+                    y,
+                    width);
+        }
+        String catalogNotice = projection.catalog().noticeMessage();
+        if (!catalogNotice.isBlank()) {
+            renderWrapped(
+                    graphics,
+                    Component.literal(catalogNotice),
+                    x,
+                    Math.min(y + 10, area.bottom() - bottomInset - 14),
+                    width,
+                    ERROR,
+                    10);
+        }
+        graphics.disableScissor();
         graphics.text(
                 font,
-                Component.translatable("screen.openallay.settings.extensions.description"),
-                area.x() + 10,
-                area.y() + 29,
+                Component.translatable(
+                        "screen.openallay.settings.extensions.experimental.title"),
+                x,
+                area.bottom() - 38,
                 MUTED,
                 false);
-        graphics.enableScissor(area.x(), area.y() + 42, area.right(), area.bottom());
-        int cardsY = area.y() + 80 - pageScroll;
-        int cardsX = area.x() + 9;
-        int cardsWidth = Math.max(80, area.width() - 18);
-        ExtensionSettingsProjection projection = extensionProjection();
-        cardsY = renderExtensionRuntime(
-                graphics, projection.runtime(), cardsX, cardsY, cardsWidth);
-        renderExtensionCatalog(graphics, projection, cardsX, cardsY + 7, cardsWidth);
-        graphics.disableScissor();
+    }
+
+    private int extensionDetailLine(
+            GuiGraphicsExtractor graphics,
+            String labelKey,
+            String value,
+            int x,
+            int y,
+            int width) {
+        return renderWrapped(
+                graphics,
+                Component.translatable(labelKey, value),
+                x,
+                y,
+                width,
+                MUTED,
+                10);
+    }
+
+    private int renderExtensionContributions(
+            GuiGraphicsExtractor graphics,
+            dev.openallay.settings.extension.ExtensionSettingsView.Contributions contributions,
+            int x,
+            int y,
+            int width) {
+        List<ContributionLine> lines = List.of(
+                new ContributionLine(
+                        "screen.openallay.settings.extensions.detail.roots",
+                        contributions.roots()),
+                new ContributionLine(
+                        "screen.openallay.settings.extensions.detail.data_modules",
+                        contributions.dataModules()),
+                new ContributionLine(
+                        "screen.openallay.settings.extensions.detail.javascript_modules",
+                        contributions.javascriptModules()),
+                new ContributionLine(
+                        "screen.openallay.settings.extensions.detail.skills",
+                        contributions.skills()),
+                new ContributionLine(
+                        "screen.openallay.settings.extensions.detail.result_views",
+                        contributions.resultViews()));
+        boolean any = false;
+        for (ContributionLine line : lines) {
+            if (line.values().isEmpty()) {
+                continue;
+            }
+            any = true;
+            y = renderWrapped(
+                    graphics,
+                    Component.translatable(line.labelKey(), String.join(", ", line.values())),
+                    x,
+                    y,
+                    width,
+                    TEXT,
+                    10);
+            y += 2;
+        }
+        if (!any) {
+            y = renderWrapped(
+                    graphics,
+                    Component.translatable(
+                            "screen.openallay.settings.extensions.detail.no_contributions"),
+                    x,
+                    y,
+                    width,
+                    MUTED,
+                    10);
+        }
+        return y;
     }
 
     private int renderExtensionRuntime(
@@ -1898,6 +2317,13 @@ public final class OpenAllaySettingsScreen extends Screen {
             rebuildWidgets();
             return;
         }
+        if (!layout.wide()
+                && section == SettingsSection.EXTENSIONS
+                && narrowExtensionDetail) {
+            narrowExtensionDetail = false;
+            rebuildWidgets();
+            return;
+        }
         onClose();
     }
 
@@ -2003,6 +2429,46 @@ public final class OpenAllaySettingsScreen extends Screen {
                 : skillProjection().community().find(selectedCommunitySkillId);
     }
 
+    private Optional<ExtensionSettingsProjection.ExtensionCard> selectedExtension() {
+        return selectedExtensionId == null
+                ? Optional.empty()
+                : extensionProjection().find(selectedExtensionId);
+    }
+
+    private static String extensionStateKey(
+            ExtensionSettingsProjection.ExtensionCard extension) {
+        if (extension.updateAvailable()) {
+            return "screen.openallay.settings.extensions.state.update_available";
+        }
+        return switch (extension.state()) {
+            case ACTIVE -> "screen.openallay.settings.extensions.state.active";
+            case RESTART_REQUIRED ->
+                    "screen.openallay.settings.extensions.state.restart_required";
+            case INCOMPATIBLE ->
+                    "screen.openallay.settings.extensions.state.incompatible";
+            case UNAVAILABLE -> "screen.openallay.settings.extensions.state.unavailable";
+            case COMMUNITY -> "screen.openallay.settings.extensions.state.available";
+        };
+    }
+
+    private static String extensionDiagnostic(String diagnostic) {
+        return switch (diagnostic) {
+            case "restart_required" -> Component.translatable(
+                            "screen.openallay.settings.extensions.diagnostic.restart_required")
+                    .getString();
+            case "incompatible_loader" -> Component.translatable(
+                            "screen.openallay.settings.extensions.diagnostic.loader")
+                    .getString();
+            case "incompatible_game_version" -> Component.translatable(
+                            "screen.openallay.settings.extensions.diagnostic.game")
+                    .getString();
+            case "incompatible_openallay_api" -> Component.translatable(
+                            "screen.openallay.settings.extensions.diagnostic.api")
+                    .getString();
+            default -> diagnostic;
+        };
+    }
+
     private static String skillStateKey(SkillSettingsProjection.PackageState state) {
         return switch (state) {
             case AVAILABLE -> "screen.openallay.settings.skills.community.available";
@@ -2025,6 +2491,46 @@ public final class OpenAllaySettingsScreen extends Screen {
         skillDraftMarkdown = "";
         localNotice = "";
         rebuildWidgets();
+    }
+
+    private void selectExtensionTab(ExtensionTab replacement) {
+        if (extensionTab == replacement) {
+            return;
+        }
+        captureDraft();
+        extensionTab = replacement;
+        pageScroll = 0;
+        narrowExtensionDetail = false;
+        List<ExtensionSettingsProjection.ExtensionCard> cards =
+                replacement == ExtensionTab.INSTALLED
+                        ? extensionProjection().installed()
+                        : extensionProjection().community();
+        selectedExtensionId = cards.isEmpty() ? null : cards.getFirst().id();
+        localNotice = "";
+        rebuildWidgets();
+    }
+
+    private void importLocalExtension() {
+        captureDraft();
+        ExtensionSettingsProjection.ExtensionCard selected =
+                selectedExtension().orElse(null);
+        if (selected == null) {
+            return;
+        }
+        if (extensionImportPathDraft.isBlank()) {
+            localNotice = Component.translatable(
+                            "screen.openallay.settings.extensions.community.import_required")
+                    .getString();
+            return;
+        }
+        try {
+            accept(service.importLocalExtensionPackage(
+                    selected.id(), Path.of(extensionImportPathDraft)));
+        } catch (InvalidPathException failure) {
+            localNotice = Component.translatable(
+                            "screen.openallay.settings.extensions.community.import_invalid")
+                    .getString();
+        }
     }
 
     private void importLocalSkill() {
@@ -2308,6 +2814,7 @@ public final class OpenAllaySettingsScreen extends Screen {
         pageContentHeight = 0;
         historyConfirmation = null;
         narrowSkillDetail = false;
+        narrowExtensionDetail = false;
         skillEditing = false;
         skillDraftMarkdown = "";
         confirmation = Confirmation.NONE;
@@ -2392,6 +2899,9 @@ public final class OpenAllaySettingsScreen extends Screen {
         }
         if (section == SettingsSection.SKILLS && skillImportPath != null) {
             skillImportPathDraft = skillImportPath.getValue();
+        }
+        if (section == SettingsSection.EXTENSIONS && extensionImportPath != null) {
+            extensionImportPathDraft = extensionImportPath.getValue();
         }
     }
 
@@ -2576,7 +3086,18 @@ public final class OpenAllaySettingsScreen extends Screen {
 
     private record Action(String translationKey, Runnable action) {}
 
+    private record ContributionLine(String labelKey, List<String> values) {
+        private ContributionLine {
+            values = List.copyOf(values);
+        }
+    }
+
     private enum SkillTab {
+        INSTALLED,
+        COMMUNITY
+    }
+
+    private enum ExtensionTab {
         INSTALLED,
         COMMUNITY
     }

@@ -15,6 +15,7 @@ public record ExtensionSettingsProjection(
         List<ModuleCard> modules,
         List<AdapterCard> adapters,
         List<ExtensionCard> extensions,
+        CatalogCard catalog,
         boolean experimentalCommands,
         boolean debugMode) {
     public ExtensionSettingsProjection {
@@ -23,6 +24,7 @@ public record ExtensionSettingsProjection(
         modules = List.copyOf(modules);
         adapters = List.copyOf(adapters);
         extensions = List.copyOf(extensions);
+        Objects.requireNonNull(catalog, "catalog");
     }
 
     public static ExtensionSettingsProjection from(
@@ -68,7 +70,7 @@ public record ExtensionSettingsProjection(
                                 extension.id(),
                                 extension.name(),
                                 extension.version(),
-                                extension.state().name(),
+                                extension.state(),
                                 extension.provider(),
                                 extension.summary(),
                                 extension.loaders(),
@@ -76,8 +78,20 @@ public record ExtensionSettingsProjection(
                                 extension.openAllayApiVersionRange(),
                                 extension.source(),
                                 extension.contributions(),
-                                extension.diagnostic()))
+                                extension.diagnostic(),
+                                extension.packageInfo().catalogListed(),
+                                extension.packageInfo().availableVersion(),
+                                extension.packageInfo().artifact(),
+                                extension.packageInfo().sha256(),
+                                extension.packageInfo().updateAvailable(),
+                                extension.packageInfo().installable()))
                         .toList(),
+                new CatalogCard(
+                        view.catalog().configured(),
+                        view.catalog().available(),
+                        view.catalog().generatedAt().map(Object::toString).orElse(""),
+                        view.catalog().notice().map(ExtensionSettingsView.Notice::code).orElse(""),
+                        view.catalog().notice().map(ExtensionSettingsView.Notice::message).orElse("")),
                 commands.enabled(),
                 debugMode);
     }
@@ -89,8 +103,28 @@ public record ExtensionSettingsProjection(
                 modules,
                 adapters,
                 extensions,
+                catalog,
                 !experimentalCommands,
                 debugMode);
+    }
+
+    public List<ExtensionCard> installed() {
+        return extensions.stream()
+                .filter(extension -> extension.state() == ExtensionSettingsView.State.ACTIVE
+                        || extension.state()
+                                == ExtensionSettingsView.State.RESTART_REQUIRED
+                        || extension.state() == ExtensionSettingsView.State.UNAVAILABLE)
+                .toList();
+    }
+
+    public List<ExtensionCard> community() {
+        return extensions.stream()
+                .filter(ExtensionCard::catalogListed)
+                .toList();
+    }
+
+    public java.util.Optional<ExtensionCard> find(String id) {
+        return extensions.stream().filter(extension -> extension.id().equals(id)).findFirst();
     }
 
     public record RuntimeCard(
@@ -123,11 +157,18 @@ public record ExtensionSettingsProjection(
             String schema,
             String diagnostic) {}
 
+    public record CatalogCard(
+            boolean configured,
+            boolean available,
+            String generatedAt,
+            String noticeCode,
+            String noticeMessage) {}
+
     public record ExtensionCard(
             String id,
             String name,
             String version,
-            String state,
+            ExtensionSettingsView.State state,
             String provider,
             String summary,
             List<String> loaders,
@@ -135,9 +176,20 @@ public record ExtensionSettingsProjection(
             String openAllayApiVersionRange,
             String source,
             ExtensionSettingsView.Contributions contributions,
-            String diagnostic) {
+            String diagnostic,
+            boolean catalogListed,
+            String availableVersion,
+            String artifact,
+            String sha256,
+            boolean updateAvailable,
+            boolean installable) {
         public ExtensionCard {
             loaders = List.copyOf(loaders);
+            Objects.requireNonNull(state, "state");
+            Objects.requireNonNull(contributions, "contributions");
+            availableVersion = availableVersion == null ? "" : availableVersion;
+            artifact = artifact == null ? "" : artifact;
+            sha256 = sha256 == null ? "" : sha256;
         }
     }
 

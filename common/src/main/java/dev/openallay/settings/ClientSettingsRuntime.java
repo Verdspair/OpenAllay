@@ -28,7 +28,7 @@ import dev.openallay.settings.capability.CapabilitySettingsView;
 import dev.openallay.settings.capability.RecipeSettingsBackend;
 import dev.openallay.settings.capability.RecipeSettingsView;
 import dev.openallay.settings.skill.SkillSettingsBackend;
-import dev.openallay.settings.extension.ExtensionSettingsView;
+import dev.openallay.settings.extension.ExtensionSettingsBackend;
 import dev.openallay.skill.AgentSkillManager;
 import dev.openallay.skill.BundledSkillLoader;
 import dev.openallay.skill.ManageSkillTool;
@@ -248,6 +248,11 @@ public record ClientSettingsRuntime(
                     : Set.of();
             SkillSettingsBackend skills = new SkillSettingsBackend(
                     configDirectory.resolve("skills"), product.skills(), installedSkillMods);
+            ExtensionSettingsBackend extensions = new ExtensionSettingsBackend(
+                    configDirectory,
+                    managedModsRoot(configDirectory),
+                    product.extensions(),
+                    product.javascriptModules());
             if (product.tools().find("openallay:manage_skill").isEmpty()) {
                 Set<String> availableTools = product.tools().descriptors().stream()
                         .map(descriptor -> descriptor.id())
@@ -346,8 +351,8 @@ public record ClientSettingsRuntime(
                     recipes,
                     skills.currentView(),
                     skills,
-                    ExtensionSettingsView.from(
-                            product.javascriptModules(), product.extensions()),
+                    extensions.currentView(),
+                    extensions,
                     initialCommands,
                     commandActions,
                     historyActions,
@@ -442,5 +447,15 @@ public record ClientSettingsRuntime(
                 new GuideFailure("model_disabled", "This model profile is disabled"));
         return new ModelProfilesConfigLoader.Load(
                 config, List.of(resolved), false);
+    }
+
+    private static Path managedModsRoot(Path configDirectory) {
+        Path configRoot = configDirectory.toAbsolutePath().normalize().getParent();
+        Path gameRoot = configRoot == null ? null : configRoot.getParent();
+        if (gameRoot == null) {
+            throw new IllegalArgumentException(
+                    "OpenAllay configuration directory requires a game directory");
+        }
+        return gameRoot.resolve("mods");
     }
 }

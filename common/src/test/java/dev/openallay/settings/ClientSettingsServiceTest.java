@@ -383,6 +383,37 @@ final class ClientSettingsServiceTest {
     }
 
     @Test
+    void communityExtensionInstallPublishesRestartRequiredImmutableProjection() {
+        FakeModels models = new FakeModels(state(config("alpha")));
+        FakeDomains domains = new FakeDomains();
+        FakeDisplay display = new FakeDisplay(GuideDisplayConfig.defaults());
+        FakeExtensions extensions = new FakeExtensions();
+        ClientSettingsService service = service(
+                models,
+                domains,
+                display,
+                new FakeSkills(),
+                extensions,
+                new FakeHistory(),
+                Runnable::run);
+
+        ToolResult<Boolean> staged =
+                service.installCommunityExtension("community:demo").join();
+
+        assertSuccess(staged);
+        assertEquals(
+                ExtensionSettingsView.State.RESTART_REQUIRED,
+                service.snapshot().extensions().extensions().stream()
+                        .filter(extension -> extension.id().equals("community:demo"))
+                        .findFirst()
+                        .orElseThrow()
+                        .state());
+        assertEquals(
+                "community_extension_staged", service.snapshot().notice().code());
+        assertEquals(SettingsOperation.Kind.IDLE, service.snapshot().operation().kind());
+    }
+
+    @Test
     void displaySavePublishesDebugProjectionOnlyAfterBackendSuccess() {
         FakeModels models = new FakeModels(state(config("alpha")));
         FakeDomains domains = new FakeDomains();
@@ -568,6 +599,50 @@ final class ClientSettingsServiceTest {
                 domains,
                 domains.recipes,
                 domains,
+                Runnable::run,
+                worker,
+                null);
+    }
+
+    private static ClientSettingsService service(
+            FakeModels models,
+            FakeDomains domains,
+            FakeDisplay display,
+            FakeSkills skills,
+            FakeExtensions extensions,
+            FakeHistory history,
+            Executor worker) {
+        ClientSettingsService.CommandActions commands =
+                new ClientSettingsService.CommandActions() {
+                    @Override
+                    public ToolResult<CommandCapabilityConfig> save(
+                            CommandCapabilityConfig candidate) {
+                        return new ToolResult.Success<>(candidate);
+                    }
+
+                    @Override
+                    public ToolResult<CommandCapabilityConfig> reload() {
+                        return new ToolResult.Success<>(CommandCapabilityConfig.defaults());
+                    }
+                };
+        return new ClientSettingsService(
+                display.current,
+                display,
+                models.current,
+                Set.of("ALPHA_KEY"),
+                models,
+                models,
+                domains.capabilities,
+                domains,
+                domains.recipes,
+                domains,
+                SkillSettingsView.empty(),
+                skills,
+                extensions.currentView(),
+                extensions,
+                CommandCapabilityConfig.defaults(),
+                commands,
+                history,
                 Runnable::run,
                 worker,
                 null);
@@ -976,6 +1051,74 @@ final class ClientSettingsServiceTest {
         @Override
         public ToolResult<SkillCommunityView> importLocalPackage(Path source) {
             return new ToolResult.Success<>(community);
+        }
+    }
+
+    private static final class FakeExtensions
+            implements ClientSettingsService.ExtensionActions {
+        private ExtensionSettingsView current;
+
+        private FakeExtensions() {
+            ExtensionSettingsView base = ExtensionSettingsView.defaults();
+            ExtensionSettingsView.Extension community = extension(
+                    ExtensionSettingsView.State.COMMUNITY, true);
+            current = new ExtensionSettingsView(
+                    base.roots(),
+                    base.bundledModules(),
+                    base.adapters(),
+                    List.of(base.extensions().getFirst(), community),
+                    new ExtensionSettingsView.Catalog(
+                            true,
+                            true,
+                            Optional.of(Instant.EPOCH),
+                            Optional.empty()));
+        }
+
+        @Override
+        public ExtensionSettingsView currentView() {
+            return current;
+        }
+
+        @Override
+        public CompletableFuture<ToolResult<ExtensionSettingsView>> installCommunity(
+                String id, CancellationSignal cancellation) {
+            ExtensionSettingsView base = ExtensionSettingsView.defaults();
+            current = new ExtensionSettingsView(
+                    base.roots(),
+                    base.bundledModules(),
+                    base.adapters(),
+                    List.of(
+                            base.extensions().getFirst(),
+                            extension(ExtensionSettingsView.State.RESTART_REQUIRED, false)),
+                    current.catalog());
+            return CompletableFuture.completedFuture(new ToolResult.Success<>(current));
+        }
+
+        private static ExtensionSettingsView.Extension extension(
+                ExtensionSettingsView.State state, boolean installable) {
+            return new ExtensionSettingsView.Extension(
+                    "community:demo",
+                    "Demo",
+                    "1.0.0",
+                    "Community",
+                    "Demo Extension",
+                    state,
+                    List.of("fabric"),
+                    "[26.2,26.3)",
+                    "[0.2,0.3)",
+                    "community",
+                    new ExtensionSettingsView.Contributions(
+                            List.of(), List.of(), List.of(), List.of(), List.of()),
+                    state == ExtensionSettingsView.State.RESTART_REQUIRED
+                            ? "restart_required"
+                            : "",
+                    new ExtensionSettingsView.PackageInfo(
+                            true,
+                            "1.0.0",
+                            "https://example.test/demo.jar",
+                            "a".repeat(64),
+                            false,
+                            installable));
         }
     }
 

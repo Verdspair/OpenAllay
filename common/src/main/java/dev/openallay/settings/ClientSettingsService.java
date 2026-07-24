@@ -149,6 +149,28 @@ public final class ClientSettingsService implements AutoCloseable {
         }
     }
 
+    public interface ExtensionActions {
+        ExtensionSettingsView currentView();
+
+        default CompletableFuture<ToolResult<ExtensionSettingsView>> refreshCommunity(
+                CancellationSignal cancellation) {
+            return CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "catalog_unavailable", "The Extension community catalog is unavailable"));
+        }
+
+        default CompletableFuture<ToolResult<ExtensionSettingsView>> installCommunity(
+                String id, CancellationSignal cancellation) {
+            return CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "catalog_unavailable", "The Extension community catalog is unavailable"));
+        }
+
+        default ToolResult<ExtensionSettingsView> importLocalPackage(
+                String id, java.nio.file.Path source) {
+            return new ToolResult.Failure<>(
+                    "extension_import_unavailable", "Local Extension import is unavailable");
+        }
+    }
+
     public interface DisplayActions {
         ToolResult<GuideDisplayConfig> saveDisplay(GuideDisplayConfig candidate);
 
@@ -287,7 +309,7 @@ public final class ClientSettingsService implements AutoCloseable {
     private final RecipeActions recipeActions;
     private final SkillActions skillActions;
     private final CommandActions commandActions;
-    private final ExtensionSettingsView extensionState;
+    private final ExtensionActions extensionActions;
     private final HistoryActions historyActions;
     private final ClientEventDispatcher dispatcher;
     private final Executor worker;
@@ -303,6 +325,7 @@ public final class ClientSettingsService implements AutoCloseable {
     private RecipeSettingsView recipeState;
     private SkillSettingsView skillState;
     private SkillCommunityView skillCommunityState;
+    private ExtensionSettingsView extensionState;
     private CommandCapabilityConfig commandState;
     private HistoryRuntimeState historyState;
     private long modelGeneration;
@@ -451,6 +474,50 @@ public final class ClientSettingsService implements AutoCloseable {
             ClientEventDispatcher dispatcher,
             Executor worker,
             SettingsNotice initialNotice) {
+        this(
+                display,
+                displayActions,
+                initialModels,
+                presentEnvironmentNames,
+                models,
+                metadataActions,
+                initialCapabilities,
+                capabilityActions,
+                initialRecipes,
+                recipeActions,
+                initialSkills,
+                skillActions,
+                initialExtensions,
+                defaultExtensionActions(initialExtensions),
+                initialCommands,
+                commandActions,
+                historyActions,
+                dispatcher,
+                worker,
+                initialNotice);
+    }
+
+    public ClientSettingsService(
+            GuideDisplayConfig display,
+            DisplayActions displayActions,
+            ModelState initialModels,
+            Set<String> presentEnvironmentNames,
+            ModelActions models,
+            MetadataActions metadataActions,
+            CapabilitySettingsView initialCapabilities,
+            CapabilityActions capabilityActions,
+            RecipeSettingsView initialRecipes,
+            RecipeActions recipeActions,
+            SkillSettingsView initialSkills,
+            SkillActions skillActions,
+            ExtensionSettingsView initialExtensions,
+            ExtensionActions extensionActions,
+            CommandCapabilityConfig initialCommands,
+            CommandActions commandActions,
+            HistoryActions historyActions,
+            ClientEventDispatcher dispatcher,
+            Executor worker,
+            SettingsNotice initialNotice) {
         this.display = Objects.requireNonNull(display, "display");
         this.displayActions = Objects.requireNonNull(displayActions, "displayActions");
         this.modelState = Objects.requireNonNull(initialModels, "initialModels");
@@ -467,6 +534,7 @@ public final class ClientSettingsService implements AutoCloseable {
         this.skillCommunityState = Objects.requireNonNull(
                 skillActions.communityView(), "initial Skill community view");
         this.extensionState = Objects.requireNonNull(initialExtensions, "initialExtensions");
+        this.extensionActions = Objects.requireNonNull(extensionActions, "extensionActions");
         this.commandState = Objects.requireNonNull(initialCommands, "initialCommands");
         this.commandActions = Objects.requireNonNull(commandActions, "commandActions");
         this.historyActions = Objects.requireNonNull(historyActions, "historyActions");
@@ -803,6 +871,86 @@ public final class ClientSettingsService implements AutoCloseable {
                     null,
                     result,
                     "skill_package_imported"));
+        });
+        return result;
+    }
+
+    public CompletableFuture<ToolResult<Boolean>> refreshExtensionCommunity() {
+        Reservation reservation = reserve(SettingsOperation.domain(
+                SettingsOperation.Kind.REFRESHING_EXTENSION_CATALOG));
+        if (!reservation.accepted()) {
+            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
+        }
+        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
+        CompletableFuture<ToolResult<ExtensionSettingsView>> refresh;
+        try {
+            refresh = Objects.requireNonNull(
+                    extensionActions.refreshCommunity(new CancellationSignal()),
+                    "Extension catalog refresh future");
+        } catch (RuntimeException failure) {
+            refresh = CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "catalog_refresh_failed",
+                    "Unable to refresh the Extension community catalog"));
+        }
+        refresh.whenComplete((completed, thrown) -> dispatcher.execute(() ->
+                finishExtensionCommunity(
+                        reservation.id(),
+                        completed,
+                        thrown,
+                        result,
+                        "extension_catalog_refreshed")));
+        return result;
+    }
+
+    public CompletableFuture<ToolResult<Boolean>> installCommunityExtension(String id) {
+        Objects.requireNonNull(id, "id");
+        Reservation reservation = reserve(new SettingsOperation(
+                SettingsOperation.Kind.INSTALLING_COMMUNITY_EXTENSION, id, false));
+        if (!reservation.accepted()) {
+            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
+        }
+        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
+        CompletableFuture<ToolResult<ExtensionSettingsView>> install;
+        try {
+            install = Objects.requireNonNull(
+                    extensionActions.installCommunity(id, new CancellationSignal()),
+                    "Extension package install future");
+        } catch (RuntimeException failure) {
+            install = CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "extension_install_failed",
+                    "Unable to install the selected Extension"));
+        }
+        install.whenComplete((completed, thrown) -> dispatcher.execute(() ->
+                finishExtensionCommunity(
+                        reservation.id(),
+                        completed,
+                        thrown,
+                        result,
+                        "community_extension_staged")));
+        return result;
+    }
+
+    public CompletableFuture<ToolResult<Boolean>> importLocalExtensionPackage(
+            String id, java.nio.file.Path source) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(source, "source");
+        Reservation reservation = reserve(new SettingsOperation(
+                SettingsOperation.Kind.IMPORTING_EXTENSION_PACKAGE, id, false));
+        if (!reservation.accepted()) {
+            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
+        }
+        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
+        worker.execute(() -> {
+            ToolResult<ExtensionSettingsView> imported = safely(
+                    () -> extensionActions.importLocalPackage(id, source),
+                    "extension_import_failed",
+                    "Unable to import the selected Extension package");
+            dispatcher.execute(() -> finishExtensionCommunity(
+                    reservation.id(),
+                    imported,
+                    null,
+                    result,
+                    "extension_package_imported"));
         });
         return result;
     }
@@ -1410,6 +1558,54 @@ public final class ClientSettingsService implements AutoCloseable {
         outward.complete(result);
     }
 
+    private void finishExtensionCommunity(
+            long operationId,
+            ToolResult<ExtensionSettingsView> completed,
+            Throwable thrown,
+            CompletableFuture<ToolResult<Boolean>> outward,
+            String successCode) {
+        ToolResult<Boolean> result;
+        synchronized (lock) {
+            if (!isCurrentLocked(operationId)) {
+                return;
+            }
+            operation = SettingsOperation.idle();
+            if (thrown == null
+                    && completed instanceof ToolResult.Success<ExtensionSettingsView> success) {
+                extensionState = Objects.requireNonNull(
+                        success.value(), "updated Extension projection");
+                notice = SettingsNotice.success(successCode, switch (successCode) {
+                    case "extension_catalog_refreshed" ->
+                            "Extension community catalog refreshed";
+                    case "extension_package_imported" ->
+                            "Extension package staged; restart Minecraft to activate it";
+                    default -> "Community Extension staged; restart Minecraft to activate it";
+                });
+                result = new ToolResult.Success<>(Boolean.TRUE);
+            } else {
+                try {
+                    extensionState = Objects.requireNonNull(
+                            extensionActions.currentView(), "current Extension projection");
+                } catch (RuntimeException ignored) {
+                    // Preserve the last immutable Extension projection on recovery failure.
+                }
+                ToolResult.Failure<ExtensionSettingsView> failure =
+                        thrown == null
+                                        && completed
+                                                instanceof ToolResult.Failure<
+                                                        ExtensionSettingsView> value
+                                ? value
+                                : new ToolResult.Failure<>(
+                                        "extension_community_operation_failed",
+                                        "Unable to update Extensions");
+                notice = SettingsNotice.failure(failure.code(), failure.message());
+                result = new ToolResult.Failure<>(failure.code(), failure.message());
+            }
+            publishLocked();
+        }
+        outward.complete(result);
+    }
+
     private void finishDisplay(
             long operationId,
             ToolResult<GuideDisplayConfig> completed,
@@ -1886,6 +2082,17 @@ public final class ClientSettingsService implements AutoCloseable {
             @Override
             public SkillSettingsView currentView() {
                 return SkillSettingsView.empty();
+            }
+        };
+    }
+
+    private static ExtensionActions defaultExtensionActions(
+            ExtensionSettingsView initial) {
+        Objects.requireNonNull(initial, "initial");
+        return new ExtensionActions() {
+            @Override
+            public ExtensionSettingsView currentView() {
+                return initial;
             }
         };
     }

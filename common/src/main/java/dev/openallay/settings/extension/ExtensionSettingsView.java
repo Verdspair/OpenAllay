@@ -7,9 +7,11 @@ import dev.openallay.script.extension.JavascriptDataModuleRegistry;
 import dev.openallay.script.schema.HostRootDescriptor;
 import dev.openallay.script.schema.HostSchema;
 import dev.openallay.script.schema.HostSchemaCatalog;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Descriptor-only extension state for Settings.
@@ -20,7 +22,8 @@ public record ExtensionSettingsView(
         List<Root> roots,
         List<String> bundledModules,
         List<Adapter> adapters,
-        List<Extension> extensions) {
+        List<Extension> extensions,
+        Catalog catalog) {
     public ExtensionSettingsView {
         roots = List.copyOf(roots);
         bundledModules = List.copyOf(bundledModules);
@@ -28,6 +31,15 @@ public record ExtensionSettingsView(
         extensions = List.copyOf(extensions).stream()
                 .sorted(Comparator.comparing(Extension::id))
                 .toList();
+        Objects.requireNonNull(catalog, "catalog");
+    }
+
+    public ExtensionSettingsView(
+            List<Root> roots,
+            List<String> bundledModules,
+            List<Adapter> adapters,
+            List<Extension> extensions) {
+        this(roots, bundledModules, adapters, extensions, Catalog.unavailable());
     }
 
     public static ExtensionSettingsView from(JavascriptDataModuleRegistry registry) {
@@ -55,7 +67,8 @@ public record ExtensionSettingsView(
                     .map(Extension::from)
                     .forEach(extensions::add);
         }
-        return new ExtensionSettingsView(roots, modules, adapters, extensions);
+        return new ExtensionSettingsView(
+                roots, modules, adapters, extensions, Catalog.unavailable());
     }
 
     public static ExtensionSettingsView defaults() {
@@ -126,6 +139,74 @@ public record ExtensionSettingsView(
         COMMUNITY
     }
 
+    public record Notice(String code, String message) {
+        public Notice {
+            code = require(code, "code");
+            message = require(message, "message");
+        }
+    }
+
+    public record Catalog(
+            boolean configured,
+            boolean available,
+            Optional<Instant> generatedAt,
+            Optional<Notice> notice) {
+        public Catalog {
+            generatedAt = Objects.requireNonNull(generatedAt, "generatedAt");
+            notice = Objects.requireNonNull(notice, "notice");
+            if (!configured && (available || generatedAt.isPresent())) {
+                throw new IllegalArgumentException(
+                        "An unconfigured Extension catalog cannot be available");
+            }
+            if (available != generatedAt.isPresent()) {
+                throw new IllegalArgumentException(
+                        "Extension catalog availability must match its generation");
+            }
+        }
+
+        public static Catalog unavailable() {
+            return new Catalog(false, false, Optional.empty(), Optional.empty());
+        }
+    }
+
+    public record PackageInfo(
+            boolean catalogListed,
+            String availableVersion,
+            String artifact,
+            String sha256,
+            boolean updateAvailable,
+            boolean installable) {
+        public PackageInfo {
+            availableVersion = availableVersion == null ? "" : availableVersion;
+            artifact = artifact == null ? "" : artifact;
+            sha256 = sha256 == null ? "" : sha256;
+            if (!catalogListed
+                    && (!availableVersion.isEmpty()
+                            || !artifact.isEmpty()
+                            || !sha256.isEmpty()
+                            || updateAvailable
+                            || installable)) {
+                throw new IllegalArgumentException(
+                        "Non-catalog Extensions cannot expose package metadata");
+            }
+            if (catalogListed
+                    && (availableVersion.isBlank()
+                            || artifact.isBlank()
+                            || sha256.isBlank())) {
+                throw new IllegalArgumentException(
+                        "Catalog Extensions require version, artifact, and checksum");
+            }
+            if (updateAvailable && !installable) {
+                throw new IllegalArgumentException(
+                        "An available Extension update must be installable");
+            }
+        }
+
+        public static PackageInfo none() {
+            return new PackageInfo(false, "", "", "", false, false);
+        }
+    }
+
     public record Contributions(
             List<String> roots,
             List<String> dataModules,
@@ -153,7 +234,8 @@ public record ExtensionSettingsView(
             String openAllayApiVersionRange,
             String source,
             Contributions contributions,
-            String diagnostic) {
+            String diagnostic,
+            PackageInfo packageInfo) {
         public Extension {
             id = require(id, "id");
             name = require(name, "name");
@@ -168,6 +250,36 @@ public record ExtensionSettingsView(
             source = require(source, "source");
             Objects.requireNonNull(contributions, "contributions");
             diagnostic = diagnostic == null ? "" : diagnostic;
+            Objects.requireNonNull(packageInfo, "packageInfo");
+        }
+
+        public Extension(
+                String id,
+                String name,
+                String version,
+                String provider,
+                String summary,
+                State state,
+                List<String> loaders,
+                String minecraftVersionRange,
+                String openAllayApiVersionRange,
+                String source,
+                Contributions contributions,
+                String diagnostic) {
+            this(
+                    id,
+                    name,
+                    version,
+                    provider,
+                    summary,
+                    state,
+                    loaders,
+                    minecraftVersionRange,
+                    openAllayApiVersionRange,
+                    source,
+                    contributions,
+                    diagnostic,
+                    PackageInfo.none());
         }
 
         private static Extension from(OpenAllayExtensionRegistry.ExtensionView extension) {
@@ -189,12 +301,19 @@ public record ExtensionSettingsView(
                             extension.javascriptModules(),
                             extension.skills(),
                             extension.resultViews()),
-                    extension.diagnostic());
+                    extension.diagnostic(),
+                    PackageInfo.none());
         }
     }
 
     ExtensionSettingsView withExtensions(List<Extension> replacements) {
-        return new ExtensionSettingsView(roots, bundledModules, adapters, replacements);
+        return new ExtensionSettingsView(
+                roots, bundledModules, adapters, replacements, catalog);
+    }
+
+    ExtensionSettingsView withCommunity(List<Extension> replacements, Catalog replacement) {
+        return new ExtensionSettingsView(
+                roots, bundledModules, adapters, replacements, replacement);
     }
 
     private static Extension core(
@@ -216,7 +335,8 @@ public record ExtensionSettingsView(
                         modules,
                         List.of(),
                         List.of("openallay:recipe", "openallay:item", "openallay:table")),
-                "");
+                "",
+                PackageInfo.none());
     }
 
     private static List<String> sorted(List<String> values) {

@@ -653,10 +653,19 @@ Skill-loading surface; recipes, guides, inventory, game context, and extension
 data are mounted below the JavaScript host graph instead of represented by
 parallel Tool families.
 
-The player-facing Settings section named **Extensions** lists the declared
-Rhino roots and schemas, bundled JavaScript modules, and registered detached
-data adapters from descriptor-only catalogs. Opening Settings does not capture
-game state or invoke an adapter.
+The player-facing Settings section named **Extensions** has separate installed
+and community master-detail pages. Installed cards list compatibility,
+diagnostics, and every declared root, data adapter, JavaScript module, Skill,
+and native result view without capturing game state or invoking an adapter.
+The community page refreshes the strict schema-1 catalog at
+`https://raw.githubusercontent.com/nkanf-dev/OpenAllay-Extensions/main/catalog.json`
+and retains its last valid generation in
+`config/openallay/catalogs/extensions.json`. A compatible downloaded package,
+or a local JAR selected for the same catalog entry, is checksum- and
+loader-metadata-validated then atomically written under a stable managed name
+in the instance `mods` directory. The settings projection remains
+`restart_required` until a later loader startup actually registers the
+Extension; it never claims hot activation.
 
 An experimental game-command capability also lives on that page and is
 disabled by default. Its strict state is stored in

@@ -115,8 +115,11 @@ public final class ExtensionPackageInstaller {
             Files.createDirectories(stagingRoot);
             temporary = Files.createTempFile(stagingRoot, ".extension-", ".jar.tmp");
             Files.write(temporary, bytes);
-            String fileName = entry.id().replace(':', '_').replace('/', '_')
-                    + "-" + entry.version() + ".jar";
+            // A stable managed filename makes catalog updates an atomic replacement instead
+            // of leaving two loader-visible versions of the same mod ID in the mods directory.
+            String fileName = "openallay-extension-"
+                    + entry.id().replace(':', '_').replace('/', '_')
+                    + ".jar";
             Path target = stagingRoot.resolve(fileName).normalize();
             if (!target.getParent().equals(stagingRoot)) {
                 throw new IllegalArgumentException("Extension staging path escapes its root");

@@ -39,6 +39,9 @@ final class ExtensionPackageInstallerTest {
         assertEquals(ExtensionInstallState.RESTART_REQUIRED, result.state());
         assertEquals("sample:extension", result.extensionId());
         assertTrue(result.stagedArtifact().isPresent());
+        assertEquals(
+                "openallay-extension-sample_extension.jar",
+                result.stagedArtifact().orElseThrow().getFileName().toString());
         assertArrayEquals(jar, Files.readAllBytes(result.stagedArtifact().orElseThrow()));
         assertFalse(Files.exists(staging.resolve(".sample_extension-1.0.0.jar.tmp")));
     }
