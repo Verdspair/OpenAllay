@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "name": "fabric-26.2-content",
+  "loader": "fabric",
+  "minecraftVersion": "26.2",
+  "generatedAt": "2026-07-25T00:00:00Z",
+  "artifacts": [
+    {
+      "project": "Farmer's Delight Refabricated",
+      "projectId": "7vxePowz",
+      "version": "26.2-3.6.8",
+      "versionId": "PR6Lz8x8",
+      "file": "FarmersDelight-26.2-3.6.8+refabricated.jar",
+      "url": "https://cdn.modrinth.com/data/7vxePowz/versions/PR6Lz8x8/FarmersDelight-26.2-3.6.8%2Brefabricated.jar",
+      "sha256": "cad661340de553b74e1a332d989a09208358666187ff876dabc75abad590118f",
+      "purpose": "recipe-rich food and cooking baseline"
+    },
+    {
+      "project": "Delight Lib",
+      "projectId": "rmDY6fYt",
+      "version": "26.06.23-26.2-fabric",
+      "versionId": "SjphfJS9",
+      "file": "delightlib-26.06.23-26.2-fabric.jar",
+      "url": "https://cdn.modrinth.com/data/rmDY6fYt/versions/SjphfJS9/delightlib-26.06.23-26.2-fabric.jar",
+      "sha256": "4cce6ddd8e28e60b2e3058073c3aab9baaedd1524eea6ee89fa94de19e220a16",
+      "purpose": "required More Delight dependency"
+    },
+    {
+      "project": "More Delight",
+      "projectId": "znHQQtuU",
+      "version": "26.06.23-26.2-fabric",
+      "versionId": "RcXOnDXk",
+      "file": "moredelight-26.06.23-26.2-fabric.jar",
+      "url": "https://cdn.modrinth.com/data/znHQQtuU/versions/RcXOnDXk/moredelight-26.06.23-26.2-fabric.jar",
+      "sha256": "79635680e0435d4947bc2d5141b7240f65a4866a9c1d0b22d81761405adc4401",
+      "purpose": "cross-mod recipe and ingredient coverage"
+    },
+    {
+      "project": "Crate Delight",
+      "projectId": "9rlXSyLg",
+      "version": "26.07.01-26.2-fabric",
+      "versionId": "bh14ODmF",
+      "file": "cratedelight-26.07.01-26.2-fabric.jar",
+      "url": "https://cdn.modrinth.com/data/9rlXSyLg/versions/bh14ODmF/cratedelight-26.07.01-26.2-fabric.jar",
+      "sha256": "36e12ec1b4a13d94c4bedb4db8a74a465517490d004d2f428276ed774d009781",
+      "purpose": "container and storage comparison tasks"
+    },
+    {
+      "project": "Storage Delight",
+      "projectId": "LTTvOp5L",
+      "version": "26.07.01-26.2-fabric",
+      "versionId": "erFVgWTv",
+      "file": "storagedelight-26.07.01-26.2-fabric.jar",
+      "url": "https://cdn.modrinth.com/data/LTTvOp5L/versions/erFVgWTv/storagedelight-26.07.01-26.2-fabric.jar",
+      "sha256": "59c3e9b77de6b24c68224de4e474aaa2a8de714bd6e5f3c861abeb0661b5a8a4",
+      "purpose": "larger storage-item and recipe surface"
+    },
+    {
+      "project": "CC: Tweaked",
+      "projectId": "gu7yAYhd",
+      "version": "1.120.1",
+      "versionId": "L5nVwMw9",
+      "file": "cc-tweaked-26.2-fabric-1.120.1.jar",
+      "url": "https://cdn.modrinth.com/data/gu7yAYhd/versions/L5nVwMw9/cc-tweaked-26.2-fabric-1.120.1.jar",
+      "sha256": "ca100392f7412ebf78b766020922fca46a51f3e8af554156fcf5917ce54d01dd",
+      "purpose": "complex registered content and command surface"
+    },
+    {
+      "project": "JEI",
+      "projectId": "u6dRKJwZ",
+      "version": "30.13.0.86",
+      "versionId": "bWAcyHib",
+      "file": "jei-26.2-fabric-30.13.0.86.jar",
+      "url": "https://cdn.modrinth.com/data/u6dRKJwZ/versions/bWAcyHib/jei-26.2-fabric-30.13.0.86.jar",
+      "sha256": "72f56680fc56e578d4fce35c83e91e25446a8fc8d93583d2e2166c18f6adc789",
+      "purpose": "JEI Extension runtime verification"
+    },
+    {
+      "project": "Architectury API",
+      "projectId": "lhGA9TYQ",
+      "version": "21.0.4+fabric",
+      "versionId": "QZBULxdg",
+      "file": "architectury-fabric-21.0.4.jar",
+      "url": "https://cdn.modrinth.com/data/lhGA9TYQ/versions/QZBULxdg/architectury-fabric-21.0.4.jar",
+      "sha256": "87ee5f2d28252dc249e7c269973891dd0b0dc208a937ca54778aa2b2287abfcb",
+      "purpose": "required REI dependency"
+    },
+    {
+      "project": "Cloth Config API",
+      "projectId": "9s6osm5g",
+      "version": "26.2.155+fabric",
+      "versionId": "Nv3xnWXd",
+      "file": "cloth-config-26.2.155.jar",
+      "url": "https://cdn.modrinth.com/data/9s6osm5g/versions/Nv3xnWXd/cloth-config-26.2.155.jar",
+      "sha256": "def4be7639cd66704f7e304d658ea0f6bf490fb4a6eaa2dbf18ec2c3999d6349",
+      "purpose": "required REI dependency"
+    },
+    {
+      "project": "REI",
+      "projectId": "nfn13YXA",
+      "version": "26.2.820+fabric",
+      "versionId": "4o0NSIMj",
+      "file": "RoughlyEnoughItems-26.2.820.jar",
+      "url": "https://cdn.modrinth.com/data/nfn13YXA/versions/4o0NSIMj/RoughlyEnoughItems-26.2.820.jar",
+      "sha256": "9ba9d2a31531759549924064f33d3d45af342e7246f877efb8cee9f75f6ddaa9",
+      "purpose": "REI Extension runtime verification"
+    }
+  ]
+}
