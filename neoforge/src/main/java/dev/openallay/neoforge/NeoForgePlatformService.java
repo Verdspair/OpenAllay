@@ -17,6 +17,11 @@ public final class NeoForgePlatformService implements PlatformService {
     }
 
     @Override
+    public String gameVersion() {
+        return net.minecraft.SharedConstants.getCurrentVersion().name();
+    }
+
+    @Override
     public boolean isModLoaded(String modId) {
         return ModList.get().isLoaded(modId);
     }

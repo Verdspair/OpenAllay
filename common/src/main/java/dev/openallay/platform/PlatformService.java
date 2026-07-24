@@ -5,6 +5,9 @@ import java.util.List;
 public interface PlatformService {
     String platformName();
 
+    /** Exact running Minecraft version, supplied by the loader after game bootstrap. */
+    String gameVersion();
+
     boolean isModLoaded(String modId);
 
     boolean isDevelopmentEnvironment();
@@ -14,7 +17,4 @@ public interface PlatformService {
         throw new UnsupportedOperationException("Installed mod metadata is unavailable");
     }
 
-    default String gameVersion() {
-        return net.minecraft.SharedConstants.getCurrentVersion().name();
-    }
 }

@@ -252,6 +252,7 @@ final class ClientModelRuntimeRegistryTest {
         return new OpenAllayRuntime(
                 new PlatformService() {
                     @Override public String platformName() { return "test"; }
+                    @Override public String gameVersion() { return "26.2-test"; }
                     @Override public boolean isModLoaded(String modId) { return false; }
                     @Override public boolean isDevelopmentEnvironment() { return true; }
                 },
@@ -283,6 +284,7 @@ final class ClientModelRuntimeRegistryTest {
         return new OpenAllayRuntime(
                 new PlatformService() {
                     @Override public String platformName() { return "test"; }
+                    @Override public String gameVersion() { return "26.2-test"; }
                     @Override public boolean isModLoaded(String modId) { return false; }
                     @Override public boolean isDevelopmentEnvironment() { return true; }
                 },

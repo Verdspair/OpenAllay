@@ -15,6 +15,11 @@ public final class FabricPlatformService implements PlatformService {
     }
 
     @Override
+    public String gameVersion() {
+        return net.minecraft.SharedConstants.getCurrentVersion().name();
+    }
+
+    @Override
     public boolean isModLoaded(String modId) {
         return FabricLoader.getInstance().isModLoaded(modId);
     }
