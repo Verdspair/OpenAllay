@@ -70,6 +70,7 @@ public record ClientSettingsSnapshot(
                 capabilities,
                 recipes,
                 skills,
+                SkillCommunityView.unavailable(),
                 extensions,
                 experimentalCommands,
                 history,
