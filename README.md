@@ -42,8 +42,9 @@ is currently connected, which data roots are available, and compatible packages
 from the
 [OpenAllay Extensions community](https://github.com/nkanf-dev/OpenAllay-Extensions).
 Community Extensions install as normal mod packages and become active after a
-restart. This lets new mod integrations grow without turning every capability
-into another one-purpose Agent tool.
+restart. You can also import a compatible local Extension JAR without waiting
+for it to appear in the community catalog. This lets new mod integrations grow
+without turning every capability into another one-purpose Agent tool.
 
 ### Results made for Minecraft
 

@@ -166,6 +166,11 @@ public final class ClientSettingsService implements AutoCloseable {
 
         default ToolResult<ExtensionSettingsView> importLocalPackage(
                 String id, java.nio.file.Path source) {
+            return importLocalPackage(source);
+        }
+
+        default ToolResult<ExtensionSettingsView> importLocalPackage(
+                java.nio.file.Path source) {
             return new ToolResult.Failure<>(
                     "extension_import_unavailable", "Local Extension import is unavailable");
         }
@@ -945,6 +950,32 @@ public final class ClientSettingsService implements AutoCloseable {
                     () -> extensionActions.importLocalPackage(id, source),
                     "extension_import_failed",
                     "Unable to import the selected Extension package");
+            dispatcher.execute(() -> finishExtensionCommunity(
+                    reservation.id(),
+                    imported,
+                    null,
+                    result,
+                    "extension_package_imported"));
+        });
+        return result;
+    }
+
+    public CompletableFuture<ToolResult<Boolean>> importLocalExtensionPackage(
+            java.nio.file.Path source) {
+        Objects.requireNonNull(source, "source");
+        Reservation reservation = reserve(new SettingsOperation(
+                SettingsOperation.Kind.IMPORTING_EXTENSION_PACKAGE,
+                "local-extension",
+                false));
+        if (!reservation.accepted()) {
+            return CompletableFuture.completedFuture(failed(reservation.failureCode()));
+        }
+        CompletableFuture<ToolResult<Boolean>> result = new CompletableFuture<>();
+        worker.execute(() -> {
+            ToolResult<ExtensionSettingsView> imported = safely(
+                    () -> extensionActions.importLocalPackage(source),
+                    "extension_import_failed",
+                    "Unable to import the Extension package");
             dispatcher.execute(() -> finishExtensionCommunity(
                     reservation.id(),
                     imported,

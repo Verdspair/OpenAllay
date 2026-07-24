@@ -414,6 +414,28 @@ final class ClientSettingsServiceTest {
     }
 
     @Test
+    void localExtensionImportDoesNotRequireACommunitySelection() {
+        FakeModels models = new FakeModels(state(config("alpha")));
+        FakeDomains domains = new FakeDomains();
+        FakeDisplay display = new FakeDisplay(GuideDisplayConfig.defaults());
+        ClientSettingsService service = service(
+                models,
+                domains,
+                display,
+                new FakeSkills(),
+                new FakeExtensions(),
+                new FakeHistory(),
+                Runnable::run);
+
+        ToolResult<Boolean> staged =
+                service.importLocalExtensionPackage(Path.of("local-extension.jar")).join();
+
+        assertSuccess(staged);
+        assertEquals("extension_package_imported", service.snapshot().notice().code());
+        assertEquals(SettingsOperation.Kind.IDLE, service.snapshot().operation().kind());
+    }
+
+    @Test
     void displaySavePublishesDebugProjectionOnlyAfterBackendSuccess() {
         FakeModels models = new FakeModels(state(config("alpha")));
         FakeDomains domains = new FakeDomains();
@@ -1082,6 +1104,15 @@ final class ClientSettingsServiceTest {
         @Override
         public CompletableFuture<ToolResult<ExtensionSettingsView>> installCommunity(
                 String id, CancellationSignal cancellation) {
+            return stage();
+        }
+
+        @Override
+        public ToolResult<ExtensionSettingsView> importLocalPackage(Path source) {
+            return stage().join();
+        }
+
+        private CompletableFuture<ToolResult<ExtensionSettingsView>> stage() {
             ExtensionSettingsView base = ExtensionSettingsView.defaults();
             current = new ExtensionSettingsView(
                     base.roots(),

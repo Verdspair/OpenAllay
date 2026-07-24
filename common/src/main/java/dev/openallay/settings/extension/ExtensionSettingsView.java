@@ -181,13 +181,9 @@ public record ExtensionSettingsView(
             artifact = artifact == null ? "" : artifact;
             sha256 = sha256 == null ? "" : sha256;
             if (!catalogListed
-                    && (!availableVersion.isEmpty()
-                            || !artifact.isEmpty()
-                            || !sha256.isEmpty()
-                            || updateAvailable
-                            || installable)) {
+                    && (!artifact.isEmpty() || updateAvailable || installable)) {
                 throw new IllegalArgumentException(
-                        "Non-catalog Extensions cannot expose package metadata");
+                        "Local Extensions cannot expose catalog actions or artifacts");
             }
             if (catalogListed
                     && (availableVersion.isBlank()
@@ -200,10 +196,23 @@ public record ExtensionSettingsView(
                 throw new IllegalArgumentException(
                         "An available Extension update must be installable");
             }
+            if (!sha256.isEmpty() && !sha256.matches("[0-9a-f]{64}")) {
+                throw new IllegalArgumentException(
+                        "Extension package SHA-256 must be lowercase hexadecimal");
+            }
+            if (!catalogListed
+                    && (availableVersion.isBlank() != sha256.isBlank())) {
+                throw new IllegalArgumentException(
+                        "Local Extension package metadata must be complete");
+            }
         }
 
         public static PackageInfo none() {
             return new PackageInfo(false, "", "", "", false, false);
+        }
+
+        public static PackageInfo local(String version, String sha256) {
+            return new PackageInfo(false, version, "", sha256, false, false);
         }
     }
 

@@ -11,6 +11,7 @@ import dev.openallay.extension.OpenAllayExtensionEnvironment;
 import dev.openallay.extension.OpenAllayExtensionRegistry;
 import dev.openallay.extension.catalog.ExtensionCatalogCodec;
 import dev.openallay.extension.install.ExtensionPackageInstaller;
+import dev.openallay.extension.install.ExtensionPackageManifest;
 import dev.openallay.script.JavascriptModuleCatalog;
 import dev.openallay.script.extension.JavascriptDataModuleRegistry;
 import dev.openallay.skill.SkillParser;
@@ -176,6 +177,36 @@ final class ExtensionSettingsBackendTest {
                         "openallay-extension-sample_extension.jar")));
     }
 
+    @Test
+    void localImportIsAvailableWhenCommunityCatalogIsEmpty() throws Exception {
+        JavascriptDataModuleRegistry dataModules = new JavascriptDataModuleRegistry();
+        OpenAllayExtensionEnvironment environment =
+                new OpenAllayExtensionEnvironment("fabric", "26.2", "0.2.0");
+        OpenAllayExtensionRegistry registry = new OpenAllayExtensionRegistry(
+                environment,
+                dataModules,
+                new JavascriptModuleCatalog(Map.of()),
+                new SkillRepository(new SkillParser(), List.of()),
+                Set.of());
+        ExtensionSettingsBackend backend = new ExtensionSettingsBackend(
+                registry,
+                dataModules,
+                new ExtensionCatalogCodec(),
+                new ExtensionPackageInstaller(environment, temporary.resolve("local-mods")));
+        Path local = temporary.resolve("local.jar");
+        Files.write(local, fabricJar("sample_extension"));
+
+        assertInstanceOf(ToolResult.Success.class, backend.importLocalPackage(local));
+
+        ExtensionSettingsView.Extension staged =
+                extension(backend.currentView(), "sample:extension");
+        assertEquals(ExtensionSettingsView.State.RESTART_REQUIRED, staged.state());
+        assertEquals("2.0.0", staged.version());
+        assertEquals("community", staged.source());
+        assertTrue(!staged.packageInfo().catalogListed());
+        assertEquals(64, staged.packageInfo().sha256().length());
+    }
+
     private static ExtensionSettingsView.Extension extension(
             ExtensionSettingsView view, String id) {
         return view.extensions().stream()
@@ -211,6 +242,25 @@ final class ExtensionSettingsBackendTest {
     private static byte[] fabricJar(String modId) throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         try (JarOutputStream jar = new JarOutputStream(output)) {
+            jar.putNextEntry(new JarEntry(ExtensionPackageManifest.JAR_PATH));
+            jar.write(("""
+                            {
+                              "schemaVersion": 1,
+                              "id": "sample:extension",
+                              "name": "Sample",
+                              "version": "2.0.0",
+                              "provider": "Provider",
+                              "summary": "Sample Extension",
+                              "loaders": ["fabric"],
+                              "minecraftVersionRange": "[26.2,26.3)",
+                              "openAllayApiVersionRange": "[0.2,0.3)",
+                              "modIds": ["%s"],
+                              "source": "community"
+                            }
+                            """)
+                    .formatted(modId)
+                    .getBytes(StandardCharsets.UTF_8));
+            jar.closeEntry();
             jar.putNextEntry(new JarEntry("fabric.mod.json"));
             jar.write(("{\"schemaVersion\":1,\"id\":\"" + modId
                             + "\",\"version\":\"2.0.0\",\"name\":\"Sample\"}")

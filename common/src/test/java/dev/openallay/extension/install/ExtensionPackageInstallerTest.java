@@ -47,8 +47,31 @@ final class ExtensionPackageInstallerTest {
     }
 
     @Test
+    void importsLocalJarWithoutACommunityCatalogEntry() throws Exception {
+        byte[] jar = fabricJar("local_extension");
+        Path source = temporary.resolve("local.jar");
+        Files.write(source, jar);
+        ExtensionPackageInstaller installer = new ExtensionPackageInstaller(
+                new OpenAllayExtensionEnvironment("fabric", "26.2", "0.2.0"),
+                temporary.resolve("mods"));
+
+        ExtensionInstallResult result = installer.stageLocal(source);
+
+        assertEquals(ExtensionInstallState.RESTART_REQUIRED, result.state());
+        assertEquals("sample:extension", result.extensionId());
+        assertEquals("sample:extension", result.manifest()
+                .orElseThrow()
+                .descriptor()
+                .id());
+        assertEquals(sha256(jar), result.sha256());
+        assertEquals(
+                "openallay-extension-sample_extension.jar",
+                result.stagedArtifact().orElseThrow().getFileName().toString());
+    }
+
+    @Test
     void rejectsChecksumMetadataAndCompatibilityWithoutPublishingCandidate() throws Exception {
-        byte[] wrongMod = fabricJar("other_mod");
+        byte[] wrongMod = fabricJar("other_mod", "sample_extension");
         Path source = temporary.resolve("wrong.jar");
         Files.write(source, wrongMod);
         Path staging = temporary.resolve("pending");
@@ -99,15 +122,41 @@ final class ExtensionPackageInstallerTest {
     }
 
     private static byte[] fabricJar(String modId) throws Exception {
+        return fabricJar(modId, modId);
+    }
+
+    private static byte[] fabricJar(String loaderModId, String manifestModId)
+            throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         try (JarOutputStream jar = new JarOutputStream(output)) {
+            jar.putNextEntry(new JarEntry(ExtensionPackageManifest.JAR_PATH));
+            jar.write(packageManifest(manifestModId).getBytes(StandardCharsets.UTF_8));
+            jar.closeEntry();
             jar.putNextEntry(new JarEntry("fabric.mod.json"));
-            jar.write(("{\"schemaVersion\":1,\"id\":\"" + modId
+            jar.write(("{\"schemaVersion\":1,\"id\":\"" + loaderModId
                             + "\",\"version\":\"1.0.0\",\"name\":\"Sample\"}")
                     .getBytes(StandardCharsets.UTF_8));
             jar.closeEntry();
         }
         return output.toByteArray();
+    }
+
+    private static String packageManifest(String modId) {
+        return """
+                {
+                  "schemaVersion": 1,
+                  "id": "sample:extension",
+                  "name": "Sample",
+                  "version": "1.0.0",
+                  "provider": "Provider",
+                  "summary": "Sample extension",
+                  "loaders": ["fabric"],
+                  "minecraftVersionRange": "[26.2,26.3)",
+                  "openAllayApiVersionRange": "[0.2,0.3)",
+                  "modIds": ["%s"],
+                  "source": "community"
+                }
+                """.formatted(modId);
     }
 
     private static String sha256(byte[] bytes) throws Exception {

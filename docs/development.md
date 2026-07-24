@@ -676,10 +676,14 @@ and native result view without capturing game state or invoking an adapter.
 The community page refreshes the strict schema-1 catalog at
 `https://raw.githubusercontent.com/nkanf-dev/OpenAllay-Extensions/main/catalog.json`
 and retains its last valid generation in
-`config/openallay/catalogs/extensions.json`. A compatible downloaded package,
-or a local JAR selected for the same catalog entry, is checksum- and
-loader-metadata-validated then atomically written under a stable managed name
-in the instance `mods` directory. The settings projection remains
+`config/openallay/catalogs/extensions.json`. Every package embeds a strict
+schema-1 identity at `META-INF/openallay-extension.json`. A compatible
+downloaded package must match that identity, the catalog descriptor, and its
+declared checksum. A local JAR is identified directly by the embedded manifest
+and does not need a catalog entry. Both paths validate actual SHA-256,
+compatibility ranges, and loader mod metadata before atomically writing the JAR
+under a stable managed name in the instance `mods` directory. The settings
+projection remains
 `restart_required` until a later loader startup actually registers the
 Extension; it never claims hot activation.
 

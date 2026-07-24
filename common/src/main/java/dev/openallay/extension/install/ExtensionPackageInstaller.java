@@ -28,6 +28,8 @@ public final class ExtensionPackageInstaller {
     private final OpenAllayExtensionEnvironment environment;
     private final Path stagingRoot;
     private final HttpTransport transport;
+    private final ExtensionPackageManifestCodec manifestCodec =
+            new ExtensionPackageManifestCodec();
 
     public ExtensionPackageInstaller(
             OpenAllayExtensionEnvironment environment, Path stagingRoot) {
@@ -66,6 +68,21 @@ public final class ExtensionPackageInstaller {
         }
     }
 
+    /** Stages a local package using only its embedded Extension manifest. */
+    public synchronized ExtensionInstallResult stageLocal(Path source) {
+        Objects.requireNonNull(source, "source");
+        Path normalized = source.toAbsolutePath().normalize();
+        try {
+            if (Files.isSymbolicLink(normalized)
+                    || !Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)) {
+                return failed("", "extension_install_failed");
+            }
+            return stageLocal(Files.readAllBytes(normalized));
+        } catch (IOException | RuntimeException failure) {
+            return failed("", "extension_install_failed");
+        }
+    }
+
     public CompletableFuture<ExtensionInstallResult> stageDownload(
             ExtensionCatalogEntry entry, CancellationSignal cancellation) {
         Objects.requireNonNull(entry, "entry");
@@ -101,15 +118,42 @@ public final class ExtensionPackageInstaller {
         if (!sha256(bytes).equals(entry.sha256())) {
             return failed(entry.id(), "checksum_mismatch");
         }
-        Set<String> declaredModIds;
+        InspectedPackage inspected;
         try {
-            declaredModIds = declaredModIds(bytes);
+            inspected = inspect(bytes);
         } catch (RuntimeException failure) {
-            return failed(entry.id(), "mod_metadata_invalid");
+            return failed(entry.id(), "extension_manifest_invalid");
         }
-        if (!declaredModIds.containsAll(entry.modIds())) {
+        if (!inspected.manifest().descriptor().equals(entry.descriptor())
+                || !inspected.manifest().modIds().equals(entry.modIds())) {
+            return failed(entry.id(), "extension_manifest_mismatch");
+        }
+        if (!inspected.declaredModIds().containsAll(inspected.manifest().modIds())) {
             return failed(entry.id(), "mod_metadata_mismatch");
         }
+        return publish(inspected.manifest(), bytes, entry.sha256());
+    }
+
+    private ExtensionInstallResult stageLocal(byte[] bytes) {
+        InspectedPackage inspected;
+        try {
+            inspected = inspect(bytes);
+        } catch (RuntimeException failure) {
+            return failed("", "extension_manifest_invalid");
+        }
+        ExtensionPackageManifest manifest = inspected.manifest();
+        String incompatibility = environment.incompatibility(manifest.descriptor());
+        if (!incompatibility.isEmpty()) {
+            return failed(manifest.descriptor().id(), incompatibility);
+        }
+        if (!inspected.declaredModIds().containsAll(manifest.modIds())) {
+            return failed(manifest.descriptor().id(), "mod_metadata_mismatch");
+        }
+        return publish(manifest, bytes, sha256(bytes));
+    }
+
+    private ExtensionInstallResult publish(
+            ExtensionPackageManifest manifest, byte[] bytes, String checksum) {
         Path temporary = null;
         try {
             Files.createDirectories(stagingRoot);
@@ -118,7 +162,7 @@ public final class ExtensionPackageInstaller {
             // A stable managed filename makes catalog updates an atomic replacement instead
             // of leaving two loader-visible versions of the same mod ID in the mods directory.
             String fileName = "openallay-extension-"
-                    + entry.id().replace(':', '_').replace('/', '_')
+                    + manifest.descriptor().id().replace(':', '_').replace('/', '_')
                     + ".jar";
             Path target = stagingRoot.resolve(fileName).normalize();
             if (!target.getParent().equals(stagingRoot)) {
@@ -131,12 +175,14 @@ public final class ExtensionPackageInstaller {
                     StandardCopyOption.REPLACE_EXISTING);
             temporary = null;
             return new ExtensionInstallResult(
-                    entry.id(),
+                    manifest.descriptor().id(),
                     ExtensionInstallState.RESTART_REQUIRED,
                     "restart_required",
-                    Optional.of(target));
+                    Optional.of(target),
+                    Optional.of(manifest),
+                    checksum);
         } catch (IOException | RuntimeException failure) {
-            return failed(entry.id(), "extension_install_failed");
+            return failed(manifest.descriptor().id(), "extension_install_failed");
         } finally {
             if (temporary != null) {
                 try {
@@ -148,14 +194,22 @@ public final class ExtensionPackageInstaller {
         }
     }
 
-    private Set<String> declaredModIds(byte[] bytes) {
+    private InspectedPackage inspect(byte[] bytes) {
         Set<String> modIds = new HashSet<>();
+        ExtensionPackageManifest manifest = null;
         try (JarInputStream jar = new JarInputStream(new ByteArrayInputStream(bytes))) {
             for (var entry = jar.getNextJarEntry(); entry != null; entry = jar.getNextJarEntry()) {
                 if (entry.isDirectory()) {
                     continue;
                 }
-                if (entry.getName().equals("fabric.mod.json")) {
+                if (entry.getName().equals(ExtensionPackageManifest.JAR_PATH)) {
+                    if (manifest != null) {
+                        throw new IllegalArgumentException(
+                                "Extension JAR has duplicate package manifests");
+                    }
+                    manifest = manifestCodec.decode(new String(
+                            jar.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+                } else if (entry.getName().equals("fabric.mod.json")) {
                     var root = JsonParser.parseReader(
                                     new java.io.InputStreamReader(
                                             jar, java.nio.charset.StandardCharsets.UTF_8))
@@ -178,10 +232,14 @@ public final class ExtensionPackageInstaller {
         } catch (IOException | RuntimeException failure) {
             throw new IllegalArgumentException("Invalid Extension JAR metadata", failure);
         }
+        if (manifest == null) {
+            throw new IllegalArgumentException(
+                    "Extension JAR has no " + ExtensionPackageManifest.JAR_PATH);
+        }
         if (modIds.isEmpty()) {
             throw new IllegalArgumentException("Extension JAR has no loader metadata");
         }
-        return Set.copyOf(modIds);
+        return new InspectedPackage(manifest, Set.copyOf(modIds));
     }
 
     private static String sha256(byte[] bytes) {
@@ -195,8 +253,16 @@ public final class ExtensionPackageInstaller {
 
     private static ExtensionInstallResult failed(String extensionId, String diagnostic) {
         return new ExtensionInstallResult(
-                extensionId, ExtensionInstallState.FAILED, diagnostic, Optional.empty());
+                extensionId,
+                ExtensionInstallState.FAILED,
+                diagnostic,
+                Optional.empty(),
+                Optional.empty(),
+                "");
     }
+
+    private record InspectedPackage(
+            ExtensionPackageManifest manifest, Set<String> declaredModIds) {}
 
     private record Download(int status, byte[] bytes) {
         private Download {

@@ -1,5 +1,6 @@
 package dev.openallay.settings.extension;
 
+import dev.openallay.extension.OpenAllayExtensionDescriptor;
 import dev.openallay.extension.OpenAllayExtensionRegistry;
 import dev.openallay.extension.catalog.ExtensionCatalogClient;
 import dev.openallay.extension.catalog.ExtensionCatalogCodec;
@@ -7,6 +8,7 @@ import dev.openallay.extension.catalog.ExtensionCatalogEntry;
 import dev.openallay.extension.catalog.ExtensionCatalogManifest;
 import dev.openallay.extension.install.ExtensionInstallResult;
 import dev.openallay.extension.install.ExtensionInstallState;
+import dev.openallay.extension.install.ExtensionPackageManifest;
 import dev.openallay.extension.install.ExtensionPackageInstaller;
 import dev.openallay.model.CancellationSignal;
 import dev.openallay.script.extension.JavascriptDataModuleRegistry;
@@ -34,7 +36,7 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
     private final ExtensionCatalogClient catalogClient;
     private ExtensionCatalogManifest catalog =
             new ExtensionCatalogManifest(1, "extension", java.time.Instant.EPOCH, List.of());
-    private final Map<String, ExtensionCatalogEntry> staged = new TreeMap<>();
+    private final Map<String, StagedPackage> staged = new TreeMap<>();
     private Optional<ExtensionSettingsView.Notice> notice = Optional.empty();
 
     /**
@@ -90,7 +92,7 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
         Map<String, ExtensionCatalogEntry> latest = latestEntries();
         latest.forEach((id, entry) -> {
             ExtensionSettingsView.Extension installed = extensions.get(id);
-            ExtensionCatalogEntry pending = staged.get(id);
+            StagedPackage pending = staged.get(id);
             if (pending != null) {
                 extensions.put(id, staged(installed, pending));
             } else if (installed != null) {
@@ -106,8 +108,8 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
                 extensions.put(id, community(entry));
             }
         });
-        staged.forEach((id, entry) -> extensions.computeIfAbsent(
-                id, ignored -> staged(null, entry)));
+        staged.forEach((id, stagedPackage) -> extensions.computeIfAbsent(
+                id, ignored -> staged(null, stagedPackage)));
 
         ExtensionSettingsView.Catalog catalogView = new ExtensionSettingsView.Catalog(
                 catalogClient != null || hasCatalog(),
@@ -167,9 +169,14 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
             String extensionId, Path source) {
         ExtensionCatalogEntry entry = entry(extensionId);
         if (entry == null) {
-            return unavailable();
+            return importLocalPackage(source);
         }
-        return accept(entry, installer.stageLocal(entry, source));
+        return accept(Optional.of(entry), installer.stageLocal(entry, source));
+    }
+
+    @Override
+    public synchronized ToolResult<ExtensionSettingsView> importLocalPackage(Path source) {
+        return accept(Optional.empty(), installer.stageLocal(source));
     }
 
     @Override
@@ -184,7 +191,7 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
         }
         return installer.stageDownload(entry, cancellation).thenApply(result -> {
             synchronized (this) {
-                return accept(entry, result);
+                return accept(Optional.of(entry), result);
             }
         });
     }
@@ -201,7 +208,7 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
     }
 
     private ToolResult<ExtensionSettingsView> accept(
-            ExtensionCatalogEntry entry, ExtensionInstallResult result) {
+            Optional<ExtensionCatalogEntry> catalogEntry, ExtensionInstallResult result) {
         if (result.state() != ExtensionInstallState.RESTART_REQUIRED) {
             notice = Optional.of(new ExtensionSettingsView.Notice(
                     result.diagnostic().isBlank()
@@ -212,7 +219,10 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
                     "extension_install_failed",
                     "The Extension package could not be validated and staged");
         }
-        staged.put(entry.id(), entry);
+        ExtensionPackageManifest manifest = result.manifest().orElseThrow();
+        staged.put(
+                manifest.descriptor().id(),
+                new StagedPackage(manifest.descriptor(), catalogEntry, result.sha256()));
         notice = Optional.empty();
         return new ToolResult.Success<>(currentView());
     }
@@ -269,19 +279,30 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
     }
 
     private static ExtensionSettingsView.Extension staged(
-            ExtensionSettingsView.Extension installed,
-            ExtensionCatalogEntry entry) {
+            ExtensionSettingsView.Extension installed, StagedPackage staged) {
         ExtensionSettingsView.Contributions contributions = installed == null
                 ? emptyContributions()
                 : installed.contributions();
-        return extension(
-                entry,
+        OpenAllayExtensionDescriptor descriptor = staged.descriptor();
+        String displayVersion =
+                installed == null ? descriptor.version() : installed.version();
+        return new ExtensionSettingsView.Extension(
+                descriptor.id(),
+                descriptor.name(),
+                displayVersion,
+                descriptor.provider(),
+                descriptor.summary(),
                 ExtensionSettingsView.State.RESTART_REQUIRED,
+                descriptor.loaders().stream().toList(),
+                descriptor.minecraftVersionRange(),
+                descriptor.openAllayApiVersionRange(),
+                descriptor.source(),
+                contributions,
                 "restart_required",
-                installed == null ? "" : installed.version(),
-                false,
-                false,
-                contributions);
+                staged.catalogEntry()
+                        .map(entry -> packageInfo(entry, false, false))
+                        .orElseGet(() -> ExtensionSettingsView.PackageInfo.local(
+                                descriptor.version(), staged.sha256())));
     }
 
     private static ExtensionSettingsView.Extension extension(
@@ -366,5 +387,19 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
     private static ToolResult<ExtensionSettingsView> unavailable() {
         return new ToolResult.Failure<>(
                 "extension_install_failed", "The Extension package is unavailable");
+    }
+
+    private record StagedPackage(
+            OpenAllayExtensionDescriptor descriptor,
+            Optional<ExtensionCatalogEntry> catalogEntry,
+            String sha256) {
+        private StagedPackage {
+            Objects.requireNonNull(descriptor, "descriptor");
+            catalogEntry = Objects.requireNonNull(catalogEntry, "catalogEntry");
+            if (sha256 == null || !sha256.matches("[0-9a-f]{64}")) {
+                throw new IllegalArgumentException(
+                        "A staged Extension requires a SHA-256 digest");
+            }
+        }
     }
 }

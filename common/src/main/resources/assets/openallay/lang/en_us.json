@@ -194,7 +194,7 @@
   "screen.openallay.settings.extensions.community.update": "Update Extension",
   "screen.openallay.settings.extensions.community.refresh": "Refresh community",
   "screen.openallay.settings.extensions.community.import_path": "Extension JAR path",
-  "screen.openallay.settings.extensions.community.import_hint": "Local JAR for the selected Extension",
+  "screen.openallay.settings.extensions.community.import_hint": "Local Extension JAR with an embedded manifest",
   "screen.openallay.settings.extensions.community.import": "Import",
   "screen.openallay.settings.extensions.community.import_required": "Enter the path to an Extension JAR.",
   "screen.openallay.settings.extensions.community.import_invalid": "The Extension JAR path is invalid.",

@@ -625,10 +625,11 @@ public final class OpenAllaySettingsScreen extends Screen {
         if (!extension.diagnostic().isBlank()) {
             height += wrappedHeight(Component.literal(extension.diagnostic()), width, 10) + 7;
         }
-        if (debugMode && extension.catalogListed()) {
-            height += wrappedHeight(Component.literal(extension.artifact()), width, 10)
-                    + wrappedHeight(Component.literal(extension.sha256()), width, 10)
-                    + 12;
+        if (debugMode && !extension.artifact().isBlank()) {
+            height += wrappedHeight(Component.literal(extension.artifact()), width, 10) + 12;
+        }
+        if (debugMode && !extension.sha256().isBlank()) {
+            height += wrappedHeight(Component.literal(extension.sha256()), width, 10) + 12;
         }
         return height + 82;
     }
@@ -681,7 +682,7 @@ public final class OpenAllaySettingsScreen extends Screen {
                 "screen.openallay.settings.extensions.community.import_hint"));
         extensionImportPath.setMaxLength(2048);
         extensionImportPath.setValue(extensionImportPathDraft);
-        extensionImportPath.active = idle && selected != null && selected.catalogListed();
+        extensionImportPath.active = idle;
         addRenderableWidget(extensionImportPath);
         Button importButton = addRenderableWidget(OpenAllayButton.create(
                         Component.translatable(
@@ -689,7 +690,7 @@ public final class OpenAllaySettingsScreen extends Screen {
                         ignored -> importLocalExtension())
                 .bounds(x + width - 68, y + 26, 68, 20)
                 .build());
-        importButton.active = idle && selected != null && selected.catalogListed();
+        importButton.active = idle;
     }
 
     private void addExperimentalCommandAction(
@@ -1664,7 +1665,7 @@ public final class OpenAllaySettingsScreen extends Screen {
                             : ERROR,
                     10);
         }
-        if (projection.debugMode() && extension.catalogListed()) {
+        if (projection.debugMode() && !extension.artifact().isBlank()) {
             y += 7;
             y = extensionDetailLine(
                     graphics,
@@ -1673,6 +1674,9 @@ public final class OpenAllaySettingsScreen extends Screen {
                     x,
                     y,
                     width);
+        }
+        if (projection.debugMode() && !extension.sha256().isBlank()) {
+            y += 7;
             extensionDetailLine(
                     graphics,
                     "screen.openallay.settings.extensions.detail.sha256",
@@ -2512,11 +2516,6 @@ public final class OpenAllaySettingsScreen extends Screen {
 
     private void importLocalExtension() {
         captureDraft();
-        ExtensionSettingsProjection.ExtensionCard selected =
-                selectedExtension().orElse(null);
-        if (selected == null) {
-            return;
-        }
         if (extensionImportPathDraft.isBlank()) {
             localNotice = Component.translatable(
                             "screen.openallay.settings.extensions.community.import_required")
@@ -2524,8 +2523,7 @@ public final class OpenAllaySettingsScreen extends Screen {
             return;
         }
         try {
-            accept(service.importLocalExtensionPackage(
-                    selected.id(), Path.of(extensionImportPathDraft)));
+            accept(service.importLocalExtensionPackage(Path.of(extensionImportPathDraft)));
         } catch (InvalidPathException failure) {
             localNotice = Component.translatable(
                             "screen.openallay.settings.extensions.community.import_invalid")

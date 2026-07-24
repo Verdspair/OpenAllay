@@ -36,7 +36,8 @@ OpenAllay Extensions 可以接入类型化游戏数据、可复用 JavaScript �
 Agent 使用的数据入口，还会列出
 [OpenAllay Extensions 社区](https://github.com/nkanf-dev/OpenAllay-Extensions)
 中的兼容安装包。社区 Extension 会像普通模组一样安装，并在重启游戏后生效。
-这样，新模组集成可以持续成长，也不必把每种能力都做成另一个用途单一的工具。
+你也可以直接导入兼容的本地 Extension JAR，不必等待它先进入社区目录。这样，
+新模组集成可以持续成长，也不必把每种能力都做成另一个用途单一的工具。
 
 ### 为 Minecraft 而生的结果
 

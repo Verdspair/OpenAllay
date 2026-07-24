@@ -194,7 +194,7 @@
   "screen.openallay.settings.extensions.community.update": "更新扩展",
   "screen.openallay.settings.extensions.community.refresh": "刷新社区",
   "screen.openallay.settings.extensions.community.import_path": "扩展 JAR 路径",
-  "screen.openallay.settings.extensions.community.import_hint": "所选扩展的本地 JAR",
+  "screen.openallay.settings.extensions.community.import_hint": "包含内嵌清单的本地扩展 JAR",
   "screen.openallay.settings.extensions.community.import": "导入",
   "screen.openallay.settings.extensions.community.import_required": "请输入扩展 JAR 的路径。",
   "screen.openallay.settings.extensions.community.import_invalid": "扩展 JAR 路径无效。",
