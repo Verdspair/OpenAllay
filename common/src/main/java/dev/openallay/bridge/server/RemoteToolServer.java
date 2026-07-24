@@ -5,12 +5,15 @@ import dev.openallay.bridge.CorrelationRegistry;
 import dev.openallay.bridge.protocol.RemoteCancelPayload;
 import dev.openallay.bridge.protocol.RemoteToolCallPayload;
 import dev.openallay.bridge.protocol.RemoteToolResultChunkPayload;
+import dev.openallay.bridge.protocol.RemoteToolRequestClosePayload;
 import dev.openallay.bridge.protocol.ResultChunker;
 import dev.openallay.context.ContextCapability;
 import dev.openallay.context.ToolInvocationContext;
 import dev.openallay.model.CancellationSignal;
 import dev.openallay.tool.Tool;
 import dev.openallay.tool.ToolResult;
+import dev.openallay.tool.RequestScopeParticipant;
+import dev.openallay.tool.builtin.RunJavascriptTool;
 import dev.openallay.trace.replay.ToolArgumentCodec;
 import dev.openallay.trace.replay.ToolResultNormalizer;
 import java.util.Set;
@@ -21,7 +24,10 @@ public final class RemoteToolServer {
     @FunctionalInterface
     public interface ContextProvider {
         CompletableFuture<ToolInvocationContext> capture(
-                UUID actorId, Set<ContextCapability> capabilities, String correlationId);
+                UUID actorId,
+                Set<ContextCapability> capabilities,
+                String correlationId,
+                CancellationSignal cancellation);
     }
 
     @FunctionalInterface
@@ -37,6 +43,8 @@ public final class RemoteToolServer {
     private final ToolResultNormalizer normalizer;
     private final Gson gson;
     private final int transportChunkBytes;
+    private final java.util.concurrent.ConcurrentMap<UUID, java.util.Set<String>> requestScopes =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     public RemoteToolServer(
             ExportedToolPolicy policy,
@@ -67,13 +75,20 @@ public final class RemoteToolServer {
         if (!correlations.register(sender, payload.correlationId(), cancellation)) {
             return new ToolResult.Failure<>("duplicate_correlation", "Correlation ID is already active");
         }
+        String requestScope = requestScope(sender, payload.sessionId());
+        if (tool instanceof RequestScopeParticipant) {
+            requestScopes.computeIfAbsent(sender, ignored ->
+                    java.util.concurrent.ConcurrentHashMap.newKeySet()).add(requestScope);
+        }
         contexts.capture(
                         sender,
                         tool.descriptor().requiredContext(),
-                        payload.correlationId().toString())
-                .thenApply(context -> invoke(tool, context, payload.argumentsJson(), cancellation))
+                        requestScope,
+                        cancellation)
+                .thenCompose(context ->
+                        invoke(tool, context, payload.argumentsJson(), cancellation))
                 .exceptionally(throwable -> new ToolResult.Failure<>(
-                        "remote_tool_failure", safeMessage(throwable)))
+                        failureCode(throwable), safeMessage(throwable)))
                 .thenAccept(result -> finish(sender, payload.correlationId(), tool, result));
         return new ToolResult.Success<>(new VoidResult());
     }
@@ -82,8 +97,25 @@ public final class RemoteToolServer {
         return correlations.cancel(sender, payload.correlationId());
     }
 
+    public void closeRequest(UUID sender, RemoteToolRequestClosePayload payload) {
+        String scope = requestScope(sender, payload.requestId());
+        java.util.Set<String> scopes = requestScopes.get(sender);
+        if (scopes == null || !scopes.remove(scope)) {
+            return;
+        }
+        policy.closeRequestScope(scope);
+        if (scopes.isEmpty()) {
+            requestScopes.remove(sender, scopes);
+        }
+    }
+
     public int disconnect(UUID sender) {
-        return correlations.cancelActor(sender);
+        int cancelled = correlations.cancelActor(sender);
+        java.util.Set<String> scopes = requestScopes.remove(sender);
+        if (scopes != null) {
+            scopes.forEach(policy::closeRequestScope);
+        }
+        return cancelled;
     }
 
     private void finish(UUID actor, UUID correlation, Tool<?, ?> tool, ToolResult<?> result) {
@@ -95,7 +127,7 @@ public final class RemoteToolServer {
                 .forEach(chunk -> responses.send(actor, chunk));
     }
 
-    private ToolResult<?> invoke(
+    private CompletableFuture<ToolResult<?>> invoke(
             Tool<?, ?> tool,
             ToolInvocationContext context,
             String argumentsJson,
@@ -103,20 +135,37 @@ public final class RemoteToolServer {
         cancellation.throwIfCancelled();
         com.google.gson.JsonElement parsed = com.google.gson.JsonParser.parseString(argumentsJson);
         if (!parsed.isJsonObject()) {
-            return new ToolResult.Failure<>("invalid_arguments", "Remote tool arguments must be an object");
+            return CompletableFuture.completedFuture(
+                    new ToolResult.Failure<>(
+                            "invalid_arguments", "Remote tool arguments must be an object"));
         }
-        ToolResult<?> decoded = arguments.decode(parsed.getAsJsonObject(), tool.descriptor().inputType());
+        com.google.gson.JsonObject object = parsed.getAsJsonObject();
+        if (tool.descriptor().id().equals(RunJavascriptTool.ID)
+                && requestsCommands(object)) {
+            return CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "remote_tool_denied",
+                    "The server JavaScript projection does not expose experimental commands"));
+        }
+        ToolResult<?> decoded = arguments.decode(object, tool.descriptor().inputType());
         if (decoded instanceof ToolResult.Failure<?> failure) {
-            return failure;
+            return CompletableFuture.completedFuture(failure);
         }
         cancellation.throwIfCancelled();
-        return invokeTyped(tool, context, ((ToolResult.Success<?>) decoded).value());
+        return invokeTypedAsync(
+                tool,
+                context,
+                ((ToolResult.Success<?>) decoded).value(),
+                cancellation);
     }
 
     @SuppressWarnings("unchecked")
-    private static <I, O> ToolResult<O> invokeTyped(
-            Tool<?, ?> raw, ToolInvocationContext context, Object input) {
-        return ((Tool<I, O>) raw).invoke(context, (I) input);
+    private static <I, O> CompletableFuture<ToolResult<?>> invokeTypedAsync(
+            Tool<?, ?> raw,
+            ToolInvocationContext context,
+            Object input,
+            CancellationSignal cancellation) {
+        return (CompletableFuture<ToolResult<?>>) (CompletableFuture<?>)
+                ((Tool<I, O>) raw).invokeAsync(context, (I) input, cancellation);
     }
 
     private static String safeMessage(Throwable throwable) {
@@ -127,6 +176,39 @@ public final class RemoteToolServer {
             current = current.getCause();
         }
         return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
+    }
+
+    private static String failureCode(Throwable throwable) {
+        Throwable current = throwable;
+        while ((current instanceof java.util.concurrent.CompletionException
+                        || current instanceof java.util.concurrent.ExecutionException)
+                && current.getCause() != null) {
+            current = current.getCause();
+        }
+        if (current instanceof dev.openallay.script.JavascriptExecutionException failure) {
+            return failure.code();
+        }
+        if (current instanceof dev.openallay.model.ModelClientException failure) {
+            return failure.failure().code();
+        }
+        return "remote_tool_failure";
+    }
+
+    private static boolean requestsCommands(com.google.gson.JsonObject arguments) {
+        if (!arguments.has("roots") || !arguments.get("roots").isJsonArray()) {
+            return false;
+        }
+        for (com.google.gson.JsonElement root : arguments.getAsJsonArray("roots")) {
+            if (root.isJsonPrimitive() && root.getAsJsonPrimitive().isString()
+                    && root.getAsString().equals("commands")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String requestScope(UUID actorId, String requestId) {
+        return actorId + "/" + requestId;
     }
 
     public record VoidResult() {}

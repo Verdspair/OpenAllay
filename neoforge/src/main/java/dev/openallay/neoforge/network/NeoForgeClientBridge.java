@@ -55,6 +55,11 @@ public final class NeoForgeClientBridge {
                 public void cancel(dev.openallay.bridge.protocol.RemoteCancelPayload payload) {
                     send("tool_cancel", payload);
                 }
+                @Override
+                public void close(
+                        dev.openallay.bridge.protocol.RemoteToolRequestClosePayload payload) {
+                    send("tool_request_close", payload);
+                }
             });
 
     public void register(IEventBus modBus) {

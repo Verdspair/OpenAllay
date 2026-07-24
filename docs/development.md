@@ -233,6 +233,22 @@ execution and potentially large normalization/chunk encoding run on a virtual
 worker, and packet sends are marshalled back to the client thread. Invalid
 settings fail closed to an empty advertised client Tool set.
 
+Focused spatial observation uses the optional `world` binding of
+`openallay:run_javascript`. Client-local execution captures client-visible
+loaded blocks and entities on the Minecraft client thread. A server-hosted
+model keeps scripts requesting `roots: ["world"]` on the server and captures
+server-authoritative data for the authenticated requesting player. A
+client-hosted model may call the server's advertised read-only JavaScript
+projection for the same authoritative route. That projection rejects the
+experimental `commands` root; command mutation remains a separate client-owned,
+default-off capability.
+
+Both routes detach block state, coordinates, entity summaries, and entity
+details before the Rhino worker observes them. Entity observation IDs are
+opaque and valid only for that request. Cancellation or disconnect stops later
+capture slices and closes the request workspace; unloaded regions remain
+explicit partial coverage rather than empty proof.
+
 The top-level settings sections are General, Models, Extensions, Skills,
 History, Diagnostics, and About. Extensions is a master-detail projection of
 the JavaScript host, reusable modules, registered detached adapters, pending

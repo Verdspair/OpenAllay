@@ -16,17 +16,15 @@ import dev.openallay.bridge.protocol.ServerAgentCancelPayload;
 import dev.openallay.bridge.protocol.ServerAgentEventCodec;
 import dev.openallay.bridge.server.ExportedToolPolicy;
 import dev.openallay.bridge.server.RemoteToolServer;
-import dev.openallay.context.minecraft.MinecraftContextCapture;
+import dev.openallay.server.MinecraftServerGuideContextProvider;
 import dev.openallay.server.ServerAgentService;
 import dev.openallay.server.ServerGuideRuntime;
 import dev.openallay.server.ServerModelCapabilityProjection;
-import dev.openallay.tool.ToolAccess;
 import dev.openallay.tool.ToolResult;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -89,26 +87,11 @@ public final class FabricServerBridge {
             return;
         }
         Set<String> exported = runtime.tools().descriptors().stream()
-                .filter(descriptor -> descriptor.access() == ToolAccess.READ_ONLY)
+                .filter(ExportedToolPolicy::isRemotelyReadable)
                 .map(descriptor -> descriptor.id())
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        RemoteToolServer.ContextProvider contexts = (actor, capabilities, correlation) -> {
-            CompletableFuture<dev.openallay.context.ToolInvocationContext> result = new CompletableFuture<>();
-            server.execute(() -> {
-                ServerPlayer player = players.get(actor);
-                if (player == null) {
-                    result.completeExceptionally(new IllegalStateException("Player disconnected"));
-                } else {
-                    try {
-                        result.complete(new MinecraftContextCapture(gson).capture(
-                                player.createCommandSourceStack(), capabilities, correlation));
-                    } catch (RuntimeException failure) {
-                        result.completeExceptionally(failure);
-                    }
-                }
-            });
-            return result;
-        };
+        MinecraftServerGuideContextProvider contexts =
+                new MinecraftServerGuideContextProvider(runtime, server, gson);
         remoteTools = new RemoteToolServer(
                 new ExportedToolPolicy(runtime.tools(), exported),
                 contexts,
@@ -120,7 +103,7 @@ public final class FabricServerBridge {
                 runtime,
                 FabricLoader.getInstance().getConfigDir().resolve("openallay/server-model.json"),
                 System.getenv(),
-                contexts::capture,
+                contexts,
                 this::sendAgentEvent,
                 new dev.openallay.bridge.server.PlayerClientToolRouter.Transport() {
                     @Override
@@ -155,6 +138,11 @@ public final class FabricServerBridge {
                             actor, codec.decode(packet.json(), RemoteToolCallPayload.class));
                     case "tool_cancel" -> remoteTools.cancel(
                             actor, codec.decode(packet.json(), RemoteCancelPayload.class));
+                    case "tool_request_close" -> remoteTools.closeRequest(
+                            actor,
+                            codec.decode(
+                                    packet.json(),
+                                    dev.openallay.bridge.protocol.RemoteToolRequestClosePayload.class));
                     case "agent_request_chunk" -> {
                         if (serverGuide instanceof ToolResult.Success<ServerGuideRuntime> success) {
                             ServerAgentRequestChunkPayload chunk = codec.decode(
@@ -204,7 +192,7 @@ public final class FabricServerBridge {
     private CapabilityPayload capabilities() {
         ToolSchemaGenerator schemas = new ToolSchemaGenerator();
         List<CapabilityPayload.RemoteToolCapability> tools = runtime.tools().descriptors().stream()
-                .filter(descriptor -> descriptor.access() == ToolAccess.READ_ONLY)
+                .filter(ExportedToolPolicy::isRemotelyReadable)
                 .map(descriptor -> new CapabilityPayload.RemoteToolCapability(
                         descriptor.id(), descriptor.description(),
                         schemas.generate(descriptor.inputType()).toString()))

@@ -9,6 +9,7 @@ import dev.openallay.bridge.protocol.BridgeProtocol;
 import dev.openallay.bridge.protocol.RemoteCancelPayload;
 import dev.openallay.bridge.protocol.RemoteToolCallPayload;
 import dev.openallay.bridge.protocol.RemoteToolResultChunkPayload;
+import dev.openallay.bridge.protocol.RemoteToolRequestClosePayload;
 import dev.openallay.bridge.protocol.ResultChunker;
 import dev.openallay.context.ContextCapability;
 import dev.openallay.context.ToolInvocationContext;
@@ -39,6 +40,7 @@ public final class RemoteToolExecutor implements AgentToolExecutor {
     public interface Transport {
         void call(RemoteToolCallPayload payload);
         void cancel(RemoteCancelPayload payload);
+        default void close(RemoteToolRequestClosePayload payload) {}
     }
 
     private final RemoteCapabilityStore capabilities;
@@ -195,6 +197,17 @@ public final class RemoteToolExecutor implements AgentToolExecutor {
             }
         });
         reassembler.clear();
+    }
+
+    @Override
+    public void closeRequestScope(String correlationId) {
+        try {
+            transport.close(new RemoteToolRequestClosePayload(
+                    BridgeProtocol.VERSION, correlationId));
+        } catch (RuntimeException ignored) {
+            // Local request termination still owns the terminal state. Disconnect cleanup on the
+            // server is the fallback for a lost best-effort close packet.
+        }
     }
 
     private ToolNameCodec codec() {

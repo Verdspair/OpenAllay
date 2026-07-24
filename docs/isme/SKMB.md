@@ -99,6 +99,11 @@ behavior, aligned Tool guidance/cards, and one sectioned read-only Tool for all
 player-observable outer game state. Deep Recipes/Guides remain independent and
 interactive/spatial world inspection remains deferred.
 
+SKMB-2026-07-25-029 supersedes only that spatial-observation deferral for the
+0.2 line. Focused `world.inspect`/`world.entities`/`world.entity` capture is now
+request scoped, detached on the owning client or server thread, and explicitly
+reports client-visible or server-authoritative evidence.
+
 Its implementation and focused deterministic suites are complete in the
 current Phase 4 worktree. Fabric and NeoForge graphical controllers each
 completed the native semantic/UI correction scenario with six screenshots,

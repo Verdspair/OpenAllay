@@ -35,7 +35,9 @@ public final class ClientToolExecutionEndpoint {
     @FunctionalInterface
     public interface ContextProvider {
         CompletableFuture<ToolInvocationContext> capture(
-                Set<ContextCapability> capabilities, String correlationId);
+                Set<ContextCapability> capabilities,
+                String correlationId,
+                CancellationSignal cancellation);
     }
 
     @FunctionalInterface
@@ -154,7 +156,9 @@ public final class ClientToolExecutionEndpoint {
         CompletableFuture<ToolInvocationContext> capture;
         try {
             capture = contexts.capture(
-                    tool.descriptor().requiredContext(), payload.requestId().toString());
+                    tool.descriptor().requiredContext(),
+                    payload.requestId().toString(),
+                    cancellation);
         } catch (RuntimeException failure) {
             finish(payload, request, tool, new ToolResult.Failure<>(
                     "client_tool_context_failed", "Client Tool context capture failed"));

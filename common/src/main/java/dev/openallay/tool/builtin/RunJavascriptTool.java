@@ -35,6 +35,8 @@ import java.util.function.Function;
 
 public final class RunJavascriptTool
         implements Tool<RunJavascriptTool.Input, RunJavascriptTool.Output>, RequestScopeParticipant {
+    public static final String ID = "openallay:run_javascript";
+
     @ToolDescription("A JavaScript program body. End with an explicit return statement.")
     public record Input(
             String source,
@@ -84,7 +86,7 @@ public final class RunJavascriptTool
     }
 
     private static final ToolDescriptor<Input, Output> DESCRIPTOR = new ToolDescriptor<>(
-            "openallay:run_javascript",
+            ID,
             "Analyze the current detached Minecraft data with isolated JavaScript. Every source must end with an explicit return. "
                     + "Use the core JavaScript contract in the system prompt and prefer one filter/map/reduce/sort/join "
                     + "program over repeated calls; do not rediscover documented roots. "

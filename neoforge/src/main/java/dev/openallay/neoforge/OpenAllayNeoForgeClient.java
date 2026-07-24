@@ -113,11 +113,20 @@ public final class OpenAllayNeoForgeClient {
                 () -> modelRegistry == null
                         ? fallbackClientTools
                         : modelRegistry.capabilities().localTools(),
-                (required, correlation) -> {
+                (required, correlation, cancellation) -> {
                     java.util.concurrent.CompletableFuture<
                             dev.openallay.context.ToolInvocationContext> captured =
                             new java.util.concurrent.CompletableFuture<>();
                     client.execute(() -> {
+                        if (cancellation.isCancelled()) {
+                            captured.completeExceptionally(
+                                    new dev.openallay.model.ModelClientException(
+                                            new dev.openallay.model.ModelFailure(
+                                                    "agent_cancelled",
+                                                    "Client Tool context capture was cancelled",
+                                                    null)));
+                            return;
+                        }
                         ToolResult<dev.openallay.context.ToolInvocationContext> result =
                                 contexts.capture(required, correlation);
                         if (result instanceof ToolResult.Success<

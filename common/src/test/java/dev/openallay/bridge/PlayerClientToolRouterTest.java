@@ -24,6 +24,7 @@ import dev.openallay.tool.ToolRegistry;
 import dev.openallay.tool.ToolResult;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -232,6 +233,38 @@ final class PlayerClientToolRouterTest {
         }
     }
 
+    @Test
+    void serverHostedAgentKeepsWorldJavascriptOnAuthoritativeServerRoute() {
+        ToolRegistry registry = new ToolRegistry();
+        registry.register("test", List.of(new ServerJavascriptTool()));
+        List<SentCall> calls = new ArrayList<>();
+        PlayerClientToolRouter router = new PlayerClientToolRouter(
+                registry, new Gson(), transport(calls, new ArrayList<>()));
+        UUID actor = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        AgentToolExecutor tools = success(router.open(
+                actor,
+                requestId,
+                "main",
+                List.of("openallay:run_javascript")));
+        JsonObject arguments = new JsonObject();
+        arguments.addProperty("source", "return world.inspect({});");
+        arguments.add("roots", com.google.gson.JsonParser.parseString("[\"world\"]"));
+
+        AgentToolResult result = tools.execute(
+                        "openallay__run_javascript",
+                        arguments,
+                        ToolInvocationContext.developmentConsole(requestId.toString()),
+                        new CancellationSignal())
+                .join();
+
+        assertTrue(calls.isEmpty());
+        assertFalse(result.failure());
+        assertEquals(
+                "server-authoritative",
+                result.normalized().getAsJsonObject("value").get("route").getAsString());
+    }
+
     private static PlayerClientToolRouter.Transport transport(
             List<SentCall> calls, List<SentCancel> cancels) {
         return new PlayerClientToolRouter.Transport() {
@@ -278,6 +311,30 @@ final class PlayerClientToolRouterTest {
         @Override
         public ToolResult<Output> invoke(ToolInvocationContext context, Input input) {
             return new ToolResult.Success<>(new Output(input.value()));
+        }
+    }
+
+    private static final class ServerJavascriptTool
+            implements Tool<ServerJavascriptTool.Input, ServerJavascriptTool.Output> {
+        record Input(String source, List<String> roots) {}
+        record Output(String route) {}
+
+        private static final ToolDescriptor<Input, Output> DESCRIPTOR = new ToolDescriptor<>(
+                "openallay:run_javascript",
+                "Run detached JavaScript",
+                Input.class,
+                Output.class,
+                ToolAccess.EXPERIMENTAL_ACTION,
+                Set.of());
+
+        @Override
+        public ToolDescriptor<Input, Output> descriptor() {
+            return DESCRIPTOR;
+        }
+
+        @Override
+        public ToolResult<Output> invoke(ToolInvocationContext context, Input input) {
+            return new ToolResult.Success<>(new Output("server-authoritative"));
         }
     }
 

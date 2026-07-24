@@ -29,7 +29,10 @@ public final class ServerAgentService {
     @FunctionalInterface
     public interface ContextProvider {
         CompletableFuture<ToolInvocationContext> capture(
-                UUID actorId, Set<ContextCapability> capabilities, String correlationId);
+                UUID actorId,
+                Set<ContextCapability> capabilities,
+                String correlationId,
+                dev.openallay.model.CancellationSignal cancellation);
     }
 
     @FunctionalInterface
@@ -118,7 +121,8 @@ public final class ServerAgentService {
                     return contexts.capture(
                             sender,
                             runtime.tools().requiredContext(),
-                            payload.requestId().toString());
+                            sender + "/" + payload.requestId(),
+                            owner.cancellation());
                 })
                 .thenCompose(context -> {
                     if (context == null

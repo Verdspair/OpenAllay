@@ -43,7 +43,7 @@ final class ServerAgentServiceTest {
                 new GameGuideAgent(model, tools, sessions, new Gson()),
                 tools,
                 sessions,
-                (actor, capabilities, id) -> CompletableFuture.completedFuture(
+                (actor, capabilities, id, cancellation) -> CompletableFuture.completedFuture(
                         ToolInvocationContext.developmentConsole(id)),
                 (actor, event) -> events.add(event),
                 new Gson(),
@@ -73,7 +73,7 @@ final class ServerAgentServiceTest {
                 new GameGuideAgent(model, tools, sessions, new Gson()),
                 tools,
                 sessions,
-                (actor, capabilities, id) -> CompletableFuture.completedFuture(
+                (actor, capabilities, id, cancellation) -> CompletableFuture.completedFuture(
                         ToolInvocationContext.developmentConsole(id)),
                 (actor, event) -> {},
                 new Gson(),
@@ -110,7 +110,7 @@ final class ServerAgentServiceTest {
         List<ServerAgentEventPayload> events = new ArrayList<>();
         ServerAgentService service = new ServerAgentService(
                 new GameGuideAgent(model, tools, sessions, new Gson()), tools, sessions,
-                (actor, capabilities, id) -> CompletableFuture.completedFuture(
+                (actor, capabilities, id, cancellation) -> CompletableFuture.completedFuture(
                         ToolInvocationContext.developmentConsole(id)),
                 (actor, event) -> events.add(event), new Gson(), "system");
         UUID actor = UUID.randomUUID();
@@ -135,7 +135,7 @@ final class ServerAgentServiceTest {
                 new GameGuideAgent(model, tools, sessions, new Gson()),
                 tools,
                 sessions,
-                (actor, capabilities, id) -> {
+                (actor, capabilities, id, cancellation) -> {
                     captures.incrementAndGet();
                     return CompletableFuture.completedFuture(
                             ToolInvocationContext.developmentConsole(id));
@@ -161,7 +161,7 @@ final class ServerAgentServiceTest {
         List<ServerAgentEventPayload> events = new ArrayList<>();
         ServerAgentService service = new ServerAgentService(
                 new GameGuideAgent(model, tools, sessions, new Gson()), tools, sessions,
-                (actor, capabilities, id) -> {
+                (actor, capabilities, id, cancellation) -> {
                     captures.incrementAndGet();
                     return CompletableFuture.completedFuture(
                             ToolInvocationContext.developmentConsole(id));

@@ -70,9 +70,25 @@ final class JavascriptWorldBridgeTest {
         assertTrue(observations.bridge("request", new CancellationSignal()).isEmpty());
     }
 
+    @Test
+    void repeatedCaptureKeepsTheRequestSnapshotAndClosesTheUnusedCandidate() {
+        RecordingCoordinator first = new RecordingCoordinator();
+        RecordingCoordinator second = new RecordingCoordinator();
+        WorldObservationRuntime observations = new WorldObservationRuntime();
+
+        observations.capture("request", first);
+        observations.capture("request", second);
+
+        assertTrue(second.closed);
+        assertTrue(observations.bridge("request", new CancellationSignal()).isPresent());
+        observations.closeRequest("request");
+        assertTrue(first.closed);
+    }
+
     private static final class RecordingCoordinator implements WorldObservationCoordinator {
         private WorldObservationRequest blocks;
         private WorldObservationRequest entities;
+        private boolean closed;
 
         @Override
         public CompletionStage<BlockObservation> inspect(
@@ -126,6 +142,11 @@ final class JavascriptWorldBridgeTest {
                     new WorldPosition(1, 2, 3),
                     Map.of("health", 10.0),
                     evidence()));
+        }
+
+        @Override
+        public void close() {
+            closed = true;
         }
     }
 

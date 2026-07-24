@@ -54,6 +54,14 @@ public final class FabricClientBridge {
                         send("tool_cancel", payload);
                     }
                 }
+
+                @Override
+                public void close(
+                        dev.openallay.bridge.protocol.RemoteToolRequestClosePayload payload) {
+                    if (ClientPlayNetworking.canSend(FabricBridgePayloads.Packet.TYPE)) {
+                        send("tool_request_close", payload);
+                    }
+                }
             });
 
     public void register() {

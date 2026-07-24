@@ -43,7 +43,7 @@ final class ClientToolExecutionEndpointTest {
         registry.register("test", List.of(tool));
         List<String> captured = new ArrayList<>();
         ClientToolExecutionEndpoint endpoint = new ClientToolExecutionEndpoint(
-                (capabilities, correlation) -> {
+                (capabilities, correlation, cancellation) -> {
                     captured.add(correlation);
                     return CompletableFuture.completedFuture(
                             ToolInvocationContext.developmentConsole(correlation));
@@ -77,7 +77,7 @@ final class ClientToolExecutionEndpointTest {
         ToolRegistry registry = registry();
         List<ClientToolResultChunkPayload> sent = new ArrayList<>();
         ClientToolExecutionEndpoint endpoint = new ClientToolExecutionEndpoint(
-                (capabilities, correlation) -> CompletableFuture.completedFuture(
+                (capabilities, correlation, cancellation) -> CompletableFuture.completedFuture(
                         ToolInvocationContext.developmentConsole(correlation)),
                 sent::add,
                 new Gson(),
@@ -118,7 +118,7 @@ final class ClientToolExecutionEndpointTest {
         ToolRegistry registry = registry();
         List<ClientToolResultChunkPayload> sent = new ArrayList<>();
         ClientToolExecutionEndpoint endpoint = new ClientToolExecutionEndpoint(
-                (capabilities, correlation) -> CompletableFuture.completedFuture(
+                (capabilities, correlation, cancellation) -> CompletableFuture.completedFuture(
                         ToolInvocationContext.developmentConsole(correlation)),
                 sent::add,
                 new Gson(),
@@ -154,7 +154,7 @@ final class ClientToolExecutionEndpointTest {
         CompletableFuture<ToolInvocationContext> context = new CompletableFuture<>();
         List<ClientToolResultChunkPayload> sent = new ArrayList<>();
         ClientToolExecutionEndpoint endpoint = new ClientToolExecutionEndpoint(
-                (capabilities, correlation) -> context,
+                (capabilities, correlation, cancellation) -> context,
                 sent::add,
                 new Gson(),
                 128,
@@ -187,7 +187,7 @@ final class ClientToolExecutionEndpointTest {
         try (var worker = Executors.newSingleThreadExecutor(
                 runnable -> new Thread(runnable, "client-tool-test-worker"))) {
             ClientToolExecutionEndpoint endpoint = new ClientToolExecutionEndpoint(
-                    (capabilities, correlation) -> context,
+                    (capabilities, correlation, cancellation) -> context,
                     chunk -> responseThread.complete(Thread.currentThread().getName()),
                     new Gson(),
                     128,
@@ -223,7 +223,7 @@ final class ClientToolExecutionEndpointTest {
                         new JavascriptResultPresenter(),
                         commands)));
         ClientToolExecutionEndpoint endpoint = new ClientToolExecutionEndpoint(
-                (capabilities, correlation) -> CompletableFuture.completedFuture(
+                (capabilities, correlation, cancellation) -> CompletableFuture.completedFuture(
                         ToolInvocationContext.developmentConsole(correlation)),
                 chunk -> {},
                 new Gson(),

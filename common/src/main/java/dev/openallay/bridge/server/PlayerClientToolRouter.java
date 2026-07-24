@@ -21,6 +21,7 @@ import dev.openallay.model.ModelToolDefinition;
 import dev.openallay.tool.ToolAccess;
 import dev.openallay.tool.ToolRegistry;
 import dev.openallay.tool.ToolResult;
+import dev.openallay.tool.builtin.RunJavascriptTool;
 import dev.openallay.trace.replay.ToolResultNormalizer;
 import java.util.List;
 import java.util.Map;
@@ -119,6 +120,7 @@ public final class PlayerClientToolRouter {
             return false;
         }
         executor.cancelPending();
+        executor.closeRequestScope(actorId + "/" + requestId);
         return true;
     }
 
@@ -224,7 +226,25 @@ public final class PlayerClientToolRouter {
         }
 
         private boolean useClient(String toolId, JsonObject arguments) {
+            if (toolId.equals(RunJavascriptTool.ID) && requestsRoot(arguments, "world")) {
+                // A server-hosted model uses the owning server thread for authoritative spatial
+                // observations. Other roots remain client-first when the player advertised them.
+                return false;
+            }
             return clientTools.contains(toolId);
+        }
+
+        private boolean requestsRoot(JsonObject arguments, String expected) {
+            if (!arguments.has("roots") || !arguments.get("roots").isJsonArray()) {
+                return false;
+            }
+            for (var root : arguments.getAsJsonArray("roots")) {
+                if (root.isJsonPrimitive() && root.getAsJsonPrimitive().isString()
+                        && root.getAsString().equals(expected)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private boolean receive(ClientToolResultChunkPayload chunk) {
@@ -271,6 +291,11 @@ public final class PlayerClientToolRouter {
                     return false;
                 }
             }
+        }
+
+        @Override
+        public void closeRequestScope(String correlationId) {
+            local.closeRequestScope(correlationId);
         }
 
         private int failPending(String code, String message) {

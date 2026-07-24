@@ -14,7 +14,12 @@ public final class WorldObservationRuntime {
         if (correlationId == null || correlationId.isBlank()) {
             throw new IllegalArgumentException("correlationId must not be blank");
         }
-        requests.put(correlationId, java.util.Objects.requireNonNull(coordinator, "coordinator"));
+        WorldObservationCoordinator candidate =
+                java.util.Objects.requireNonNull(coordinator, "coordinator");
+        WorldObservationCoordinator existing = requests.putIfAbsent(correlationId, candidate);
+        if (existing != null && existing != candidate) {
+            candidate.close();
+        }
     }
 
     public Optional<JavascriptWorldBridge> bridge(

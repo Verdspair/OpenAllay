@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import dev.openallay.bridge.protocol.BridgeProtocol;
 import dev.openallay.bridge.protocol.CapabilityPayload;
 import dev.openallay.bridge.protocol.RemoteToolCallPayload;
+import dev.openallay.bridge.protocol.RemoteToolRequestClosePayload;
 import dev.openallay.context.ToolInvocationContext;
 import dev.openallay.model.CancellationSignal;
 import java.time.Duration;
@@ -107,6 +108,24 @@ final class RemoteToolExecutorAliasTest {
 
         assertTrue(result.failure());
         assertEquals("server_tool_bridge_unavailable", result.normalized().get("code").getAsString());
+    }
+
+    @Test
+    void terminalRequestCloseReleasesTheMatchingServerWorkspace() {
+        AtomicReference<RemoteToolRequestClosePayload> closed = new AtomicReference<>();
+        RemoteToolExecutor executor = new RemoteToolExecutor(
+                capabilities(),
+                new RemoteToolExecutor.Transport() {
+                    @Override public void call(RemoteToolCallPayload payload) {}
+                    @Override public void cancel(dev.openallay.bridge.protocol.RemoteCancelPayload payload) {}
+                    @Override public void close(RemoteToolRequestClosePayload payload) {
+                        closed.set(payload);
+                    }
+                });
+
+        executor.closeRequestScope("actor/request");
+
+        assertEquals("actor/request", closed.get().requestId());
     }
 
     @Test

@@ -3,6 +3,8 @@ package dev.openallay.bridge.server;
 import dev.openallay.tool.Tool;
 import dev.openallay.tool.ToolAccess;
 import dev.openallay.tool.ToolRegistry;
+import dev.openallay.tool.ToolDescriptor;
+import dev.openallay.tool.builtin.RunJavascriptTool;
 import java.util.Optional;
 import java.util.Set;
 
@@ -16,7 +18,7 @@ public final class ExportedToolPolicy {
         for (String id : this.exported) {
             Tool<?, ?> tool = tools.find(id).orElseThrow(() ->
                     new IllegalArgumentException("Cannot export unknown tool " + id));
-            if (tool.descriptor().access() != ToolAccess.READ_ONLY) {
+            if (!isRemotelyReadable(tool.descriptor())) {
                 throw new IllegalArgumentException("Cannot remotely export non-read-only tool " + id);
             }
         }
@@ -28,5 +30,23 @@ public final class ExportedToolPolicy {
 
     public Set<String> ids() {
         return exported;
+    }
+
+    public void closeRequestScope(String correlationId) {
+        exported.stream()
+                .map(tools::find)
+                .flatMap(Optional::stream)
+                .filter(dev.openallay.tool.RequestScopeParticipant.class::isInstance)
+                .map(dev.openallay.tool.RequestScopeParticipant.class::cast)
+                .forEach(participant -> participant.closeRequestScope(correlationId));
+    }
+
+    /**
+     * The server projection of run_javascript is read-only because the remote endpoint rejects the
+     * commands root and the server never captures a command bridge for that invocation.
+     */
+    public static boolean isRemotelyReadable(ToolDescriptor<?, ?> descriptor) {
+        return descriptor.access() == ToolAccess.READ_ONLY
+                || descriptor.id().equals(RunJavascriptTool.ID);
     }
 }

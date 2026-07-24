@@ -90,7 +90,7 @@ final class ServerClientToolAgentTest {
                             () -> router.close(actor, payload.requestId())));
                 },
                 sessions,
-                (actor, capabilities, correlation) -> CompletableFuture.completedFuture(
+                (actor, capabilities, correlation, cancellation) -> CompletableFuture.completedFuture(
                         ToolInvocationContext.developmentConsole(correlation)),
                 (actor, event) -> events.add(event),
                 gson,
