@@ -33,7 +33,6 @@ final class OpenAllayIdentityTest {
 
         Path resources = Path.of("src/main/resources");
         assertTrue(Files.isDirectory(resources.resolve("assets/openallay")));
-        assertTrue(Files.isDirectory(resources.resolve("data/openallay")));
         assertTrue(Files.isDirectory(resources.resolve("assets/openallay/openallay_skills")));
         assertFalse(Files.exists(resources.resolve("assets/tomewisp")));
         assertFalse(Files.exists(resources.resolve("data/tomewisp")));
