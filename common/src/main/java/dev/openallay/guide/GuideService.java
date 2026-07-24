@@ -370,15 +370,11 @@ public final class GuideService implements GuideHistoryAdministration {
         CompletableFuture<Void> result = new CompletableFuture<>();
         dispatcher.execute(() -> {
             if (!remote.serverModelAvailable()) {
-                List<UUID> affected = sessions.values().stream()
-                        .map(GuideService::active)
-                        .filter(Objects::nonNull)
-                        .filter(request -> request.topology() == GuideTopology.SERVER)
-                        .map(GuideRequestSnapshot::requestId)
-                        .toList();
-                affected.forEach(requestId -> apply(requestId, new AgentEvent.Failed(
-                        "capability_unavailable",
-                        "The active server model capability disappeared")));
+                GuideModelSelection fallback = defaultClientSelection();
+                sessions.values().stream()
+                        .filter(session -> session.modelSelection.kind()
+                                == GuideModelSelection.Kind.SERVER)
+                        .forEach(session -> select(session, fallback));
             }
             publishWithoutSave();
             result.complete(null);
@@ -961,7 +957,8 @@ public final class GuideService implements GuideHistoryAdministration {
                 copies,
                 clock.instant(),
                 currentSelection,
-                profiles);
+                profiles,
+                remote.contextSpec());
     }
 
     private void startHistoryLoad() {

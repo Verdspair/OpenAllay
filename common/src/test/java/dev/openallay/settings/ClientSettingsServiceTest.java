@@ -30,6 +30,8 @@ import dev.openallay.model.metadata.ModelMetadata;
 import dev.openallay.model.metadata.ModelMetadataUpdate;
 import dev.openallay.settings.model.ModelConnectionResult;
 import dev.openallay.settings.model.ModelProfileSettingsView;
+import dev.openallay.bridge.protocol.BridgeProtocol;
+import dev.openallay.bridge.protocol.CapabilityPayload;
 import dev.openallay.settings.capability.CapabilitySettingsView;
 import dev.openallay.settings.capability.RecipeSettingsView;
 import dev.openallay.settings.diagnostics.SettingsDiagnosticsAggregator;
@@ -57,6 +59,35 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
 final class ClientSettingsServiceTest {
+    @Test
+    void serverModelCapabilityIsConnectionScopedAndNeverEntersLocalProfiles() {
+        FakeModels models = new FakeModels(state(config("alpha")));
+        ClientSettingsService service = service(models, Set.of("ALPHA_KEY"));
+        CapabilityPayload advertised = new CapabilityPayload(
+                BridgeProtocol.VERSION,
+                List.of(),
+                true,
+                100_000,
+                8_192,
+                6_000,
+                "server/deepseek");
+
+        service.replaceServerModel(advertised).join();
+
+        assertTrue(service.snapshot().serverModel().available());
+        assertEquals("server/deepseek", service.snapshot().serverModel().canonicalModelId());
+        assertEquals(List.of("alpha"), service.snapshot().models().config().profiles().stream()
+                .map(ModelProfileDefinition::id)
+                .toList());
+
+        service.clearServerModel().join();
+
+        assertFalse(service.snapshot().serverModel().available());
+        assertEquals(List.of("alpha"), service.snapshot().models().config().profiles().stream()
+                .map(ModelProfileDefinition::id)
+                .toList());
+    }
+
     @Test
     void initialSnapshotPreservesProfileOrderAndOnlyCredentialPresence() {
         FakeModels models = new FakeModels(state(config("alpha", "beta")));

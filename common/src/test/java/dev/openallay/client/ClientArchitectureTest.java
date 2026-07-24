@@ -85,6 +85,12 @@ final class ClientArchitectureTest {
             assertTrue(source.contains("OpenAllaySettingsScreen"), entrypoint::toString);
             assertTrue(source.contains("service,\n                                recipeClient,\n                                display,"),
                     entrypoint::toString);
+            assertTrue(
+                    source.contains("settings.settings().replaceServerModel(bridge.capabilities())"),
+                    entrypoint::toString);
+            assertTrue(
+                    source.contains("settings.settings().clearServerModel()"),
+                    entrypoint::toString);
             assertTrue(source.contains("services.shutdown()"), entrypoint::toString);
             assertTrue(source.contains("history.closeAsync()"), entrypoint::toString);
             assertTrue(source.contains("settings.closeAsync()"), entrypoint::toString);
@@ -116,10 +122,17 @@ final class ClientArchitectureTest {
                 root.resolve("fabric/src/main/java/dev/openallay/fabric/network/FabricServerBridge.java"),
                 root.resolve("neoforge/src/main/java/dev/openallay/neoforge/network/NeoForgeServerBridge.java"))) {
             String source = Files.readString(bridge);
-            assertTrue(source.contains("spec.budget().contextWindowTokens()"), bridge::toString);
-            assertTrue(source.contains("spec.budget().maxOutputTokens()"), bridge::toString);
-            assertTrue(source.contains("spec.canonicalModelId()"), bridge::toString);
+            assertTrue(
+                    source.contains("ServerModelCapabilityProjection.from("),
+                    bridge::toString);
+            assertTrue(source.contains("ensureServices"), bridge::toString);
         }
+        assertTrue(Files.readString(root.resolve(
+                        "fabric/src/main/java/dev/openallay/fabric/network/FabricServerBridge.java"))
+                .contains("SERVER_STARTED.register(bridge::ensureServices)"));
+        assertTrue(Files.readString(root.resolve(
+                        "neoforge/src/main/java/dev/openallay/neoforge/network/NeoForgeServerBridge.java"))
+                .contains("ServerStartedEvent"));
 
         try (var files = Files.walk(root.resolve("common/src/main/java"))) {
             List<Path> violations = files.filter(path -> path.toString().endsWith(".java"))

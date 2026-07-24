@@ -131,30 +131,83 @@ final class GuideServiceModelSelectionTest {
         assertTrue(local.profileByRequest.isEmpty());
     }
 
+    @Test
+    void withdrawingServerModelRestoresLocalDefaultForFutureRequestsOnly() {
+        ProfileLocal local = new ProfileLocal();
+        MutableRemote remote = new MutableRemote(true, "server/model-a");
+        GuideService service = service(local, remote);
+        success(service.setModelSelection(GuideModelSelection.server()).join());
+        UUID active = success(service.ask("server request").join());
+
+        remote.replace(false, null);
+        service.refreshCapabilities().join();
+
+        GuideRequestSnapshot captured = request(service, "main", active);
+        assertEquals(GuideModelSelection.server(), captured.modelSelection());
+        assertEquals(GuideRequestStatus.MODEL_WAIT, captured.status());
+        assertEquals(GuideModelSelection.client("a"), session(service, "main").modelSelection());
+
+        remote.complete(active, "server answer");
+        UUID next = success(service.ask("local request").join());
+        assertEquals("a", local.profileByRequest.get(next));
+    }
+
     private static GuideService service(ProfileLocal local, boolean serverAvailable) {
+        return service(local, new MutableRemote(serverAvailable, "server/model"));
+    }
+
+    private static GuideService service(ProfileLocal local, GuideRemoteEndpoint remote) {
         return new GuideService(
                 ACTOR,
                 local,
-                new GuideRemoteEndpoint() {
-                    @Override public boolean serverModelAvailable() { return serverAvailable; }
-                    @Override public boolean serverToolsAvailable() { return serverAvailable; }
-                    @Override public boolean ask(
-                            UUID requestId,
-                            String sessionId,
-                            String question,
-                            Consumer<AgentEvent> events) {
-                        if (!serverAvailable) return false;
-                        events.accept(new AgentEvent.StateChanged(AgentState.MODEL_WAIT));
-                        return true;
-                    }
-                    @Override public boolean cancel(UUID requestId) { return true; }
-                    @Override public void disconnect() {}
-                },
+                remote,
                 (capabilities, correlation) -> new ToolResult.Success<>(
                         ToolInvocationContext.developmentConsole(correlation)),
                 Runnable::run,
                 Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
                 new Gson());
+    }
+
+    private static final class MutableRemote implements GuideRemoteEndpoint {
+        private boolean available;
+        private GuideContextSpec contextSpec;
+        private final Map<UUID, Consumer<AgentEvent>> pending = new LinkedHashMap<>();
+
+        private MutableRemote(boolean available, String canonicalModelId) {
+            replace(available, canonicalModelId);
+        }
+
+        private void replace(boolean replacement, String canonicalModelId) {
+            available = replacement;
+            contextSpec = replacement
+                    ? new GuideContextSpec(
+                            new dev.openallay.agent.context.ContextBudget(128_000, 4_096),
+                            4_096,
+                            canonicalModelId)
+                    : null;
+        }
+
+        @Override public boolean serverModelAvailable() { return available; }
+        @Override public boolean serverToolsAvailable() { return available; }
+        @Override public java.util.Optional<GuideContextSpec> contextSpec() {
+            return java.util.Optional.ofNullable(contextSpec);
+        }
+        @Override public boolean ask(
+                UUID requestId,
+                String sessionId,
+                String question,
+                Consumer<AgentEvent> events) {
+            if (!available) return false;
+            pending.put(requestId, events);
+            events.accept(new AgentEvent.StateChanged(AgentState.MODEL_WAIT));
+            return true;
+        }
+        @Override public boolean cancel(UUID requestId) { return true; }
+        @Override public void disconnect() {}
+
+        private void complete(UUID requestId, String answer) {
+            pending.get(requestId).accept(new AgentEvent.FinalText(answer));
+        }
     }
 
     private static GuideSessionSnapshot session(GuideService service, String id) {

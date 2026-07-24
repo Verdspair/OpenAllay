@@ -164,7 +164,10 @@ public final class OpenAllayNeoForgeClient {
                 history,
                 new MinecraftGuideHistoryScope(client));
         historySettings.bind(services);
-        bridge.onDisconnect(services::disconnect);
+        bridge.onDisconnect(() -> {
+            if (settings != null) settings.settings().clearServerModel();
+            services.disconnect();
+        });
         NeoForge.EVENT_BUS.addListener((ClientStoppingEvent event) ->
                 services.shutdown()
                         .handle((ignored, failure) -> null)
@@ -173,9 +176,15 @@ public final class OpenAllayNeoForgeClient {
                                 ? java.util.concurrent.CompletableFuture.completedFuture(null)
                                 : settings.closeAsync()));
         bridge.onCapabilitiesChanged(() -> {
+            if (settings != null) {
+                settings.settings().replaceServerModel(bridge.capabilities());
+            }
             var current = services.current();
             if (current != null) current.refreshCapabilities();
         });
+        if (settings != null) {
+            settings.settings().replaceServerModel(bridge.capabilities());
+        }
         java.util.function.Consumer<dev.openallay.guide.GuideService> showGuide =
                 new java.util.function.Consumer<>() {
                     @Override

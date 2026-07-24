@@ -2111,6 +2111,9 @@ public final class OpenAllayScreen extends Screen {
     private static Component choiceLabel(GuideUiModelChoice choice) {
         return choice.selection().kind() == GuideModelSelection.Kind.SERVER
                 ? Component.translatable("screen.openallay.model.server")
+                        .copy()
+                        .append(" · ")
+                        .append(choice.displayName())
                 : Component.translatable(
                         "screen.openallay.model.client", choice.displayName());
     }

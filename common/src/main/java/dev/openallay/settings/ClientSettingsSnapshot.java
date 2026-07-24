@@ -2,6 +2,7 @@ package dev.openallay.settings;
 
 import dev.openallay.guide.ui.GuideDisplayConfig;
 import dev.openallay.settings.model.ModelProfileSettingsView;
+import dev.openallay.settings.model.ServerModelSettingsView;
 import dev.openallay.settings.capability.CapabilitySettingsView;
 import dev.openallay.settings.capability.RecipeSettingsView;
 import dev.openallay.settings.diagnostics.SettingsDiagnosticsSnapshot;
@@ -19,6 +20,7 @@ public record ClientSettingsSnapshot(
         long generation,
         GuideDisplayConfig display,
         ModelProfileSettingsView models,
+        ServerModelSettingsView serverModel,
         CapabilitySettingsView capabilities,
         RecipeSettingsView recipes,
         SkillSettingsView skills,
@@ -35,6 +37,7 @@ public record ClientSettingsSnapshot(
         }
         Objects.requireNonNull(display, "display");
         Objects.requireNonNull(models, "models");
+        Objects.requireNonNull(serverModel, "serverModel");
         Objects.requireNonNull(capabilities, "capabilities");
         Objects.requireNonNull(recipes, "recipes");
         Objects.requireNonNull(skills, "skills");
@@ -52,12 +55,42 @@ public record ClientSettingsSnapshot(
             ModelProfileSettingsView models,
             CapabilitySettingsView capabilities,
             RecipeSettingsView recipes,
+            SkillSettingsView skills,
+            ExtensionSettingsView extensions,
+            CommandCapabilityConfig experimentalCommands,
+            HistorySettingsView history,
+            SettingsDiagnosticsSnapshot diagnostics,
             SettingsOperation operation,
             SettingsNotice notice) {
         this(
                 generation,
                 display,
                 models,
+                ServerModelSettingsView.unavailable(),
+                capabilities,
+                recipes,
+                skills,
+                extensions,
+                experimentalCommands,
+                history,
+                diagnostics,
+                operation,
+                notice);
+    }
+
+    public ClientSettingsSnapshot(
+            long generation,
+            GuideDisplayConfig display,
+            ModelProfileSettingsView models,
+            CapabilitySettingsView capabilities,
+            RecipeSettingsView recipes,
+            SettingsOperation operation,
+            SettingsNotice notice) {
+        this(
+                generation,
+                display,
+                models,
+                ServerModelSettingsView.unavailable(),
                 capabilities,
                 recipes,
                 SkillSettingsView.empty(),
@@ -80,6 +113,7 @@ public record ClientSettingsSnapshot(
                 generation,
                 display,
                 models,
+                ServerModelSettingsView.unavailable(),
                 CapabilitySettingsView.defaults(),
                 RecipeSettingsView.defaults(),
                 SkillSettingsView.empty(),

@@ -5,6 +5,7 @@ import dev.openallay.client.gui.settings.ExtensionSettingsProjection;
 import dev.openallay.client.gui.settings.GeneralSettingsProjection;
 import dev.openallay.client.gui.settings.HistorySettingsProjection;
 import dev.openallay.client.gui.settings.ModelProfileDraft;
+import dev.openallay.client.gui.settings.ModelSettingsProjection;
 import dev.openallay.client.gui.settings.RecipeSettingsProjection;
 import dev.openallay.client.gui.settings.SettingsLayout;
 import dev.openallay.client.gui.settings.SettingsSection;
@@ -61,6 +62,7 @@ public final class OpenAllaySettingsScreen extends Screen {
     private SettingsLayout layout;
     private SettingsSection section = SettingsSection.GENERAL;
     private String selectedProfileId;
+    private boolean selectedServerModel;
     private ModelProfileDraft draft;
     private Confirmation confirmation = Confirmation.NONE;
     private String localNotice = "";
@@ -150,13 +152,18 @@ public final class OpenAllaySettingsScreen extends Screen {
             if (!previous.models().config().equals(next.models().config())
                     || completedReload(
                             previous, next, SettingsOperation.Kind.RELOADING_MODELS)) {
-                String retained = next.models().profiles().stream()
-                        .map(profile -> profile.definition().id())
-                        .filter(profileId -> profileId.equals(selectedProfileId))
-                        .findFirst()
-                        .orElse(next.models().config().defaultProfileId());
-                select(retained);
+                if (!selectedServerModel) {
+                    String retained = next.models().profiles().stream()
+                            .map(profile -> profile.definition().id())
+                            .filter(profileId -> profileId.equals(selectedProfileId))
+                            .findFirst()
+                            .orElse(next.models().config().defaultProfileId());
+                    select(retained);
+                }
                 confirmation = Confirmation.NONE;
+            }
+            if (selectedServerModel && !next.serverModel().available()) {
+                select(next.models().config().defaultProfileId());
             }
             if (!previous.display().equals(next.display())
                     || completedReload(
@@ -340,7 +347,9 @@ public final class OpenAllaySettingsScreen extends Screen {
         if (layout.wide()) {
             addProfileList();
         }
-        if (modelCatalogOpen) {
+        if (selectedServerModel) {
+            return;
+        } else if (modelCatalogOpen) {
             addModelCatalogPicker();
         } else {
             addEditor();
@@ -450,16 +459,20 @@ public final class OpenAllaySettingsScreen extends Screen {
         int x = layout.list().x() + 6;
         int y = layout.list().y() + 26;
         int buttonWidth = layout.list().width() - 12;
-        for (ModelCard card : project(snapshot).models()) {
+        for (ModelSettingsProjection.ModelCard card : project(snapshot).models()) {
             Component label = Component.literal(
-                    (card.defaultProfile() ? "★ " : "") + card.displayName());
+                    (card.defaultProfile() ? "★ " : "")
+                            + (card.origin() == ModelSettingsProjection.Origin.SERVER
+                                    ? "☁ "
+                                    : "")
+                            + card.displayName());
             Button button = addRenderableWidget(OpenAllayButton.create(
                             label,
-                            ignored -> selectAndRebuild(card.id()))
-                    .selected(card.id().equals(selectedProfileId))
+                            ignored -> selectAndRebuild(card.selectionId()))
+                    .selected(card.selectionId().equals(selectedModelSelectionId()))
                     .bounds(x, y, buttonWidth, 22)
                     .build());
-            button.active = !card.id().equals(selectedProfileId);
+            button.active = !card.selectionId().equals(selectedModelSelectionId());
             y += 26;
             if (y > layout.list().bottom() - 50) {
                 break;
@@ -842,7 +855,9 @@ public final class OpenAllaySettingsScreen extends Screen {
 
     private List<Action> footerActions() {
         return switch (section) {
-            case MODELS -> modelCatalogOpen ? List.of(
+            case MODELS -> selectedServerModel
+                    ? List.of(new Action("screen.openallay.settings.done", this::onClose))
+                    : modelCatalogOpen ? List.of(
                     new Action("screen.openallay.settings.models.catalog_close", () -> {
                         modelCatalogOpen = false;
                         rebuildWidgets();
@@ -897,6 +912,10 @@ public final class OpenAllaySettingsScreen extends Screen {
                     false);
         }
         SettingsLayout.Rect area = layout.editor();
+        if (selectedServerModel) {
+            renderServerModel(graphics, area);
+            return;
+        }
         if (modelCatalogOpen) {
             graphics.text(
                     font,
@@ -950,6 +969,58 @@ public final class OpenAllaySettingsScreen extends Screen {
                             : "screen.openallay.settings.models.api_key_replace"));
             graphics.text(font, status, x, statusY, color, false);
         });
+    }
+
+    private void renderServerModel(
+            GuiGraphicsExtractor graphics, SettingsLayout.Rect area) {
+        var server = snapshot.serverModel();
+        int x = area.x() + 10;
+        int y = area.y() + 12;
+        graphics.text(
+                font,
+                Component.translatable("screen.openallay.settings.models.server_title"),
+                x,
+                y,
+                ACCENT,
+                false);
+        y += 22;
+        graphics.text(
+                font,
+                Component.translatable(
+                        "screen.openallay.settings.models.server_model",
+                        server.canonicalModelId()),
+                x,
+                y,
+                TEXT,
+                false);
+        y += 18;
+        graphics.text(
+                font,
+                Component.translatable(
+                        "screen.openallay.settings.models.server_context",
+                        server.contextWindowTokens()),
+                x,
+                y,
+                MUTED,
+                false);
+        y += 18;
+        graphics.text(
+                font,
+                Component.translatable(
+                        "screen.openallay.settings.models.server_output",
+                        server.maxOutputTokens()),
+                x,
+                y,
+                MUTED,
+                false);
+        y += 26;
+        for (var line : font.split(
+                Component.translatable(
+                        "screen.openallay.settings.models.server_read_only"),
+                Math.max(80, area.width() - 20))) {
+            graphics.text(font, line, x, y, MUTED, false);
+            y += 10;
+        }
     }
 
     private void renderGeneral(GuiGraphicsExtractor graphics) {
@@ -2248,7 +2319,14 @@ public final class OpenAllaySettingsScreen extends Screen {
     }
 
     private void selectAndRebuild(String profileId) {
-        select(profileId);
+        if (ModelSettingsProjection.SERVER_SELECTION_ID.equals(profileId)) {
+            selectedServerModel = true;
+            invalidateModelCatalog();
+        } else {
+            select(profileId.startsWith("client:")
+                    ? profileId.substring("client:".length())
+                    : profileId);
+        }
         editorScroll = 0;
         confirmation = Confirmation.NONE;
         localNotice = "";
@@ -2262,6 +2340,7 @@ public final class OpenAllaySettingsScreen extends Screen {
                 .findFirst()
                 .orElseThrow();
         selectedProfileId = definition.id();
+        selectedServerModel = false;
         draft = ModelProfileDraft.from(definition);
         draftEnabled = definition.enabled();
         draftProtocol = definition.protocol();
@@ -2276,6 +2355,7 @@ public final class OpenAllaySettingsScreen extends Screen {
             candidate = "profile-" + ++suffix;
         }
         selectedProfileId = null;
+        selectedServerModel = false;
         draft = ModelProfileDraft.create(candidate);
         draftEnabled = true;
         draftProtocol = ModelProtocol.OPENAI_CHAT;
@@ -2292,7 +2372,7 @@ public final class OpenAllaySettingsScreen extends Screen {
     }
 
     private void captureDraft() {
-        if (section == SettingsSection.MODELS && id != null) {
+        if (section == SettingsSection.MODELS && !selectedServerModel && id != null) {
             draft = new ModelProfileDraft(
                     id.getValue(),
                     displayName.getValue(),
@@ -2375,6 +2455,12 @@ public final class OpenAllaySettingsScreen extends Screen {
                 .findFirst();
     }
 
+    private String selectedModelSelectionId() {
+        return selectedServerModel
+                ? ModelSettingsProjection.SERVER_SELECTION_ID
+                : "client:" + selectedProfileId;
+    }
+
     private static void panel(
             GuiGraphicsExtractor graphics, SettingsLayout.Rect rect, int color) {
         if (rect.width() > 0 && rect.height() > 0) {
@@ -2438,17 +2524,8 @@ public final class OpenAllaySettingsScreen extends Screen {
 
     static Projection project(ClientSettingsSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot");
-        List<ModelCard> cards = snapshot.models().profiles().stream()
-                .map(profile -> new ModelCard(
-                        profile.definition().id(),
-                        profile.definition().displayName(),
-                        profile.definition().model(),
-                        profile.credentialPresent(),
-                        profile.available(),
-                        profile.definition().id().equals(
-                                snapshot.models().config().defaultProfileId()),
-                        profile.failure() == null ? null : profile.failure().code()))
-                .toList();
+        List<ModelSettingsProjection.ModelCard> cards =
+                ModelSettingsProjection.from(snapshot.models(), snapshot.serverModel()).models();
         return new Projection(
                 SettingsSection.topLevel(),
                 cards,
@@ -2476,7 +2553,7 @@ public final class OpenAllaySettingsScreen extends Screen {
 
     record Projection(
             List<SettingsSection> sections,
-            List<ModelCard> models,
+            List<ModelSettingsProjection.ModelCard> models,
             GeneralSettingsProjection general,
             RecipeSettingsProjection recipes,
             SkillSettingsProjection skills,
@@ -2496,15 +2573,6 @@ public final class OpenAllaySettingsScreen extends Screen {
             Objects.requireNonNull(diagnostics, "diagnostics");
         }
     }
-
-    record ModelCard(
-            String id,
-            String displayName,
-            String model,
-            boolean credentialPresent,
-            boolean available,
-            boolean defaultProfile,
-            String failureCode) {}
 
     private record Action(String translationKey, Runnable action) {}
 

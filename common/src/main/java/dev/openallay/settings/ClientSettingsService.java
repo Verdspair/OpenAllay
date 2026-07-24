@@ -19,6 +19,8 @@ import dev.openallay.model.metadata.ModelMetadata;
 import dev.openallay.model.metadata.ModelMetadataUpdate;
 import dev.openallay.settings.model.ModelConnectionResult;
 import dev.openallay.settings.model.ModelProfileSettingsView;
+import dev.openallay.settings.model.ServerModelSettingsView;
+import dev.openallay.bridge.protocol.CapabilityPayload;
 import dev.openallay.settings.capability.CapabilitySettingsView;
 import dev.openallay.settings.capability.RecipeSettingsView;
 import dev.openallay.settings.diagnostics.SettingsDiagnosticsAggregator;
@@ -296,6 +298,7 @@ public final class ClientSettingsService implements AutoCloseable {
             new SettingsDiagnosticsAggregator();
 
     private ModelState modelState;
+    private ServerModelSettingsView serverModelState = ServerModelSettingsView.unavailable();
     private CapabilitySettingsView capabilityState;
     private RecipeSettingsView recipeState;
     private SkillSettingsView skillState;
@@ -478,6 +481,37 @@ public final class ClientSettingsService implements AutoCloseable {
         synchronized (lock) {
             return snapshot;
         }
+    }
+
+    /** Replaces the connection-scoped server model projection without persisting it. */
+    public CompletableFuture<Void> replaceServerModel(CapabilityPayload capability) {
+        Objects.requireNonNull(capability, "capability");
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        dispatcher.execute(() -> {
+            synchronized (lock) {
+                if (!closed) {
+                    serverModelState = ServerModelSettingsView.from(capability);
+                    publishLocked();
+                }
+            }
+            result.complete(null);
+        });
+        return result;
+    }
+
+    /** Clears all server-origin model state on disconnect. */
+    public CompletableFuture<Void> clearServerModel() {
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        dispatcher.execute(() -> {
+            synchronized (lock) {
+                if (!closed && serverModelState.available()) {
+                    serverModelState = ServerModelSettingsView.unavailable();
+                    publishLocked();
+                }
+            }
+            result.complete(null);
+        });
+        return result;
     }
 
     public AutoCloseable listen(Consumer<ClientSettingsSnapshot> listener) {
@@ -1631,6 +1665,7 @@ public final class ClientSettingsService implements AutoCloseable {
                 generation,
                 display,
                 modelView,
+                serverModelState,
                 capabilityState,
                 recipeState,
                 skillState,

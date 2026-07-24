@@ -161,9 +161,16 @@ future requests. Active requests retain the runtime they captured at
 submission. Replacing a key never overwrites the credential used by an active
 profile; unreachable rows are collected only after successful publication.
 
-The Models page configures client-owned profiles only. A connected server model
-is shown in the Guide model selector as a synchronized, read-only choice and is
-configured exclusively by the server's `server-model.json`. The model ID field
+The Models page mixes client-owned profiles with the connected server model.
+The server entry is synchronized automatically, carries a server badge, and is
+strictly read-only: client settings cannot edit, test, delete, or persist it.
+It is configured exclusively by the server's `server-model.json`. A valid
+server runtime is constructed at server startup before the first capability
+packet can advertise it. Missing, disabled, or invalid configuration advertises
+no server model and records only a server-local diagnostic. Disconnect removes
+the entry and restores each affected session to its local default for future
+requests; an already active request keeps the model/runtime it captured. The
+model ID field
 remains editable and can fetch an authenticated `/models` catalog using the
 currently typed password first or the already-saved credential otherwise. A
 saved credential is represented by an explicit saved-key hint; its value is

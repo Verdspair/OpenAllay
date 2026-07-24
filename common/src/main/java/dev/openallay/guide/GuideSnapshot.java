@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.Optional;
 
 public record GuideSnapshot(
         UUID actorId,
@@ -15,7 +16,8 @@ public record GuideSnapshot(
         List<GuideSessionSnapshot> sessions,
         Instant updatedAt,
         GuideModelSelection modelSelection,
-        List<GuideClientModelProfile> clientProfiles) {
+        List<GuideClientModelProfile> clientProfiles,
+        Optional<GuideContextSpec> serverModel) {
     public GuideSnapshot {
         java.util.Objects.requireNonNull(actorId, "actorId");
         if (selectedSession == null || selectedSession.isBlank()) {
@@ -29,9 +31,35 @@ public record GuideSnapshot(
         java.util.Objects.requireNonNull(updatedAt, "updatedAt");
         java.util.Objects.requireNonNull(modelSelection, "modelSelection");
         clientProfiles = List.copyOf(clientProfiles);
+        serverModel = java.util.Objects.requireNonNull(serverModel, "serverModel");
         if (modelMode != modelSelection.modelMode()) {
             throw new IllegalArgumentException("modelMode must match the selected session model");
         }
+    }
+
+    public GuideSnapshot(
+            UUID actorId,
+            String selectedSession,
+            GuideModelMode modelMode,
+            boolean clientModelAvailable,
+            boolean serverModelAvailable,
+            GuidePersistenceSnapshot persistence,
+            List<GuideSessionSnapshot> sessions,
+            Instant updatedAt,
+            GuideModelSelection modelSelection,
+            List<GuideClientModelProfile> clientProfiles) {
+        this(
+                actorId,
+                selectedSession,
+                modelMode,
+                clientModelAvailable,
+                serverModelAvailable,
+                persistence,
+                sessions,
+                updatedAt,
+                modelSelection,
+                clientProfiles,
+                Optional.empty());
     }
 
     public GuideSnapshot(
@@ -55,7 +83,8 @@ public record GuideSnapshot(
                 modelMode == GuideModelMode.SERVER
                         ? GuideModelSelection.server()
                         : GuideModelSelection.client("default"),
-                List.of());
+                List.of(),
+                Optional.empty());
     }
 
     public GuideSnapshot(

@@ -18,6 +18,7 @@ import dev.openallay.bridge.server.ExportedToolPolicy;
 import dev.openallay.bridge.server.RemoteToolServer;
 import dev.openallay.context.minecraft.MinecraftContextCapture;
 import dev.openallay.server.ServerGuideRuntime;
+import dev.openallay.server.ServerModelCapabilityProjection;
 import dev.openallay.server.ServerAgentService;
 import dev.openallay.tool.ToolAccess;
 import dev.openallay.tool.ToolResult;
@@ -30,6 +31,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
@@ -50,6 +52,8 @@ public final class NeoForgeServerBridge {
     }
 
     void registerLifecycle() {
+        NeoForge.EVENT_BUS.addListener((ServerStartedEvent event) ->
+                ensureServices(event.getServer()));
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
             if (event.getEntity() instanceof ServerPlayer player) {
                 players.put(player.getUUID(), player);
@@ -175,6 +179,12 @@ public final class NeoForgeServerBridge {
                         send(actor, "client_tool_cancel", payload);
                     }
                 });
+        if (serverGuide instanceof ToolResult.Failure<ServerGuideRuntime> failure) {
+            dev.openallay.OpenAllayConstants.LOGGER.info(
+                    "NeoForge server model is not advertised ({}): {}",
+                    failure.code(),
+                    failure.message());
+        }
     }
 
     private CapabilityPayload capabilities() {
@@ -185,15 +195,11 @@ public final class NeoForgeServerBridge {
                         descriptor.id(), descriptor.description(),
                         schemas.generate(descriptor.inputType()).toString()))
                 .toList();
-        if (serverGuide instanceof ToolResult.Success<ServerGuideRuntime> success) {
-            var spec = success.value().contextSpec();
-            return new CapabilityPayload(
-                    BridgeProtocol.VERSION, tools, true,
-                    spec.budget().contextWindowTokens(), spec.budget().maxOutputTokens(),
-                    spec.promptAndToolTokens(), spec.canonicalModelId());
-        }
-        return new CapabilityPayload(
-                BridgeProtocol.VERSION, tools, false, 0, 0, 0, "");
+        return ServerModelCapabilityProjection.from(
+                tools,
+                serverGuide instanceof ToolResult.Success<ServerGuideRuntime> success
+                        ? java.util.Optional.of(success.value().contextSpec())
+                        : java.util.Optional.empty());
     }
 
     private boolean send(UUID actor, String kind, Object payload) {

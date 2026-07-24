@@ -335,6 +335,40 @@ final class GuideUiViewTest {
         assertFalse(view.modelChoices().stream()
                 .anyMatch(choice -> choice.selection().equals(
                         GuideModelSelection.client("disabled"))));
+        GuideUiModelChoice server = view.modelChoices().getLast();
+        assertEquals(ModelOrigin.SERVER, server.origin());
+        assertFalse(server.editable());
+    }
+
+    @Test
+    void serverChoiceUsesTheConnectionAdvertisedCanonicalIdentity() {
+        GuideSnapshot snapshot = new GuideSnapshot(
+                ACTOR,
+                "main",
+                GuideModelMode.CLIENT,
+                true,
+                true,
+                GuidePersistenceSnapshot.disabled(),
+                List.of(new GuideSessionSnapshot(
+                        "main",
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        GuideModelSelection.client("a"))),
+                Instant.EPOCH,
+                GuideModelSelection.client("a"),
+                List.of(new GuideClientModelProfile(
+                        "a", "Model A", true, true, "provider/a", null)),
+                java.util.Optional.of(new dev.openallay.guide.GuideContextSpec(
+                        new dev.openallay.agent.context.ContextBudget(100_000, 8_192),
+                        6_000,
+                        "server/deepseek")));
+
+        GuideUiModelChoice server = GuideUiView.from(snapshot).modelChoices().getLast();
+
+        assertEquals("server/deepseek", server.displayName());
+        assertEquals(ModelOrigin.SERVER, server.origin());
+        assertFalse(server.editable());
     }
 
     @Test

@@ -43,7 +43,7 @@ final class OpenAllaySettingsScreenProjectionTest {
                 OpenAllaySettingsScreen.project(snapshot);
 
         assertEquals(List.of("alpha", "beta"), projection.models().stream()
-                .map(OpenAllaySettingsScreen.ModelCard::id)
+                .map(dev.openallay.client.gui.settings.ModelSettingsProjection.ModelCard::profileId)
                 .toList());
         assertFalse(projection.toString().contains("ALPHA_KEY"));
         assertFalse(projection.toString().contains("secret-value"));

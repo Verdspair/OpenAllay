@@ -7,11 +7,32 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import com.google.gson.Gson;
 import dev.openallay.tool.ToolResult;
 import java.io.StringReader;
+import java.nio.file.Path;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 final class ModelConfigLoaderTest {
     private final ModelConfigLoader loader = new ModelConfigLoader();
+
+    @Test
+    void missingOrInvalidServerBootstrapConfigFailsWithoutEchoingCredentials(
+            @TempDir Path directory) {
+        ToolResult.Failure<ModelConfig> missing =
+                failure(loader.load(directory.resolve("server-model.json"), Map.of()));
+        assertEquals("model_not_configured", missing.code());
+
+        String secret = "server-bootstrap-secret";
+        ToolResult.Failure<ModelConfig> invalid = failure(loader.load(
+                new StringReader("""
+                        {"protocol":"openai_chat","baseUrl":"https://example.test/v1",
+                         "model":"server/model","apiKey":"%s",
+                         "contextWindowTokens":"invalid"}
+                        """.formatted(secret)),
+                Map.of()));
+        assertEquals("invalid_model_config", invalid.code());
+        assertFalse(invalid.message().contains(secret));
+    }
 
     @Test
     void environmentOverridesFileAndSecretsNeverRender() {

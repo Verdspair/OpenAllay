@@ -159,6 +159,8 @@ public record GuideUiView(
                 seeds.add(new ChoiceSeed(
                         GuideModelSelection.client(profile.id()),
                         profile.displayName(),
+                        ModelOrigin.CLIENT,
+                        true,
                         profile.available()));
             }
         }
@@ -183,12 +185,20 @@ public record GuideUiView(
                         && active.modelSelection().kind() == GuideModelSelection.Kind.SERVER;
         if (serverRelevant) {
             seeds.add(new ChoiceSeed(
-                    GuideModelSelection.server(), "Server model", snapshot.serverModelAvailable()));
+                    GuideModelSelection.server(),
+                    snapshot.serverModel()
+                            .map(dev.openallay.guide.GuideContextSpec::canonicalModelId)
+                            .orElse("Server model"),
+                    ModelOrigin.SERVER,
+                    false,
+                    snapshot.serverModelAvailable()));
         }
         GuideModelSelection running = active == null ? null : active.modelSelection();
         return seeds.stream().map(seed -> new GuideUiModelChoice(
                 seed.selection(),
                 seed.displayName(),
+                seed.origin(),
+                seed.editable(),
                 seed.available(),
                 seed.selection().equals(snapshot.modelSelection()),
                 seed.selection().equals(running))).toList();
@@ -209,9 +219,15 @@ public record GuideUiView(
         seeds.add(new ChoiceSeed(
                 selection,
                 retained == null ? selection.profileId() : retained.displayName(),
+                ModelOrigin.CLIENT,
+                true,
                 retained == null ? compatibilityAvailable : retained.available()));
     }
 
     private record ChoiceSeed(
-            GuideModelSelection selection, String displayName, boolean available) {}
+            GuideModelSelection selection,
+            String displayName,
+            ModelOrigin origin,
+            boolean editable,
+            boolean available) {}
 }

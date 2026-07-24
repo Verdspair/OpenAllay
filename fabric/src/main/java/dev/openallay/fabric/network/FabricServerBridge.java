@@ -19,6 +19,7 @@ import dev.openallay.bridge.server.RemoteToolServer;
 import dev.openallay.context.minecraft.MinecraftContextCapture;
 import dev.openallay.server.ServerAgentService;
 import dev.openallay.server.ServerGuideRuntime;
+import dev.openallay.server.ServerModelCapabilityProjection;
 import dev.openallay.tool.ToolAccess;
 import dev.openallay.tool.ToolResult;
 import java.util.List;
@@ -28,6 +29,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -50,6 +52,7 @@ public final class FabricServerBridge {
 
     public static void register(OpenAllayRuntime runtime) {
         FabricServerBridge bridge = new FabricServerBridge(runtime);
+        ServerLifecycleEvents.SERVER_STARTED.register(bridge::ensureServices);
         ServerPlayConnectionEvents.JOIN.register(bridge::join);
         ServerPlayConnectionEvents.DISCONNECT.register(bridge::disconnect);
         ServerPlayNetworking.registerGlobalReceiver(
@@ -134,6 +137,12 @@ public final class FabricServerBridge {
                         send(actor, "client_tool_cancel", payload);
                     }
                 });
+        if (serverGuide instanceof ToolResult.Failure<ServerGuideRuntime> failure) {
+            dev.openallay.OpenAllayConstants.LOGGER.info(
+                    "Fabric server model is not advertised ({}): {}",
+                    failure.code(),
+                    failure.message());
+        }
     }
 
     private void receive(
@@ -200,15 +209,11 @@ public final class FabricServerBridge {
                         descriptor.id(), descriptor.description(),
                         schemas.generate(descriptor.inputType()).toString()))
                 .toList();
-        if (serverGuide instanceof ToolResult.Success<ServerGuideRuntime> success) {
-            var spec = success.value().contextSpec();
-            return new CapabilityPayload(
-                    BridgeProtocol.VERSION, tools, true,
-                    spec.budget().contextWindowTokens(), spec.budget().maxOutputTokens(),
-                    spec.promptAndToolTokens(), spec.canonicalModelId());
-        }
-        return new CapabilityPayload(
-                BridgeProtocol.VERSION, tools, false, 0, 0, 0, "");
+        return ServerModelCapabilityProjection.from(
+                tools,
+                serverGuide instanceof ToolResult.Success<ServerGuideRuntime> success
+                        ? java.util.Optional.of(success.value().contextSpec())
+                        : java.util.Optional.empty());
     }
 
     private boolean send(UUID actor, String kind, Object payload) {
