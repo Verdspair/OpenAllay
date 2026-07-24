@@ -13,11 +13,26 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "category", "prompt", "attempts", "maxModelTurns", "verifier"],
+        "required": [
+          "id",
+          "category",
+          "prompt",
+          "fixture",
+          "requiredCapabilities",
+          "attempts",
+          "maxModelTurns",
+          "verifier"
+        ],
         "properties": {
           "id": {"type": "string", "minLength": 1},
           "category": {"type": "string", "minLength": 1},
           "prompt": {"type": "string", "minLength": 1},
+          "fixture": {"type": "string", "minLength": 1},
+          "requiredCapabilities": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true
+          },
           "attempts": {"type": "integer", "minimum": 1},
           "maxModelTurns": {"type": "integer", "minimum": 1},
           "verifier": {

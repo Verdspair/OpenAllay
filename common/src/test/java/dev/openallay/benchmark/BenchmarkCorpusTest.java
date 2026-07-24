@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -36,7 +37,29 @@ final class BenchmarkCorpusTest {
         for (BenchmarkCase testCase : corpus.cases()) {
             assertFalse(testCase.prompt().contains("/give "));
             assertFalse(testCase.prompt().contains("return {"));
+            assertEquals("javascript-agent-v2", testCase.fixture());
+            assertFalse(testCase.requiredCapabilities().isEmpty());
         }
+    }
+
+    @Test
+    void applicabilityUsesDeclaredFixtureCapabilitiesInsteadOfCaseIds() {
+        BenchmarkCase testCase = new BenchmarkCase(
+                "world",
+                "world",
+                "Inspect nearby blocks",
+                "fixture-a",
+                java.util.List.of("registries", "world"),
+                1,
+                3,
+                new BenchmarkCase.Verifier(
+                        BenchmarkCase.Kind.NON_EMPTY_RESULT, "", null, ""));
+
+        assertTrue(testCase.applicableTo(
+                "fixture-a", Set.of("registries", "world", "extensions")));
+        assertFalse(testCase.applicableTo("fixture-a", Set.of("registries")));
+        assertFalse(testCase.applicableTo(
+                "fixture-b", Set.of("registries", "world")));
     }
 
     @Test

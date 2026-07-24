@@ -36,7 +36,9 @@ final class BenchmarkRunnerTest {
         assertEquals(2, result.successes());
         assertEquals(2.0 / 3.0, result.successProbability(), 0.0001);
         assertEquals(3.0, result.averageModelTurns(), 0.0001);
+        assertEquals(3.0, result.medianModelTurns(), 0.0001);
         assertEquals(4.0, result.averageToolCalls(), 0.0001);
+        assertEquals(4.0, result.medianToolCalls(), 0.0001);
         assertFalse(java.util.Arrays.stream(BenchmarkMetrics.class.getRecordComponents())
                 .anyMatch(component -> component.getName().toLowerCase().contains("time")));
     }

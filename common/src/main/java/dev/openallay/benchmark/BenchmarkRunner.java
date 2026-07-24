@@ -57,11 +57,25 @@ public final class BenchmarkRunner {
                     successes,
                     successes / (double) attempts,
                     modelTurns / (double) attempts,
+                    median(metrics.stream()
+                            .map(BenchmarkMetrics::modelTurns)
+                            .toList()),
                     toolCalls / (double) attempts,
+                    median(metrics.stream()
+                            .map(BenchmarkMetrics::toolCalls)
+                            .toList()),
                     metrics,
                     diagnostics));
         }
         return new BenchmarkReport(corpusVersion, reports);
+    }
+
+    private static double median(List<Integer> values) {
+        List<Integer> ordered = values.stream().sorted().toList();
+        int middle = ordered.size() / 2;
+        return ordered.size() % 2 == 1
+                ? ordered.get(middle)
+                : (ordered.get(middle - 1) + ordered.get(middle)) / 2.0D;
     }
 
     private static BenchmarkMetrics withSuccess(BenchmarkMetrics metrics, boolean success) {

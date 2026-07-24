@@ -6,6 +6,8 @@
       "id": "exact-installed-mod",
       "category": "core-context",
       "prompt": "我安装了 Farmer's Delight 吗？告诉我它的版本。",
+      "fixture": "javascript-agent-v2",
+      "requiredCapabilities": ["game"],
       "attempts": 3,
       "maxModelTurns": 3,
       "verifier": {"kind": "RESULT_CONTAINS", "contains": "farmersdelight"}
@@ -14,46 +16,58 @@
       "id": "highest-damage-sword",
       "category": "data-analysis",
       "prompt": "找出当前整合包里基础攻击伤害最高的剑，并说明比较依据。",
+      "fixture": "javascript-agent-v2",
+      "requiredCapabilities": ["registries"],
       "attempts": 3,
       "maxModelTurns": 4,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "minecraft:netherite_sword"}
+      "verifier": {"kind": "RESULT_CONTAINS", "contains": "example:obsidian_sword"}
     },
     {
       "id": "least-material-container",
       "category": "recipes",
       "prompt": "找出消耗材料种类和总数都尽量少的可合成容器。",
+      "fixture": "javascript-agent-v2",
+      "requiredCapabilities": ["registries", "recipes"],
       "attempts": 3,
       "maxModelTurns": 5,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "minecraft:chest"}
+      "verifier": {"kind": "RESULT_CONTAINS", "contains": "example:small_pouch"}
     },
     {
       "id": "farmers-delight-food-ranking",
       "category": "extension-data",
       "prompt": "汇总 Farmer's Delight 食物并按饱食度排序，列出最高的一组。",
+      "fixture": "javascript-agent-v2",
+      "requiredCapabilities": ["registries", "content-profile"],
       "attempts": 3,
       "maxModelTurns": 5,
-      "verifier": {"kind": "NON_EMPTY_RESULT"}
+      "verifier": {"kind": "RESULT_CONTAINS", "contains": "farmersdelight:roast_chicken"}
     },
     {
       "id": "dynamic-extension-schema",
       "category": "schema",
       "prompt": "查看当前扩展提供了哪些动态对象，并挑一个说明它的字段结构。",
+      "fixture": "javascript-agent-v2",
+      "requiredCapabilities": ["extensions"],
       "attempts": 3,
       "maxModelTurns": 4,
-      "verifier": {"kind": "NON_EMPTY_RESULT"}
+      "verifier": {"kind": "RESULT_CONTAINS", "contains": "benchmark:machines"}
     },
     {
       "id": "recipe-craftability",
       "category": "recipes",
       "prompt": "查苹果酒的准确配方，并根据当前背包判断材料是否足够。",
+      "fixture": "javascript-agent-v2",
+      "requiredCapabilities": ["recipes", "player", "inventory-rich"],
       "attempts": 3,
       "maxModelTurns": 5,
-      "verifier": {"kind": "NON_EMPTY_RESULT"}
+      "verifier": {"kind": "RESULT_CONTAINS", "contains": "farmersdelight:apple_cider"}
     },
     {
       "id": "server-model-routing",
       "category": "model-routing",
       "prompt": "使用服务器提供的模型回答一句话，并保持当前会话。",
+      "fixture": "javascript-agent-v2",
+      "requiredCapabilities": ["server-model"],
       "attempts": 3,
       "maxModelTurns": 2,
       "verifier": {"kind": "EFFECT_CONTAINS", "contains": "server-model"}
@@ -62,6 +76,8 @@
       "id": "modern-command-components",
       "category": "commands",
       "prompt": "给我一把带多个高级附魔并有自定义名称和描述的剑。",
+      "fixture": "javascript-agent-v2",
+      "requiredCapabilities": ["commands"],
       "attempts": 3,
       "maxModelTurns": 6,
       "verifier": {"kind": "EFFECT_CONTAINS", "contains": "enchanted-item-created"}
@@ -70,14 +86,18 @@
       "id": "recipe-viewer-extension",
       "category": "extensions",
       "prompt": "列出配方查看器当前暴露的配方类别和一个示例。",
+      "fixture": "javascript-agent-v2",
+      "requiredCapabilities": ["extensions", "recipe-viewer"],
       "attempts": 3,
       "maxModelTurns": 4,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "recipe"}
+      "verifier": {"kind": "RESULT_CONTAINS", "contains": "openallay:jei"}
     },
     {
       "id": "tree-cross-section",
       "category": "world",
       "prompt": "检查我附近一个薄的水平截面，判断有没有树并给出依据。",
+      "fixture": "javascript-agent-v2",
+      "requiredCapabilities": ["world"],
       "attempts": 3,
       "maxModelTurns": 5,
       "verifier": {"kind": "RESULT_CONTAINS", "contains": "_log"}
@@ -86,9 +106,11 @@
       "id": "entity-detail",
       "category": "world",
       "prompt": "列出附近的牛，选一只读取详细状态。",
+      "fixture": "javascript-agent-v2",
+      "requiredCapabilities": ["world"],
       "attempts": 3,
       "maxModelTurns": 5,
-      "verifier": {"kind": "JSON_PATH_EQUALS", "path": "type", "expected": "minecraft:cow"}
+      "verifier": {"kind": "RESULT_CONTAINS", "contains": "minecraft:cow"}
     }
   ]
 }

@@ -19,6 +19,42 @@ the same command. On FLClash, its proxy can be selected explicitly:
 OPENALLAY_CURL_PROXY=socks5h://127.0.0.1:7890 ./gradlew-curl build
 ```
 
+## Agent benchmark
+
+The versioned benchmark corpus is
+`common/src/main/resources/data/openallay/benchmarks/core.json`. Its fixture
+identity, required capabilities, prompts, turn budgets, and external canonical
+predicates are decoded strictly. Deterministic corpus/verifier coverage is
+offline:
+
+```bash
+scripts/run-agent-benchmark.sh deterministic
+```
+
+The live mode is an explicit, billable provider operation. It runs every case
+applicable to the `javascript-agent-v2` fixture through the production
+`GameGuideAgent`, model protocol adapter, Tool registry, Rhino runtime, Skill
+loader, result normalizer, and trace recorder:
+
+```bash
+OPENALLAY_MODEL_BASE_URL='https://provider.example/v1/' \
+OPENALLAY_MODEL='provider/model-id' \
+OPENALLAY_API_KEY='...' \
+OPENALLAY_BENCHMARK_REPEATS=3 \
+scripts/run-agent-benchmark.sh live
+```
+
+`OPENALLAY_BENCHMARK_CASES` may contain a comma-separated subset of exact case
+IDs. Experimental command cases are excluded unless
+`OPENALLAY_BENCHMARK_INCLUDE_COMMANDS=true`; server-routing cases require a
+different server fixture and are not fabricated by the local JavaScript
+fixture. Reports under `build/reports/openallay/benchmarks/` retain corpus
+version, commit, redacted provider authority, canonical model ID, complete
+provider-neutral Agent traces, success probability, per-attempt counters, and
+median model/Tool calls. Wall-clock values remain trace diagnostics and are not
+benchmark score inputs. API keys and authorization data are never written to
+the report.
+
 ## Continuous integration and releases
 
 The `Quality` GitHub Actions workflow runs for pull requests, `main`, `mc/**`,

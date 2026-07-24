@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.Reader;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 /** Strict schema-1 benchmark corpus codec. */
@@ -12,7 +13,15 @@ public final class BenchmarkCorpusCodec {
     private static final Set<String> ROOT_FIELDS =
             Set.of("schemaVersion", "version", "cases");
     private static final Set<String> CASE_FIELDS =
-            Set.of("id", "category", "prompt", "attempts", "maxModelTurns", "verifier");
+            Set.of(
+                    "id",
+                    "category",
+                    "prompt",
+                    "fixture",
+                    "requiredCapabilities",
+                    "attempts",
+                    "maxModelTurns",
+                    "verifier");
     private static final Set<String> VERIFIER_FIELDS =
             Set.of("kind", "path", "expected", "contains");
 
@@ -37,6 +46,8 @@ public final class BenchmarkCorpusCodec {
                     string(object, "id"),
                     string(object, "category"),
                     string(object, "prompt"),
+                    string(object, "fixture"),
+                    strings(object, "requiredCapabilities"),
                     integer(object, "attempts"),
                     integer(object, "maxModelTurns"),
                     verifier(object.getAsJsonObject("verifier"))));
@@ -92,6 +103,20 @@ public final class BenchmarkCorpusCodec {
         } catch (NumberFormatException failure) {
             throw invalid(name + " must be an integer");
         }
+    }
+
+    private static java.util.List<String> strings(JsonObject object, String name) {
+        if (!object.has(name) || !object.get(name).isJsonArray()) {
+            throw invalid(name + " must be an array");
+        }
+        ArrayList<String> values = new ArrayList<>();
+        object.getAsJsonArray(name).forEach(value -> {
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+                throw invalid(name + " must contain only strings");
+            }
+            values.add(value.getAsString());
+        });
+        return List.copyOf(values);
     }
 
     private static IllegalArgumentException invalid(String message) {

@@ -16,7 +16,9 @@ public record BenchmarkReport(
             int successes,
             double successProbability,
             double averageModelTurns,
+            double medianModelTurns,
             double averageToolCalls,
+            double medianToolCalls,
             List<BenchmarkMetrics> metrics,
             List<String> diagnostics) {
         public CaseReport {
