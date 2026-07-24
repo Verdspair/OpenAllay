@@ -7,6 +7,7 @@ case "$mode" in
   deterministic)
     exec ./gradlew :common:test \
       --tests 'dev.openallay.benchmark.*' \
+      --tests 'dev.openallay.model.live.LiveAgentBenchmarkAcceptanceTest.fixtureCapabilitiesDoNotSilentlySkipContentAndInventoryCases' \
       --rerun-tasks \
       --max-workers=1
     ;;

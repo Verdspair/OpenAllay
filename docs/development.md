@@ -25,7 +25,9 @@ The versioned benchmark corpus is
 `common/src/main/resources/data/openallay/benchmarks/core.json`. Its fixture
 identity, required capabilities, prompts, turn budgets, and external canonical
 predicates are decoded strictly. Deterministic corpus/verifier coverage is
-offline:
+offline. It also verifies that the local live-benchmark fixture actually
+contains and selects its content-profile and inventory-rich cases instead of
+silently filtering them:
 
 ```bash
 scripts/run-agent-benchmark.sh deterministic
@@ -48,7 +50,10 @@ scripts/run-agent-benchmark.sh live
 IDs. Experimental command cases are excluded unless
 `OPENALLAY_BENCHMARK_INCLUDE_COMMANDS=true`; server-routing cases require a
 different server fixture and are not fabricated by the local JavaScript
-fixture. Reports under `build/reports/openallay/benchmarks/` retain corpus
+fixture. The default local fixture includes the Farmer's Delight-style food
+ranking and recipe/inventory craftability cases as detached, generalized test
+data; it does not copy expected answers into model context. Reports under
+`build/reports/openallay/benchmarks/` retain corpus
 version, commit, redacted provider authority, canonical model ID, complete
 provider-neutral Agent traces, success probability, per-attempt counters, and
 median model/Tool calls. Wall-clock values remain trace diagnostics and are not

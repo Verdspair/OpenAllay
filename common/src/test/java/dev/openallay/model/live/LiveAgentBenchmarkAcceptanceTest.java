@@ -1,6 +1,7 @@
 package dev.openallay.model.live;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -23,6 +24,18 @@ import dev.openallay.benchmark.BenchmarkVerifier;
 import dev.openallay.context.DataAuthority;
 import dev.openallay.context.DataCompleteness;
 import dev.openallay.context.EvidenceMetadata;
+import dev.openallay.context.IngredientAlternativeSnapshot;
+import dev.openallay.context.IngredientRequirementSnapshot;
+import dev.openallay.context.ItemStackSnapshot;
+import dev.openallay.context.PlayerSnapshot;
+import dev.openallay.context.RecipeEntrySnapshot;
+import dev.openallay.context.RecipeLayoutSnapshot;
+import dev.openallay.context.RecipeOutputSnapshot;
+import dev.openallay.context.RecipeProcessingSnapshot;
+import dev.openallay.context.RecipeReference;
+import dev.openallay.context.RecipeSnapshot;
+import dev.openallay.context.RegistryEntrySnapshot;
+import dev.openallay.context.RegistrySnapshot;
 import dev.openallay.context.ToolInvocationContext;
 import dev.openallay.context.game.ObservableGameStateSnapshot;
 import dev.openallay.model.CancellationSignal;
@@ -34,6 +47,7 @@ import dev.openallay.model.config.SecretValue;
 import dev.openallay.model.openai.OpenAiChatClient;
 import dev.openallay.model.scheduling.ModelRequestScheduler;
 import dev.openallay.platform.InstalledModMetadata;
+import dev.openallay.recipe.RecipeUnlockState;
 import dev.openallay.script.RhinoJavascriptRuntime;
 import dev.openallay.script.command.CommandCapabilityConfig;
 import dev.openallay.script.command.CommandCapabilityRuntime;
@@ -90,6 +104,38 @@ import org.junit.jupiter.api.Test;
  */
 final class LiveAgentBenchmarkAcceptanceTest {
     private static final String FIXTURE = "javascript-agent-v2";
+    private static final Set<String> FIXTURE_CAPABILITIES = Set.of(
+            "game",
+            "player",
+            "registries",
+            "recipes",
+            "extensions",
+            "recipe-viewer",
+            "world",
+            "content-profile",
+            "inventory-rich");
+
+    @Test
+    void fixtureCapabilitiesDoNotSilentlySkipContentAndInventoryCases() {
+        ToolInvocationContext context = benchmarkContext("fixture-audit");
+        List<String> selected = select(
+                        corpus(),
+                        Map.of(),
+                        fixtureCapabilities(false),
+                        1)
+                .stream()
+                .map(BenchmarkCase::id)
+                .toList();
+
+        assertTrue(selected.contains("farmers-delight-food-ranking"));
+        assertTrue(selected.contains("recipe-craftability"));
+        assertTrue(context.registries().orElseThrow().entries().stream()
+                .anyMatch(entry -> entry.id().equals("farmersdelight:roast_chicken")));
+        assertTrue(context.recipes().orElseThrow().recipes().stream()
+                .anyMatch(recipe -> recipe.id().equals("farmersdelight:apple_cider")));
+        assertTrue(context.player().orElseThrow().inventory().slots().stream()
+                .anyMatch(slot -> slot.stack().itemId().equals("minecraft:apple")));
+    }
 
     @Test
     void realProviderRunsEveryApplicableCorpusCaseAndRetainsRedactedTraces()
@@ -103,14 +149,8 @@ final class LiveAgentBenchmarkAcceptanceTest {
                 "OPENALLAY_BENCHMARK_REPEATS", "3"), "OPENALLAY_BENCHMARK_REPEATS");
         boolean includeCommands = Boolean.parseBoolean(
                 environment.getOrDefault("OPENALLAY_BENCHMARK_INCLUDE_COMMANDS", "false"));
-        Set<String> capabilities = new LinkedHashSet<>(Set.of(
-                "game", "player", "registries", "recipes", "extensions",
-                "recipe-viewer", "world"));
-        if (includeCommands) {
-            capabilities.add("commands");
-        }
         List<BenchmarkCase> cases =
-                select(corpus, environment, capabilities, repeats);
+                select(corpus, environment, fixtureCapabilities(includeCommands), repeats);
         assertFalse(cases.isEmpty(), "No applicable benchmark cases were selected");
 
         ModelClient rawModel = model(environment, gson);
@@ -277,6 +317,35 @@ final class LiveAgentBenchmarkAcceptanceTest {
 
     private static ToolInvocationContext benchmarkContext(String correlationId) {
         ToolInvocationContext base = JavascriptAgentTestFixtures.context(correlationId);
+        ArrayList<RegistryEntrySnapshot> registryEntries =
+                new ArrayList<>(base.registries().orElseThrow().entries());
+        registryEntries.add(food("farmersdelight:vegetable_soup", 8, 0.6D));
+        registryEntries.add(food("farmersdelight:bacon_sandwich", 10, 0.8D));
+        registryEntries.add(food("farmersdelight:roast_chicken", 16, 1.0D));
+        registryEntries.sort(java.util.Comparator.comparing(RegistryEntrySnapshot::id));
+        RegistrySnapshot registries =
+                new RegistrySnapshot(GroundedTestFixtures.serverEvidence(), registryEntries);
+
+        ArrayList<RecipeEntrySnapshot> recipeEntries =
+                new ArrayList<>(base.recipes().orElseThrow().recipes());
+        recipeEntries.add(appleCiderRecipe());
+        recipeEntries.sort(java.util.Comparator.comparing(RecipeEntrySnapshot::id));
+        RecipeSnapshot recipes =
+                new RecipeSnapshot(GroundedTestFixtures.serverEvidence(), recipeEntries);
+
+        PlayerSnapshot basePlayer = base.player().orElseThrow();
+        PlayerSnapshot player = new PlayerSnapshot(
+                basePlayer.uuid(),
+                basePlayer.displayName(),
+                basePlayer.dimension(),
+                basePlayer.position(),
+                basePlayer.gameMode(),
+                GroundedTestFixtures.inventory(Map.of(
+                        "minecraft:apple", 3L,
+                        "minecraft:glass_bottle", 1L,
+                        "minecraft:sugar", 2L)),
+                basePlayer.evidence());
+
         ObservableGameStateSnapshot state = base.observableGameState().orElseThrow();
         ArrayList<InstalledModMetadata> installed = new ArrayList<>(state.mods().installed());
         installed.add(new InstalledModMetadata(
@@ -299,17 +368,86 @@ final class LiveAgentBenchmarkAcceptanceTest {
                 state.packs(),
                 state.shaders(),
                 state.diagnostics(),
-                state.player(),
+                new ObservableGameStateSnapshot.PlayerUiState(
+                        player,
+                        state.player().openScreen(),
+                        state.player().openScreenTitle(),
+                        state.player().evidence(),
+                        state.player().diagnostics()),
                 state.worldQueries());
         return new ToolInvocationContext(
                 correlationId,
                 base.capturedAt(),
                 base.caller(),
-                base.player(),
-                base.registries(),
-                base.recipes(),
+                java.util.Optional.of(player),
+                java.util.Optional.of(registries),
+                java.util.Optional.of(recipes),
                 java.util.Optional.of(game),
                 base.metrics());
+    }
+
+    private static Set<String> fixtureCapabilities(boolean includeCommands) {
+        LinkedHashSet<String> capabilities = new LinkedHashSet<>(FIXTURE_CAPABILITIES);
+        if (includeCommands) {
+            capabilities.add("commands");
+        }
+        return Set.copyOf(capabilities);
+    }
+
+    private static RegistryEntrySnapshot food(
+            String id, int nutrition, double saturationModifier) {
+        return new RegistryEntrySnapshot(
+                id,
+                "item",
+                id,
+                id.substring(0, id.indexOf(':')),
+                "minecraft:registry",
+                List.of(),
+                Set.of("farmersdelight:foods"),
+                Set.of("minecraft:food"),
+                Map.of(
+                        "minecraft:food",
+                        JsonParser.parseString("""
+                                {"nutrition":%d,"saturationModifier":%s}
+                                """.formatted(nutrition, saturationModifier))));
+    }
+
+    private static RecipeEntrySnapshot appleCiderRecipe() {
+        return new RecipeEntrySnapshot(
+                new RecipeReference(
+                        "minecraft:recipe_manager",
+                        GroundedTestFixtures.RECIPE_GENERATION,
+                        "farmersdelight:apple_cider"),
+                "farmersdelight:apple_cider",
+                "farmersdelight:cooking",
+                new RecipeLayoutSnapshot(3, 1, false),
+                "farmersdelight:cooking_pot",
+                List.of(
+                        ingredient("apples", 2, "minecraft:apple"),
+                        ingredient("sugar", 1, "minecraft:sugar"),
+                        ingredient("bottle", 1, "minecraft:glass_bottle")),
+                List.of(),
+                List.of(),
+                List.of(new RecipeOutputSnapshot(
+                        new ItemStackSnapshot(
+                                "farmersdelight:apple_cider", 1, "Apple Cider"),
+                        1.0D)),
+                List.of(),
+                RecipeProcessingSnapshot.unknown(),
+                List.of(),
+                Map.of(),
+                RecipeUnlockState.UNKNOWN,
+                GroundedTestFixtures.serverEvidence());
+    }
+
+    private static IngredientRequirementSnapshot ingredient(
+            String key, int count, String itemId) {
+        return new IngredientRequirementSnapshot(
+                key,
+                count,
+                true,
+                List.of(new IngredientAlternativeSnapshot(
+                        "item", itemId, List.of(itemId))));
     }
 
     private static JavascriptDataModuleRegistry extensions() {
