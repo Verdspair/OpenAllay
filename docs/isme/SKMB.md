@@ -36,6 +36,7 @@ accepted and contains explicit approval evidence.
 | SKMB-2026-07-24-026 | accepted | direct Java host graph binding for Rhino, workspace, and extensions | C, E, F | decisions/2026-07-24-026-direct-rhino-host-objects.md | verified |
 | SKMB-2026-07-24-027 | accepted | bundled JavaScript modules, complete live E2E traces, silent history saves, and VFS disposition | B, C, E, F, G | decisions/2026-07-24-027-js-modules-live-e2e-and-silent-history.md | pending |
 | SKMB-2026-07-25-028 | accepted | capability/schema catalog, typed Rhino results, Extensions settings, and experimental complete command bridge | B, C, E, F, G | decisions/2026-07-25-028-capability-catalog-rich-results-and-experimental-commands.md | pending |
+| SKMB-2026-07-25-029 | accepted | 0.2.x core prompt, Skill/Extension communities, server models, world observation, and benchmark | B, C, D, E, F, G | decisions/2026-07-25-029-openallay-0.2-platform-iteration.md | pending |
 
 SKMB-2026-07-18-006 is implemented by `a0eaeff`, `19ab90f`, and `c6ca6bc`.
 Its deterministic clean-build and packaged-driver evidence is recorded in the
