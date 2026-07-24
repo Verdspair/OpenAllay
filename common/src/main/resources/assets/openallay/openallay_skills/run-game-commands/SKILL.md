@@ -19,20 +19,21 @@ command capability for this request:
   and returns the messages that Minecraft produced. A single optional leading
   `/` is removed; the remaining string is unchanged.
 
-Load `references/commands.md` before composing a discovery or execution
-program. Prefer one JavaScript call: inspect the detached catalog only when the
-syntax is unknown, then submit commands in the required order in the same
-program.
-
 For a command-only `run_javascript` call, set the Tool input `roots` to
 `["commands"]`. The binding is named `commands` directly; there is no
 `mc.commands`.
 
 If the player supplied an exact command, or the required vanilla command and
-syntax are already unambiguous, call `commands.run` directly. Do not list the
-whole command tree first. When discovery is genuinely needed, filter
+syntax are already unambiguous, this main document is enough: call
+`commands.run` directly. Do not list the whole command tree and do not load the
+reference merely to confirm a known command.
+
+Load `references/commands.md` before writing the program only when the syntax
+is unknown, the command contains a modern item/text component, or the task
+needs several ordered commands. For unknown syntax, filter
 `commands.list().nodes` inside the same program by the relevant literal/mod
-prefix and return only those candidates; never return the unfiltered catalog.
+prefix, use `commands.describe(path)` on the exact candidate, and return only
+the focused candidates; never return the unfiltered catalog.
 
 Always inspect and return the `commands.run` result. `state: "feedback"` means
 Minecraft emitted one or more messages in the command feedback window;
@@ -44,5 +45,8 @@ Minecraft remains authoritative for parsing and permissions. Submissions are
 not transactional: if a later statement fails or the Agent is cancelled,
 commands already submitted stay submitted and are never rolled back.
 
-Do not invent a command path. If an exact player-visible path cannot be found,
-report that it is unavailable instead of trying similarly named mutations.
+Treat parser errors and permission errors in `messages` as rejection, not
+success. Correct a parser error at most once after inspecting its actual
+message and the matching described path; never make blind variants. If an
+exact player-visible path cannot be found, report that it is unavailable
+instead of trying similarly named mutations.

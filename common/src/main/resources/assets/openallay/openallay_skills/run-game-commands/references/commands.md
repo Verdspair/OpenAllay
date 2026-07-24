@@ -11,6 +11,36 @@ var command = `tellraw @s {"text":"OpenAllay command feedback test"}`;
 return commands.run(command);
 ```
 
+## Modern item components
+
+Modern `/give` item arguments use the current item-component grammar, not
+legacy item NBT:
+
+```text
+<item-id>[<component-id>=<SNBT value>,<component-id>=<SNBT value>,...]
+```
+
+First confirm the outer path:
+
+```javascript
+var give = commands.describe("give <targets> <item>");
+var item = `minecraft:paper[minecraft:custom_name={text:'Sample'}]`;
+return {
+  syntax: give,
+  result: commands.run(`give @s ${item} 1`)
+};
+```
+
+The item ID, component IDs, values, and count must come from the player's
+request and current game, not from this sample. Mods may register their own
+items and components. Do not copy a benchmark artifact or prewritten answer.
+Do not use the removed legacy `{tag:...}` form.
+
+If Minecraft returns an unknown-item, unknown-component, malformed-component,
+or command-context message, inspect that exact feedback together with the
+described `<item>` node, change only the rejected part, and retry at most once.
+Permission feedback is terminal; changing spelling cannot grant permission.
+
 ## Discover the active registry
 
 ```javascript

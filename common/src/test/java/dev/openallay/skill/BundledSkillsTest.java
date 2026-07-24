@@ -40,6 +40,13 @@ final class BundledSkillsTest {
         assertEquals(Set.of("references/commands.md"), commands.references().keySet());
         assertTrue(commands.instructions().contains("`commands.list()`"));
         assertTrue(commands.instructions().contains("never rolled back"));
+        assertTrue(commands.instructions().contains("this main document is enough"));
+        assertTrue(commands.instructions().contains("modern item/text component"));
+        String commandReference = commands.references().get("references/commands.md");
+        assertTrue(commandReference.contains("<component-id>=<SNBT value>"));
+        assertTrue(commandReference.contains("commands.describe(\"give <targets> <item>\")"));
+        assertTrue(commandReference.contains("retry at most once"));
+        assertFalse(commandReference.contains("enchanted-item-created"));
     }
 
     @Test

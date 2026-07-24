@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Owns the default-off setting and immutable per-request command capability captures.
@@ -34,7 +35,7 @@ public final class CommandCapabilityRuntime {
     private final long feedbackDeadlineMillis;
     private final Map<String, Boolean> requestSettings = new ConcurrentHashMap<>();
     private final Map<String, RequestCapability> requests = new ConcurrentHashMap<>();
-    private final Map<UUID, Object> actorLocks = new ConcurrentHashMap<>();
+    private final Map<UUID, ReentrantLock> actorLocks = new ConcurrentHashMap<>();
     private final Map<UUID, PendingFeedback> pendingFeedback = new ConcurrentHashMap<>();
 
     public CommandCapabilityRuntime() {
@@ -172,8 +173,10 @@ public final class CommandCapabilityRuntime {
             String command,
             Submitter submitter,
             CancellationSignal cancellation) {
-        Object actorLock = actorLocks.computeIfAbsent(actorId, ignored -> new Object());
-        synchronized (actorLock) {
+        ReentrantLock actorLock =
+                actorLocks.computeIfAbsent(actorId, ignored -> new ReentrantLock(true));
+        acquire(actorLock, cancellation);
+        try {
             cancellation.throwIfCancelled();
             PendingFeedback pending =
                     new PendingFeedback(feedbackQuietMillis, feedbackDeadlineMillis);
@@ -199,6 +202,27 @@ public final class CommandCapabilityRuntime {
                         durationMillis);
             } finally {
                 pendingFeedback.remove(actorId, pending);
+            }
+        } finally {
+            actorLock.unlock();
+        }
+    }
+
+    private static void acquire(
+            ReentrantLock actorLock, CancellationSignal cancellation) {
+        while (true) {
+            cancellation.throwIfCancelled();
+            try {
+                if (actorLock.tryLock(50, TimeUnit.MILLISECONDS)) {
+                    return;
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                cancellation.throwIfCancelled();
+                throw new JavascriptExecutionException(
+                        "command_submission_failed",
+                        "Command scheduling was interrupted",
+                        interrupted);
             }
         }
     }
