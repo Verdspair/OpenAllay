@@ -2,6 +2,7 @@ package dev.openallay.extension.install;
 
 import com.google.gson.JsonParser;
 import dev.openallay.extension.OpenAllayExtensionEnvironment;
+import dev.openallay.extension.catalog.ExtensionCatalogArtifact;
 import dev.openallay.extension.catalog.ExtensionCatalogEntry;
 import dev.openallay.model.CancellationSignal;
 import dev.openallay.net.HttpExchangeRequest;
@@ -87,12 +88,20 @@ public final class ExtensionPackageInstaller {
             ExtensionCatalogEntry entry, CancellationSignal cancellation) {
         Objects.requireNonNull(entry, "entry");
         Objects.requireNonNull(cancellation, "cancellation");
-        String incompatibility = environment.incompatibility(entry.descriptor());
+        Optional<ExtensionCatalogArtifact> selected =
+                entry.artifactFor(environment.loader());
+        if (selected.isEmpty()) {
+            return CompletableFuture.completedFuture(
+                    failed(entry.id(), "incompatible_loader"));
+        }
+        String incompatibility =
+                environment.incompatibility(entry.descriptorFor(environment.loader()));
         if (!incompatibility.isEmpty()) {
             return CompletableFuture.completedFuture(failed(entry.id(), incompatibility));
         }
+        ExtensionCatalogArtifact artifact = selected.orElseThrow();
         return transport.execute(
-                        HttpExchangeRequest.newBuilder(entry.artifact())
+                        HttpExchangeRequest.newBuilder(artifact.artifact())
                                 .timeout(java.time.Duration.ofSeconds(60))
                                 .header("accept", "application/java-archive, application/octet-stream")
                                 .get()
@@ -111,11 +120,18 @@ public final class ExtensionPackageInstaller {
     }
 
     private ExtensionInstallResult stage(ExtensionCatalogEntry entry, byte[] bytes) {
-        String incompatibility = environment.incompatibility(entry.descriptor());
+        Optional<ExtensionCatalogArtifact> selected =
+                entry.artifactFor(environment.loader());
+        if (selected.isEmpty()) {
+            return failed(entry.id(), "incompatible_loader");
+        }
+        String incompatibility =
+                environment.incompatibility(entry.descriptorFor(environment.loader()));
         if (!incompatibility.isEmpty()) {
             return failed(entry.id(), incompatibility);
         }
-        if (!sha256(bytes).equals(entry.sha256())) {
+        ExtensionCatalogArtifact artifact = selected.orElseThrow();
+        if (!sha256(bytes).equals(artifact.sha256())) {
             return failed(entry.id(), "checksum_mismatch");
         }
         InspectedPackage inspected;
@@ -124,14 +140,16 @@ public final class ExtensionPackageInstaller {
         } catch (RuntimeException failure) {
             return failed(entry.id(), "extension_manifest_invalid");
         }
-        if (!inspected.manifest().descriptor().equals(entry.descriptor())
-                || !inspected.manifest().modIds().equals(entry.modIds())) {
+        if (!inspected.manifest()
+                        .descriptor()
+                        .equals(entry.descriptorFor(environment.loader()))
+                || !inspected.manifest().modIds().equals(artifact.modIds())) {
             return failed(entry.id(), "extension_manifest_mismatch");
         }
         if (!inspected.declaredModIds().containsAll(inspected.manifest().modIds())) {
             return failed(entry.id(), "mod_metadata_mismatch");
         }
-        return publish(inspected.manifest(), bytes, entry.sha256());
+        return publish(inspected.manifest(), bytes, artifact.sha256());
     }
 
     private ExtensionInstallResult stageLocal(byte[] bytes) {

@@ -1,36 +1,44 @@
 package dev.openallay.extension.catalog;
 
 import dev.openallay.extension.OpenAllayExtensionDescriptor;
-import java.net.URI;
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
-import java.util.regex.Pattern;
+import java.util.TreeMap;
 
-/** One immutable Extension package entry from a schema-1 catalog. */
+/** One immutable Extension version with one independently verified JAR per loader. */
 public record ExtensionCatalogEntry(
         String id,
         String name,
         String version,
         String provider,
         String summary,
-        Set<String> loaders,
         String minecraftVersionRange,
         String openAllayApiVersionRange,
-        URI artifact,
-        String sha256,
-        Set<String> modIds,
+        List<ExtensionCatalogArtifact> artifacts,
         String source) {
-    private static final Pattern SHA256 = Pattern.compile("[0-9a-f]{64}");
-    private static final Pattern MOD_ID = Pattern.compile("[a-z0-9_.-]+");
 
     public ExtensionCatalogEntry {
+        TreeMap<String, ExtensionCatalogArtifact> byLoader = new TreeMap<>();
+        for (ExtensionCatalogArtifact artifact : List.copyOf(artifacts)) {
+            java.util.Objects.requireNonNull(artifact, "artifact");
+            if (byLoader.putIfAbsent(artifact.loader(), artifact) != null) {
+                throw new IllegalArgumentException(
+                        "Duplicate Extension artifact loader: " + artifact.loader());
+            }
+        }
+        if (byLoader.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Extension catalog entry must declare at least one artifact");
+        }
+        artifacts = List.copyOf(byLoader.values());
         OpenAllayExtensionDescriptor descriptor = new OpenAllayExtensionDescriptor(
                 id,
                 name,
                 version,
                 provider,
                 summary,
-                loaders,
+                byLoader.keySet(),
                 minecraftVersionRange,
                 openAllayApiVersionRange,
                 source);
@@ -39,53 +47,25 @@ public record ExtensionCatalogEntry(
         version = descriptor.version();
         provider = descriptor.provider();
         summary = descriptor.summary();
-        loaders = descriptor.loaders();
         minecraftVersionRange = descriptor.minecraftVersionRange();
         openAllayApiVersionRange = descriptor.openAllayApiVersionRange();
-        artifact = secureUri(artifact);
-        if (sha256 == null || !SHA256.matcher(sha256).matches()) {
-            throw new IllegalArgumentException("Extension SHA-256 must be 64 lowercase hex digits");
-        }
-        TreeSet<String> normalizedModIds = new TreeSet<>();
-        for (String modId : Set.copyOf(modIds)) {
-            if (modId == null || !MOD_ID.matcher(modId).matches()) {
-                throw new IllegalArgumentException("Invalid Extension mod ID: " + modId);
-            }
-            normalizedModIds.add(modId);
-        }
-        if (normalizedModIds.isEmpty()) {
-            throw new IllegalArgumentException("Extension package must declare at least one mod ID");
-        }
-        modIds = Set.copyOf(normalizedModIds);
         source = descriptor.source();
     }
 
-    public ExtensionCatalogEntry(
-            String id,
-            String name,
-            String version,
-            String provider,
-            String summary,
-            Set<String> loaders,
-            String minecraftVersionRange,
-            String openAllayApiVersionRange,
-            String artifact,
-            String sha256,
-            Set<String> modIds,
-            String source) {
-        this(
-                id,
-                name,
-                version,
-                provider,
-                summary,
-                loaders,
-                minecraftVersionRange,
-                openAllayApiVersionRange,
-                URI.create(artifact),
-                sha256,
-                modIds,
-                source);
+    public Set<String> loaders() {
+        return artifacts.stream()
+                .map(ExtensionCatalogArtifact::loader)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    public Optional<ExtensionCatalogArtifact> artifactFor(String loader) {
+        if (loader == null) {
+            return Optional.empty();
+        }
+        String normalized = loader.strip().toLowerCase(java.util.Locale.ROOT);
+        return artifacts.stream()
+                .filter(artifact -> artifact.loader().equals(normalized))
+                .findFirst();
     }
 
     public OpenAllayExtensionDescriptor descriptor() {
@@ -95,28 +75,25 @@ public record ExtensionCatalogEntry(
                 version,
                 provider,
                 summary,
-                loaders,
+                loaders(),
                 minecraftVersionRange,
                 openAllayApiVersionRange,
                 source);
     }
 
-    private static URI secureUri(URI uri) {
-        java.util.Objects.requireNonNull(uri, "artifact");
-        String host = uri.getHost();
-        boolean loopback = host != null
-                && (host.equalsIgnoreCase("localhost")
-                        || host.equals("127.0.0.1")
-                        || host.equals("::1"));
-        if (!"https".equalsIgnoreCase(uri.getScheme())
-                && !("http".equalsIgnoreCase(uri.getScheme()) && loopback)) {
-            throw new IllegalArgumentException(
-                    "Extension artifact URI must use HTTPS or loopback HTTP");
-        }
-        if (uri.getUserInfo() != null) {
-            throw new IllegalArgumentException(
-                    "Extension artifact URI must not contain credentials");
-        }
-        return uri;
+    public OpenAllayExtensionDescriptor descriptorFor(String loader) {
+        ExtensionCatalogArtifact selected = artifactFor(loader)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Extension has no artifact for loader: " + loader));
+        return new OpenAllayExtensionDescriptor(
+                id,
+                name,
+                version,
+                provider,
+                summary,
+                Set.of(selected.loader()),
+                minecraftVersionRange,
+                openAllayApiVersionRange,
+                source);
     }
 }

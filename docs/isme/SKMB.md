@@ -37,6 +37,7 @@ accepted and contains explicit approval evidence.
 | SKMB-2026-07-24-027 | accepted | bundled JavaScript modules, complete live E2E traces, silent history saves, and VFS disposition | B, C, E, F, G | decisions/2026-07-24-027-js-modules-live-e2e-and-silent-history.md | pending |
 | SKMB-2026-07-25-028 | accepted | capability/schema catalog, typed Rhino results, Extensions settings, and experimental complete command bridge | B, C, E, F, G | decisions/2026-07-25-028-capability-catalog-rich-results-and-experimental-commands.md | pending |
 | SKMB-2026-07-25-029 | accepted | 0.2.x core prompt, Skill/Extension communities, server models, world observation, and benchmark | B, C, D, E, F, G | decisions/2026-07-25-029-openallay-0.2-platform-iteration.md | pending |
+| SKMB-2026-07-25-030 | accepted | loader-specific Extension catalog artifacts and package selection | B, D, F | decisions/2026-07-25-030-loader-specific-extension-artifacts.md | pending |
 
 SKMB-2026-07-18-006 is implemented by `a0eaeff`, `19ab90f`, and `c6ca6bc`.
 Its deterministic clean-build and packaged-driver evidence is recorded in the
@@ -156,6 +157,8 @@ graphical evidence review all passed. Phase 4 is closed.
 | javascript_host_graph_ready | One request owns immutable direct Java root descriptors and captured extension/knowledge snapshots | MinecraftAgentHostGraph | No input serialization, no live Minecraft objects, request-scoped lifetime | SKMB-2026-07-24-026 |
 | javascript_host_scope_open | One Rhino execution owns lazy read-only wrappers and an identity cache over the request host graph | RhinoHostAdapter | No wrapper or scope sharing across executions or requests | SKMB-2026-07-24-026 |
 | managed_skill_writing | One complete local Skill package is staged and validated | ManagedSkillStore | Prior active package remains until atomic publication succeeds | SKMB-2026-07-24-025 |
+| extension_catalog_v2_ready | One strict schema-2 Extension catalog generation is available | ExtensionCatalogClient | One logical version contains independently verified loader artifacts | SKMB-2026-07-25-030 |
+| extension_artifact_selected | One catalog entry resolved the exact current-loader artifact | ExtensionPackageInstaller | URL, checksum, and mod IDs belong only to the selected loader | SKMB-2026-07-25-030 |
 
 ## Transition Decisions
 
@@ -240,6 +243,9 @@ graphical evidence review all passed. Phase 4 is closed.
 | T79 | command_capability_disabled or enabled | player atomically saves the opposite experimental setting | command_capability_enabled or disabled for future requests | Publish the new setting only after durable replacement succeeds; an active request retains its captured command capability | SKMB-2026-07-25-028 |
 | T80 | javascript_host_scope_open with command capability enabled | script calls `commands.run` while connected | command_submission_pending then command_feedback_wait then javascript_host_scope_open | Marshal the exact command to the owning Minecraft thread in script order, collect the current player's non-overlay game messages until the feedback window closes, and return the observed messages; Minecraft retains parsing and player permission authority | SKMB-2026-07-25-028 |
 | T81 | command_submission_pending or command_feedback_wait | disconnect, cancellation, submission failure, quiet feedback completion, or feedback deadline | javascript_host_scope_open with a result/explicit failure or terminal cancellation | Submit nothing after a pre-submission terminal condition; already submitted commands remain submitted; return `feedback` with observed messages or `no_feedback` without inventing success | SKMB-2026-07-25-028 |
+| T82 | catalog_refreshing | strict schema-2 Extension catalog validates | extension_catalog_v2_ready | Atomically publish one generation after rejecting duplicate identities and duplicate loader artifacts | SKMB-2026-07-25-030 |
+| T83 | extension_catalog_v2_ready | player installs/updates an Extension compatible with the current loader | extension_artifact_selected | Resolve the current loader before HTTP and bind checksum/mod-ID authority to that artifact only | SKMB-2026-07-25-030 |
+| T84 | extension_artifact_selected | selected JAR checksum, embedded identity, compatibility, mod IDs, and loader metadata validate | extension_restart_required | Atomically stage the selected loader JAR under its stable managed name | SKMB-2026-07-25-030 |
 
 ## Invariants
 
@@ -344,6 +350,9 @@ graphical evidence review all passed. Phase 4 is closed.
 | I98 | When experimental commands are disabled, their object, schema, catalog, and matching Skill are absent from future requests rather than represented as an authoritative empty capability | SKMB-2026-07-25-028 |
 | I99 | When experimental commands are enabled, discovery projects the complete active player-visible Brigadier tree, including mod registrations, and execution preserves the initiating player's identity and Minecraft permissions without an OpenAllay command allowlist, argument filter, or call cap | SKMB-2026-07-25-028 |
 | I100 | Command execution is serialized per player and non-transactional: cancellation or later script failure prevents only not-yet-submitted calls and never rolls back already submitted Minecraft commands; the result contains only client-visible feedback observed while that call owned the player's feedback window | SKMB-2026-07-25-028 |
+| I101 | One logical Extension ID/version contains at most one independently verified artifact per loader | SKMB-2026-07-25-030 |
+| I102 | Extension download and staging select the current loader before transport; Fabric and NeoForge never consume each other's artifact URL, checksum, or mod-ID authority | SKMB-2026-07-25-030 |
+| I103 | Local Extension import remains catalog-independent and is governed by its embedded package manifest and actual loader metadata | SKMB-2026-07-25-030 |
 
 ## Fail Semantics
 
@@ -411,6 +420,7 @@ graphical evidence review all passed. Phase 4 is closed.
 | F60 | A direct host value is unsupported, a map key is not a String, or script code attempts to mutate/delete a host property | Fail with `javascript_host_type_unsupported`, `javascript_host_map_key_unsupported`, or `javascript_host_read_only`; mutate no request data and publish no handle | SKMB-2026-07-24-026 |
 | F61 | A bundled JavaScript module is unknown, cyclic, or fails evaluation | Fail `javascript_module_unavailable` or `javascript_module_error`, publish no partial result, and retain the request for a corrected call | SKMB-2026-07-24-027 |
 | F62 | A terminal real-client request has no complete local trace or trace persistence fails | Fail E2E acceptance and publish no unredacted or partial trace artifact | SKMB-2026-07-24-027 |
+| F63 | An Extension catalog uses schema 1/unknown fields/duplicate loader artifacts, or an entry lacks the current-loader artifact | Reject the candidate generation as `catalog_refresh_failed` while retaining the last valid schema-2 cache, or fail install as `incompatible_loader` before HTTP and stage nothing | SKMB-2026-07-25-030 |
 
 ## Reviewed Statistical Defaults
 

@@ -5,7 +5,6 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,13 +21,12 @@ public final class ExtensionCatalogCodec {
             "version",
             "provider",
             "summary",
-            "loaders",
             "minecraftVersionRange",
             "openAllayApiVersionRange",
-            "artifact",
-            "sha256",
-            "modIds",
+            "artifacts",
             "source");
+    private static final Set<String> ARTIFACT_FIELDS =
+            Set.of("loader", "artifact", "sha256", "modIds");
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
     public ExtensionCatalogManifest decode(String json) {
@@ -49,12 +47,9 @@ public final class ExtensionCatalogCodec {
                         string(entry, "version"),
                         string(entry, "provider"),
                         string(entry, "summary"),
-                        strings(entry, "loaders"),
                         string(entry, "minecraftVersionRange"),
                         string(entry, "openAllayApiVersionRange"),
-                        URI.create(string(entry, "artifact")),
-                        string(entry, "sha256"),
-                        strings(entry, "modIds"),
+                        artifacts(entry),
                         string(entry, "source")));
             }
             return new ExtensionCatalogManifest(
@@ -83,12 +78,18 @@ public final class ExtensionCatalogCodec {
             encoded.addProperty("version", entry.version());
             encoded.addProperty("provider", entry.provider());
             encoded.addProperty("summary", entry.summary());
-            encoded.add("loaders", strings(entry.loaders()));
             encoded.addProperty("minecraftVersionRange", entry.minecraftVersionRange());
             encoded.addProperty("openAllayApiVersionRange", entry.openAllayApiVersionRange());
-            encoded.addProperty("artifact", entry.artifact().toString());
-            encoded.addProperty("sha256", entry.sha256());
-            encoded.add("modIds", strings(entry.modIds()));
+            var artifacts = new com.google.gson.JsonArray();
+            for (ExtensionCatalogArtifact artifact : entry.artifacts()) {
+                JsonObject encodedArtifact = new JsonObject();
+                encodedArtifact.addProperty("loader", artifact.loader());
+                encodedArtifact.addProperty("artifact", artifact.artifact().toString());
+                encodedArtifact.addProperty("sha256", artifact.sha256());
+                encodedArtifact.add("modIds", strings(artifact.modIds()));
+                artifacts.add(encodedArtifact);
+            }
+            encoded.add("artifacts", artifacts);
             encoded.addProperty("source", entry.source());
             entries.add(encoded);
         }
@@ -129,6 +130,24 @@ public final class ExtensionCatalogCodec {
             }
         }
         return Set.copyOf(values);
+    }
+
+    private static List<ExtensionCatalogArtifact> artifacts(JsonObject object) {
+        JsonElement value = object.get("artifacts");
+        if (value == null || !value.isJsonArray() || value.getAsJsonArray().isEmpty()) {
+            throw new IllegalArgumentException("artifacts must be a non-empty array");
+        }
+        List<ExtensionCatalogArtifact> artifacts = new ArrayList<>();
+        for (JsonElement item : value.getAsJsonArray()) {
+            JsonObject artifact = object(item, "artifact");
+            exactFields(artifact, ARTIFACT_FIELDS, "artifact");
+            artifacts.add(new ExtensionCatalogArtifact(
+                    string(artifact, "loader"),
+                    string(artifact, "artifact"),
+                    string(artifact, "sha256"),
+                    strings(artifact, "modIds")));
+        }
+        return List.copyOf(artifacts);
     }
 
     private static com.google.gson.JsonArray strings(Set<String> values) {

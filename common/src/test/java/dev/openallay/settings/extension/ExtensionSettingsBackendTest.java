@@ -61,7 +61,7 @@ final class ExtensionSettingsBackendTest {
 
         ToolResult<ExtensionSettingsView> accepted = backend.replaceCatalog("""
                 {
-                  "schemaVersion": 1,
+                  "schemaVersion": 2,
                   "kind": "extension",
                   "generatedAt": "2026-07-25T00:00:00Z",
                   "extensions": [
@@ -71,12 +71,14 @@ final class ExtensionSettingsBackendTest {
                       "version": "1.0.0",
                       "provider": "Community",
                       "summary": "Compatible package",
-                      "loaders": ["fabric"],
                       "minecraftVersionRange": "[26.2,26.3)",
                       "openAllayApiVersionRange": "[0.2,0.3)",
-                      "artifact": "https://example.invalid/compatible.jar",
-                      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                      "modIds": ["compatible_extension"],
+                      "artifacts": [{
+                        "loader": "fabric",
+                        "artifact": "https://example.invalid/compatible.jar",
+                        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "modIds": ["compatible_extension"]
+                      }],
                       "source": "community"
                     },
                     {
@@ -85,12 +87,14 @@ final class ExtensionSettingsBackendTest {
                       "version": "1.0.0",
                       "provider": "Community",
                       "summary": "Incompatible package",
-                      "loaders": ["neoforge"],
                       "minecraftVersionRange": "[26.2,26.3)",
                       "openAllayApiVersionRange": "[0.2,0.3)",
-                      "artifact": "https://example.invalid/neoforge.jar",
-                      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                      "modIds": ["neoforge_extension"],
+                      "artifacts": [{
+                        "loader": "neoforge",
+                        "artifact": "https://example.invalid/neoforge.jar",
+                        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "modIds": ["neoforge_extension"]
+                      }],
                       "source": "community"
                     }
                   ]
@@ -218,7 +222,7 @@ final class ExtensionSettingsBackendTest {
     private static String catalog(String version, String checksum) {
         return """
                 {
-                  "schemaVersion": 1,
+                  "schemaVersion": 2,
                   "kind": "extension",
                   "generatedAt": "2026-07-25T00:00:00Z",
                   "extensions": [{
@@ -227,12 +231,14 @@ final class ExtensionSettingsBackendTest {
                     "version": "%s",
                     "provider": "Provider",
                     "summary": "Sample Extension",
-                    "loaders": ["fabric"],
                     "minecraftVersionRange": "[26.2,26.3)",
                     "openAllayApiVersionRange": "[0.2,0.3)",
-                    "artifact": "https://example.invalid/sample.jar",
-                    "sha256": "%s",
-                    "modIds": ["sample_extension"],
+                    "artifacts": [{
+                      "loader": "fabric",
+                      "artifact": "https://example.invalid/sample.jar",
+                      "sha256": "%s",
+                      "modIds": ["sample_extension"]
+                    }],
                     "source": "community"
                   }]
                 }

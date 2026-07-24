@@ -35,7 +35,11 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
     private final ExtensionPackageInstaller installer;
     private final ExtensionCatalogClient catalogClient;
     private ExtensionCatalogManifest catalog =
-            new ExtensionCatalogManifest(1, "extension", java.time.Instant.EPOCH, List.of());
+            new ExtensionCatalogManifest(
+                    ExtensionCatalogManifest.SCHEMA_VERSION,
+                    "extension",
+                    java.time.Instant.EPOCH,
+                    List.of());
     private final Map<String, StagedPackage> staged = new TreeMap<>();
     private Optional<ExtensionSettingsView.Notice> notice = Optional.empty();
 
@@ -256,7 +260,7 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
                 emptyContributions());
     }
 
-    private static ExtensionSettingsView.Extension installed(
+    private ExtensionSettingsView.Extension installed(
             ExtensionSettingsView.Extension installed,
             ExtensionCatalogEntry available,
             boolean compatible) {
@@ -278,7 +282,7 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
                 packageInfo(available, update, update));
     }
 
-    private static ExtensionSettingsView.Extension staged(
+    private ExtensionSettingsView.Extension staged(
             ExtensionSettingsView.Extension installed, StagedPackage staged) {
         ExtensionSettingsView.Contributions contributions = installed == null
                 ? emptyContributions()
@@ -305,7 +309,7 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
                                 descriptor.version(), staged.sha256())));
     }
 
-    private static ExtensionSettingsView.Extension extension(
+    private ExtensionSettingsView.Extension extension(
             ExtensionCatalogEntry entry,
             ExtensionSettingsView.State state,
             String diagnostic,
@@ -331,13 +335,16 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
                 packageInfo(entry, updateAvailable, installable));
     }
 
-    private static ExtensionSettingsView.PackageInfo packageInfo(
+    private ExtensionSettingsView.PackageInfo packageInfo(
             ExtensionCatalogEntry entry, boolean updateAvailable, boolean installable) {
+        dev.openallay.extension.catalog.ExtensionCatalogArtifact artifact =
+                entry.artifactFor(registry.environment().loader())
+                        .orElseGet(() -> entry.artifacts().getFirst());
         return new ExtensionSettingsView.PackageInfo(
                 true,
                 entry.version(),
-                entry.artifact().toString(),
-                entry.sha256(),
+                artifact.artifact().toString(),
+                artifact.sha256(),
                 updateAvailable,
                 installable);
     }

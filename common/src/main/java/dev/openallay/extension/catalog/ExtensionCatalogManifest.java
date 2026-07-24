@@ -6,13 +6,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 
-/** Strict schema-1 community catalog for normal loader-managed Extension JARs. */
+/** Strict schema-2 community catalog for loader-specific Extension JARs. */
 public record ExtensionCatalogManifest(
         int schemaVersion,
         String kind,
         Instant generatedAt,
         List<ExtensionCatalogEntry> extensions) {
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
 
     public ExtensionCatalogManifest {
         if (schemaVersion != SCHEMA_VERSION || !"extension".equals(kind)) {

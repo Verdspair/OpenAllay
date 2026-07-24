@@ -3,6 +3,7 @@ package dev.openallay.extension.catalog;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.openallay.model.CancellationSignal;
 import dev.openallay.net.HttpExchangeRequest;
@@ -16,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -93,6 +95,65 @@ final class ExtensionCatalogClientTest {
         assertInstanceOf(ToolResult.Success.class, first.join());
     }
 
+    @Test
+    void schemaTwoSelectsIndependentArtifactsForEachLoader() {
+        ExtensionCatalogManifest decoded = new ExtensionCatalogCodec().decode("""
+                {"schemaVersion":2,"kind":"extension","generatedAt":"2026-07-25T00:00:00Z",
+                 "extensions":[{
+                   "id":"sample:one","name":"Sample","version":"1.0.0",
+                   "provider":"Community","summary":"Sample Extension",
+                   "minecraftVersionRange":"[26.2,26.3)",
+                   "openAllayApiVersionRange":"[0.2,0.3)",
+                   "artifacts":[
+                     {"loader":"neoforge","artifact":"https://example.test/sample-neoforge.jar",
+                      "sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "modIds":["sample_neoforge"]},
+                     {"loader":"fabric","artifact":"https://example.test/sample-fabric.jar",
+                      "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "modIds":["sample_fabric"]}
+                   ],"source":"https://example.test/sample"
+                 }]}
+                """);
+
+        ExtensionCatalogEntry entry = decoded.extensions().getFirst();
+        assertEquals(Set.of("fabric", "neoforge"), entry.loaders());
+        assertEquals(
+                "sample_fabric",
+                entry.artifactFor("FABRIC").orElseThrow().modIds().iterator().next());
+        assertEquals(
+                "sample_neoforge",
+                entry.artifactFor("neoforge").orElseThrow().modIds().iterator().next());
+        assertEquals("fabric", entry.artifacts().getFirst().loader());
+    }
+
+    @Test
+    void rejectsLegacySchemaAndDuplicateLoaderArtifacts() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ExtensionCatalogCodec().decode(
+                        catalog("sample:one", "1.0.0").replace(
+                                "\"schemaVersion\":2", "\"schemaVersion\":1")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ExtensionCatalogCodec().decode("""
+                        {"schemaVersion":2,"kind":"extension","generatedAt":"2026-07-25T00:00:00Z",
+                         "extensions":[{
+                           "id":"sample:one","name":"Sample","version":"1.0.0",
+                           "provider":"Community","summary":"Sample Extension",
+                           "minecraftVersionRange":"[26.2,26.3)",
+                           "openAllayApiVersionRange":"[0.2,0.3)",
+                           "artifacts":[
+                             {"loader":"fabric","artifact":"https://example.test/a.jar",
+                              "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                              "modIds":["sample"]},
+                             {"loader":"fabric","artifact":"https://example.test/b.jar",
+                              "sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                              "modIds":["sample"]}
+                           ],"source":"https://example.test/sample"
+                         }]}
+                        """));
+    }
+
     private static HttpTransport transport(int status, String body) {
         return new HttpTransport() {
             @Override
@@ -119,15 +180,17 @@ final class ExtensionCatalogClientTest {
 
     static String catalog(String id, String version) {
         return """
-                {"schemaVersion":1,"kind":"extension","generatedAt":"2026-07-25T00:00:00Z",
+                {"schemaVersion":2,"kind":"extension","generatedAt":"2026-07-25T00:00:00Z",
                  "extensions":[{
                    "id":"%s","name":"Sample","version":"%s",
                    "provider":"Community","summary":"Sample Extension",
-                   "loaders":["fabric"],"minecraftVersionRange":"[26.2,26.3)",
+                   "minecraftVersionRange":"[26.2,26.3)",
                    "openAllayApiVersionRange":"[0.2,0.3)",
-                   "artifact":"https://example.test/sample.jar",
-                   "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                   "modIds":["sample_extension"],"source":"https://example.test/sample"
+                   "artifacts":[{
+                     "loader":"fabric","artifact":"https://example.test/sample.jar",
+                     "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                     "modIds":["sample_extension"]
+                   }],"source":"https://example.test/sample"
                  }]}
                 """.formatted(id, version);
     }
