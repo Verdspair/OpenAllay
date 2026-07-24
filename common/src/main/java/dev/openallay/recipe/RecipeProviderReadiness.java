@@ -2,7 +2,13 @@ package dev.openallay.recipe;
 
 import java.util.Objects;
 
-/** Development-probe view of whether required recipe viewers can be sampled safely. */
+/**
+ * Development-probe view of whether required recipe viewers can be sampled safely.
+ *
+ * @param state readiness state
+ * @param code stable diagnostic code
+ * @param message human-readable diagnostic
+ */
 public record RecipeProviderReadiness(State state, String code, String message) {
     public RecipeProviderReadiness {
         Objects.requireNonNull(state, "state");

@@ -4,7 +4,15 @@ import dev.openallay.context.DataCompleteness;
 import dev.openallay.context.RecipeSnapshot;
 import java.util.List;
 
-/** Deterministic status projection that exposes source health without duplicating recipes. */
+/**
+ * Deterministic status projection that exposes source health without duplicating recipes.
+ *
+ * @param completeness completeness of the aggregated catalog
+ * @param recipeCount number of normalized recipes
+ * @param semanticGroupCount number of semantic recipe groups
+ * @param providers per-provider readiness and coverage
+ * @param conflicts normalization diagnostics and conflicts
+ */
 public record RecipeCatalogStatus(
         DataCompleteness completeness,
         int recipeCount,

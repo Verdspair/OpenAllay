@@ -7,7 +7,14 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
-/** Generic stable-ID recipe Tool settings for the current pre-release schema. */
+/**
+ * Generic stable-ID recipe settings.
+ *
+ * @param schemaVersion strict persisted schema version
+ * @param visibility recipe visibility policy
+ * @param preferredViewer preferred recipe-viewer source or {@value #AUTO}
+ * @param disabledSources source IDs excluded from recipe discovery
+ */
 public record RecipeClientConfig(
         int schemaVersion,
         RecipeVisibilityPolicy visibility,
