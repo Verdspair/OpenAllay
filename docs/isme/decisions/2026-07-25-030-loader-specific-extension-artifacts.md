@@ -8,7 +8,7 @@
     0.2.x implementation decisions, and asked OpenAllay to continue iterating
     rather than preserve a known incompatible catalog shape.
 - date: 2026-07-25
-- commit: pending
+- commit: 5a1520f; implemented through 897bced
 - patterns:
   - B_state_persistence
   - D_external_dependency

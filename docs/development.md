@@ -702,10 +702,9 @@ The public authoring repository includes an independent dual-loader example at
 `examples/hello-extension`. Its CI builds one shared typed contribution into
 separate Fabric and NeoForge packages, verifies each embedded manifest and
 loader metadata, and records both SHA-256 values. OpenAllay `0.2.0` predates the
-public Extension SPI, so the example currently verifies against loader JARs
-built from the 0.2 feature branch. The catalog remains empty until a later
-0.2.x release exposes that SPI through a public release artifact; do not
-advertise `0.2.0` as an Extension compile dependency.
+public Extension SPI; `0.2.1` is the first release that publishes it. External
+projects must compile against `0.2.1` or a later compatible 0.2.x artifact and
+must not advertise `0.2.0` as an Extension dependency.
 
 An experimental game-command capability also lives on that page and is
 disabled by default. Its strict state is stored in
