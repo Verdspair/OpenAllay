@@ -52,7 +52,11 @@ IDs. Experimental command cases are excluded unless
 different server fixture and are not fabricated by the local JavaScript
 fixture. The default local fixture includes the Farmer's Delight-style food
 ranking and recipe/inventory craftability cases as detached, generalized test
-data; it does not copy expected answers into model context. Reports under
+data; it does not copy expected answers into model context. Default runs print
+an `OPENALLAY_BENCHMARK_SKIPPED` line for every unavailable case and retain a
+schema-2 selection plan with its missing capabilities, so fixture coverage
+cannot shrink silently. Explicitly selected unavailable cases still fail fast.
+Reports under
 `build/reports/openallay/benchmarks/` retain corpus
 version, commit, redacted provider authority, canonical model ID, complete
 provider-neutral Agent traces, success probability, per-attempt counters, and
