@@ -28,16 +28,22 @@ single-item searches.
 Skills give the Agent progressively disclosed instructions for a mod, activity,
 or type of problem. OpenAllay loads the relevant Skill when a task needs it,
 while simple questions can go straight to the available game data. Bundled
-Skills already cover game-data analysis, Minecraft questions, game-state
-inspection, and the optional command workflow.
+Skills already cover missing recipes, modded machines, guide books, progression,
+multi-part game diagnosis, and the optional command workflow. Browse, install,
+and update more workflows from the
+[OpenAllay Skills community](https://github.com/nkanf-dev/OpenAllay-Skills), or
+import a local Skill package from the in-game settings.
 
 ### Extensions that grow with your modpack
 
 OpenAllay Extensions provide typed game data, reusable JavaScript modules, mod
 integrations, and native result views. The in-game Extensions page shows what
-is currently connected and which data roots are available. This is the
-foundation for community-built integrations that can understand new mods
-without turning every capability into another one-purpose Agent tool.
+is currently connected, which data roots are available, and compatible packages
+from the
+[OpenAllay Extensions community](https://github.com/nkanf-dev/OpenAllay-Extensions).
+Community Extensions install as normal mod packages and become active after a
+restart. This lets new mod integrations grow without turning every capability
+into another one-purpose Agent tool.
 
 ### Results made for Minecraft
 
@@ -53,7 +59,9 @@ Connect an OpenAI-compatible Chat Completions or Anthropic Messages provider,
 save several model profiles, and switch between them from the conversation.
 OpenAllay works in single-player and on ordinary multiplayer servers without
 requiring the server to install it. A server that does install OpenAllay may
-offer a shared model and additional server-side capabilities.
+offer a shared model and additional server-side capabilities. Its shared model
+appears automatically in **Models** while connected, clearly marked as
+server-provided and separate from your local profiles.
 
 ### Conversations that stay useful
 
@@ -62,7 +70,7 @@ messages, or export a complete session. Live status explains whether the Agent
 is loading guidance, analysing game data, waiting for the model, or completing
 an action.
 
-## What OpenAllay 0.2.0 can do
+## What OpenAllay 0.2 can do
 
 - Analyse and connect items, recipes, effects, tags, registries, guides,
   settings, and player-visible game state with one JavaScript program.
@@ -74,6 +82,8 @@ an action.
   and inventory calculations.
 - Inspect installed mods, video and gameplay settings, resource packs,
   coordinates, dimension, and F3-style diagnostics.
+- Inspect a focused region of blocks or entities, then filter and compare the
+  observed data with JavaScript instead of flooding the conversation.
 - Search supported guide-book content and use recipe information from the game,
   JEI, REI, and recipe-rich mods such as Farmer's Delight.
 - Present trusted recipes, items, tables, compact values, and generic results
@@ -86,15 +96,15 @@ an action.
 
 ## Quick start
 
-Download OpenAllay **0.2.0** for **Fabric** or **NeoForge** from Modrinth. This
-release targets Minecraft **26.2** and requires Java **25**. Fabric players also
-need the matching Fabric API.
+Download the latest OpenAllay **0.2.x** build for **Fabric** or **NeoForge**
+from Modrinth. The 0.2 line targets Minecraft **26.2** and requires Java **25**.
+Fabric players also need the matching Fabric API.
 
 Place the downloaded JAR in your instance's `mods` folder, start Minecraft, and
 connect a model:
 
 1. Enter a world and press **K**, or run `/guide`.
-2. Select the gear button and open **Client Models**.
+2. Select the gear button and open **Models**.
 3. Add an **OpenAI-compatible Chat Completions** or **Anthropic Messages**
    profile.
 4. Enter the provider URL, model ID, context window, and API key, then save.
@@ -151,9 +161,10 @@ not installed or is unavailable for the current setup.
 OpenAllay is growing into an open Agent platform for Minecraft:
 
 - **OpenAllay Skills** — workflows and domain knowledge that players, modpack
-  authors, and communities can create, improve, and share.
+  authors, and communities can create, improve, share, and install in-game.
 - **OpenAllay Extensions** — new game-data adapters, reusable modules, mod
-  integrations, Agent capabilities, and native result experiences.
+  integrations, Agent capabilities, and native result experiences, distributed
+  as familiar mod packages.
 - **OpenAllay Host** — shared models and centrally managed Agent services for
   servers and communities.
 - **OpenAllay Studio** — a creative environment for rich in-game experiences,
@@ -162,13 +173,15 @@ OpenAllay is growing into an open Agent platform for Minecraft:
 ### Next
 
 - A player memory system that you can review, correct, pin, or forget.
-- Better workflows for creating, editing, and sharing Skills and Extensions.
+- Better workflows for creating, editing, reviewing, and publishing Skills and
+  Extensions.
 - More first-party data adapters, knowledge sources, and mod integrations.
 - A clearer experimental-action experience with player approvals.
 
 ### Longer term
 
-- Understand maps, nearby environments, structures, blocks, and containers.
+- Expand focused block and entity observation into maps, structures,
+  containers, and richer nearby-environment understanding.
 - Turn structures and documentation into step-by-step visual tutorials,
   including Ponder-style guidance when a compatible integration is available.
 - Plan production chains across machines, intermediate materials, and large
