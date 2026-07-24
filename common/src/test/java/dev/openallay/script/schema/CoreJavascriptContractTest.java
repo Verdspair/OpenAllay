@@ -26,6 +26,8 @@ final class CoreJavascriptContractTest {
         assertTrue(rendered.contains("world.inspect("));
         assertTrue(rendered.contains("world.entities("));
         assertTrue(rendered.contains("world.entity(observationId)"));
+        assertTrue(rendered.contains("roots [\"world\"]"));
+        assertTrue(rendered.contains("never mc.world"));
         assertFalse(rendered.contains("analyze-game-data"));
     }
 

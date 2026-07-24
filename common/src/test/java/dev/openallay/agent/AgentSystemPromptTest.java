@@ -35,6 +35,9 @@ final class AgentSystemPromptTest {
         assertTrue(prompt.contains("materially verifies a candidate universe"));
         assertTrue(prompt.contains("require(\"openallay:crafting\")"));
         assertTrue(prompt.contains("there is no second craftability Tool"));
+        assertTrue(prompt.contains("roots [\"world\"]"));
+        assertTrue(prompt.contains("there is no mc.world"));
+        assertTrue(prompt.contains("no Skill preflight is required"));
         assertTrue(prompt.contains("current request's Tool definitions"));
         assertTrue(prompt.contains("mc.game.mods.installed"));
         assertTrue(prompt.contains("schema.describe(path)"));

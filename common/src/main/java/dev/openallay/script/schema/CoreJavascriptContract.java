@@ -24,7 +24,7 @@ public final class CoreJavascriptContract {
                 - workspace.open(handle): reopen one exact result from this request.
                 - helpers.schema(value): inspect one genuinely dynamic JSON or Extension value.
                 - require(id): load one exact bundled JavaScript module documented by the current contract or a vertical Skill.
-                - world (optional request root):
+                - world (optional top-level request root): select it with roots ["world"]; call world directly, never mc.world.
                   world.inspect({from:{x,y,z},to:{x,y,z}}, {includeAir:false}) returns loaded blocks, state properties, relative/absolute positions, coverage, and evidence.
                   world.entities({from:{x,y,z},to:{x,y,z}}, {type:"namespace:id"}) returns entity summaries with request-scoped observationId values.
                   world.entity(observationId) returns the detached detail for one entity from that same request.

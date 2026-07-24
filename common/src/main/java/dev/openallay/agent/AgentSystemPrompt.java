@@ -61,6 +61,7 @@ public final class AgentSystemPrompt {
                 - Use Object.keys(...) or helpers.schema(...) only for a genuinely undocumented mod-added property shape. Make at most one focused discovery call, then one analysis call; never probe the root, then the array, then every row in separate calls.
                 - When the core contract, a loaded Skill, or an example already documents the task and fields, the first run_javascript call should perform the complete filter/join/aggregate/sort and return answer-sized data.
                 - Pass the smallest required roots to run_javascript (for example ["items"] or ["items","recipes"]).
+                - For spatial block/entity observation, pass roots ["world"] and call the top-level world object documented by the core contract; there is no mc.world and no Skill preflight is required.
                 - End every program with an explicit return. Return only the compact answer data you need, not a whole catalog.
                 - Canonical results stay in a request workspace. When a result is summarized, preserve its exact handle and pass it in handles before using workspace.open(handle) in a later program.
                 - Preserve stable result, source, recipe, document, invocation, and evidence handles exactly. Never construct or repair one.

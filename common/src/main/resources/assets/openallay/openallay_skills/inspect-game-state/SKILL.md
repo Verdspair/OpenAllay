@@ -31,6 +31,8 @@ retain authority/completeness metadata. If a section is partial or unavailable,
 say what is unavailable and stop rather than guessing.
 
 Recipes and Guides are separate deep-content domains; load their Skills for
-those questions. Nearby blocks/entities, maps, structures, another container's
-contents, arbitrary paths/classes, raw commands, and every write or world
-interaction are outside this Skill.
+those questions. Spatial block/entity observation is also outside this
+troubleshooting Skill: use the core top-level `world` binding directly with
+`roots: ["world"]` when that request capability is available. Maps, structures,
+another container's contents, arbitrary paths/classes, raw commands, and every
+write or world interaction remain outside this Skill.
