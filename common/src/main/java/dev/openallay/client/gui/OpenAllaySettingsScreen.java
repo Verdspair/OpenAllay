@@ -196,12 +196,14 @@ public final class OpenAllaySettingsScreen extends Screen {
                         : community.packages().getFirst().id();
             }
             ExtensionSettingsProjection extensionProjection = extensionProjection();
-            if (selectedExtensionId == null
-                    || extensionProjection.find(selectedExtensionId).isEmpty()) {
-                List<ExtensionSettingsProjection.ExtensionCard> cards =
-                        extensionTab == ExtensionTab.INSTALLED
-                                ? extensionProjection.installed()
-                                : extensionProjection.community();
+            List<ExtensionSettingsProjection.ExtensionCard> cards =
+                    extensionTab == ExtensionTab.INSTALLED
+                            ? extensionProjection.installed()
+                            : extensionProjection.community();
+            boolean selectionVisible = selectedExtensionId != null
+                    && cards.stream()
+                            .anyMatch(extension -> extension.id().equals(selectedExtensionId));
+            if (!selectionVisible) {
                 selectedExtensionId = cards.isEmpty() ? null : cards.getFirst().id();
             }
             if (layout != null) {
@@ -2434,9 +2436,13 @@ public final class OpenAllaySettingsScreen extends Screen {
     }
 
     private Optional<ExtensionSettingsProjection.ExtensionCard> selectedExtension() {
-        return selectedExtensionId == null
-                ? Optional.empty()
-                : extensionProjection().find(selectedExtensionId);
+        if (selectedExtensionId == null) {
+            return Optional.empty();
+        }
+        ExtensionSettingsProjection projection = extensionProjection();
+        return extensionTab == ExtensionTab.INSTALLED
+                ? projection.findInstalled(selectedExtensionId)
+                : projection.findCommunity(selectedExtensionId);
     }
 
     private static String extensionStateKey(

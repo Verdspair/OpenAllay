@@ -127,6 +127,14 @@ public record ExtensionSettingsProjection(
         return extensions.stream().filter(extension -> extension.id().equals(id)).findFirst();
     }
 
+    public java.util.Optional<ExtensionCard> findInstalled(String id) {
+        return installed().stream().filter(extension -> extension.id().equals(id)).findFirst();
+    }
+
+    public java.util.Optional<ExtensionCard> findCommunity(String id) {
+        return community().stream().filter(extension -> extension.id().equals(id)).findFirst();
+    }
+
     public record RuntimeCard(
             String id,
             String titleKey,

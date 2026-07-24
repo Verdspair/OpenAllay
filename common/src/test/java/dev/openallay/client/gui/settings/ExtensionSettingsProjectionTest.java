@@ -110,6 +110,10 @@ final class ExtensionSettingsProjectionTest {
                 projection.community().stream()
                         .map(ExtensionSettingsProjection.ExtensionCard::id)
                         .toList());
+        assertTrue(projection.findCommunity("community:sample").isPresent());
+        assertTrue(projection.findInstalled("community:sample").isEmpty());
+        assertTrue(projection.findInstalled("openallay:core").isPresent());
+        assertTrue(projection.findCommunity("openallay:core").isEmpty());
         assertTrue(projection.community().getFirst().installable());
         assertTrue(projection.catalog().available());
     }
