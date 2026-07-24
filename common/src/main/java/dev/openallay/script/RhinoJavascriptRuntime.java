@@ -12,6 +12,7 @@ import dev.openallay.script.host.RhinoHostAdapter;
 import dev.openallay.script.schema.DeclaredHostRoots;
 import dev.openallay.script.schema.HostSchemaCatalog;
 import dev.openallay.script.command.JavascriptCommandBridge;
+import dev.openallay.world.JavascriptWorldBridge;
 import dev.openallay.script.result.JavascriptResultShape;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -129,6 +130,7 @@ public final class RhinoJavascriptRuntime {
                 workspaceValues,
                 Map.of(),
                 cancellation,
+                null,
                 null);
     }
 
@@ -144,7 +146,8 @@ public final class RhinoJavascriptRuntime {
                 workspaceValues,
                 Map.of(),
                 cancellation,
-                commands);
+                commands,
+                null);
     }
 
     public JavascriptExecution execute(
@@ -154,6 +157,24 @@ public final class RhinoJavascriptRuntime {
             Map<String, JavascriptResultShape> workspaceShapes,
             CancellationSignal cancellation,
             JavascriptCommandBridge commands) {
+        return execute(
+                source,
+                minecraftRoots,
+                workspaceValues,
+                workspaceShapes,
+                cancellation,
+                commands,
+                null);
+    }
+
+    public JavascriptExecution execute(
+            String source,
+            Map<String, Object> minecraftRoots,
+            Map<String, JsonElement> workspaceValues,
+            Map<String, JavascriptResultShape> workspaceShapes,
+            CancellationSignal cancellation,
+            JavascriptCommandBridge commands,
+            JavascriptWorldBridge world) {
         if (source == null || source.isBlank()) {
             throw new JavascriptExecutionException(
                     "javascript_invalid", "JavaScript source must not be blank");
@@ -194,6 +215,9 @@ public final class RhinoJavascriptRuntime {
                     workspace(context, scope, adapter, workspaceValues, workspaceShapes));
             if (commands != null) {
                 defineGlobal(context, scope, "commands", commands.bind(context, scope, adapter));
+            }
+            if (world != null) {
+                defineGlobal(context, scope, "world", world.bind(context, scope, adapter));
             }
             LinkedHashSet<String> usedModules = new LinkedHashSet<>();
             defineGlobal(

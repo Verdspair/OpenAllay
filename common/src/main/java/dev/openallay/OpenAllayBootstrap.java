@@ -23,6 +23,7 @@ import dev.openallay.script.workspace.AgentResultWorkspaceRegistry;
 import dev.openallay.script.workspace.JavascriptResultPresenter;
 import dev.openallay.script.extension.JavascriptDataModuleRegistry;
 import dev.openallay.script.command.CommandCapabilityRuntime;
+import dev.openallay.world.WorldObservationRuntime;
 import dev.openallay.trace.json.TraceParser;
 import dev.openallay.trace.minecraft.TraceReplayService;
 import dev.openallay.trace.minecraft.TraceRepository;
@@ -49,6 +50,7 @@ public final class OpenAllayBootstrap {
         JavascriptDataModuleRegistry javascriptModules =
                 new JavascriptDataModuleRegistry();
         CommandCapabilityRuntime commands = new CommandCapabilityRuntime();
+        WorldObservationRuntime worldObservations = new WorldObservationRuntime();
         ToolRegistry tools = new ToolRegistry();
         tools.register(
                 "openallay:builtins",
@@ -58,7 +60,8 @@ public final class OpenAllayBootstrap {
                         javascriptWorkspaces,
                         knowledge,
                         javascriptModules,
-                        commands));
+                        commands,
+                        worldObservations));
         PatchouliMultiblockStore patchouliMultiblocks = new PatchouliMultiblockStore();
         SkillRepository skills = new SkillRepository(
                 new SkillParser(),
@@ -84,6 +87,7 @@ public final class OpenAllayBootstrap {
                 patchouliMultiblocks,
                 javascriptModules,
                 commands,
+                worldObservations,
                 skills,
                 new DevelopmentToolInspector(tools),
                 traceReplay,
@@ -148,7 +152,8 @@ public final class OpenAllayBootstrap {
                 javascriptWorkspaces,
                 knowledge,
                 new JavascriptDataModuleRegistry(),
-                new CommandCapabilityRuntime());
+                new CommandCapabilityRuntime(),
+                new WorldObservationRuntime());
     }
 
     static List<Tool<?, ?>> builtinTools(
@@ -163,7 +168,8 @@ public final class OpenAllayBootstrap {
                 javascriptWorkspaces,
                 knowledge,
                 javascriptModules,
-                new CommandCapabilityRuntime());
+                new CommandCapabilityRuntime(),
+                new WorldObservationRuntime());
     }
 
     static List<Tool<?, ?>> builtinTools(
@@ -173,12 +179,31 @@ public final class OpenAllayBootstrap {
             KnowledgeRegistry knowledge,
             JavascriptDataModuleRegistry javascriptModules,
             CommandCapabilityRuntime commands) {
+        return builtinTools(
+                platform,
+                gson,
+                javascriptWorkspaces,
+                knowledge,
+                javascriptModules,
+                commands,
+                new WorldObservationRuntime());
+    }
+
+    static List<Tool<?, ?>> builtinTools(
+            PlatformService platform,
+            Gson gson,
+            AgentResultWorkspaceRegistry javascriptWorkspaces,
+            KnowledgeRegistry knowledge,
+            JavascriptDataModuleRegistry javascriptModules,
+            CommandCapabilityRuntime commands,
+            WorldObservationRuntime worldObservations) {
         return List.of(new RunJavascriptTool(
                 new RhinoJavascriptRuntime(),
                 context -> new MinecraftAgentHostGraph(
                         context, knowledge::snapshot, javascriptModules),
                 javascriptWorkspaces,
                 new JavascriptResultPresenter(),
-                commands));
+                commands,
+                worldObservations));
     }
 }

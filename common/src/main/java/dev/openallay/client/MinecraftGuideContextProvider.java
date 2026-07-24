@@ -16,6 +16,7 @@ import dev.openallay.recipe.RecipeProviderReadiness;
 import dev.openallay.recipe.RecipeProviderReadinessGate;
 import dev.openallay.tool.ToolResult;
 import dev.openallay.script.command.MinecraftCommandCapture;
+import dev.openallay.world.MinecraftClientWorldObservationCoordinator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -67,6 +68,13 @@ public final class MinecraftGuideContextProvider implements GuideContextProvider
                             .capture(client, capabilities, correlationId);
             MinecraftCommandCapture.capture(
                     client, runtime.commands(), correlationId, context.capturedAt());
+            context.player().ifPresent(player -> runtime.worldObservations().capture(
+                    correlationId,
+                    new MinecraftClientWorldObservationCoordinator(
+                            client,
+                            runtime.platform(),
+                            player.uuid(),
+                            player.dimension())));
             return new ToolResult.Success<>(context);
         } catch (RuntimeException failure) {
             return new ToolResult.Failure<>(

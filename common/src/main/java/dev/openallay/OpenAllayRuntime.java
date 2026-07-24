@@ -8,6 +8,7 @@ import dev.openallay.platform.PlatformService;
 import dev.openallay.skill.SkillRepository;
 import dev.openallay.script.extension.JavascriptDataModuleRegistry;
 import dev.openallay.script.command.CommandCapabilityRuntime;
+import dev.openallay.world.WorldObservationRuntime;
 import dev.openallay.tool.ToolRegistry;
 import dev.openallay.trace.minecraft.TraceReplayService;
 import java.util.Objects;
@@ -19,6 +20,7 @@ public record OpenAllayRuntime(
         PatchouliMultiblockStore patchouliMultiblocks,
         JavascriptDataModuleRegistry javascriptModules,
         CommandCapabilityRuntime commands,
+        WorldObservationRuntime worldObservations,
         SkillRepository skills,
         DevelopmentToolInspector developmentTools,
         TraceReplayService traceReplay,
@@ -27,6 +29,7 @@ public record OpenAllayRuntime(
         Objects.requireNonNull(capabilitySettings, "capabilitySettings");
         Objects.requireNonNull(javascriptModules, "javascriptModules");
         Objects.requireNonNull(commands, "commands");
+        Objects.requireNonNull(worldObservations, "worldObservations");
     }
 
     public OpenAllayRuntime(
@@ -46,6 +49,7 @@ public record OpenAllayRuntime(
                 patchouliMultiblocks,
                 javascriptModules,
                 new CommandCapabilityRuntime(),
+                new WorldObservationRuntime(),
                 skills,
                 developmentTools,
                 traceReplay,
@@ -68,6 +72,7 @@ public record OpenAllayRuntime(
                 patchouliMultiblocks,
                 new JavascriptDataModuleRegistry(),
                 new CommandCapabilityRuntime(),
+                new WorldObservationRuntime(),
                 skills,
                 developmentTools,
                 traceReplay,
@@ -89,6 +94,7 @@ public record OpenAllayRuntime(
                 patchouliMultiblocks,
                 new JavascriptDataModuleRegistry(),
                 new CommandCapabilityRuntime(),
+                new WorldObservationRuntime(),
                 skills,
                 developmentTools,
                 traceReplay,

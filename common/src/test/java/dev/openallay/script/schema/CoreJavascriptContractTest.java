@@ -23,6 +23,9 @@ final class CoreJavascriptContractTest {
         assertTrue(rendered.contains("schema.describe(path)"));
         assertTrue(rendered.contains("workspace.open(handle)"));
         assertTrue(rendered.contains("require(id)"));
+        assertTrue(rendered.contains("world.inspect("));
+        assertTrue(rendered.contains("world.entities("));
+        assertTrue(rendered.contains("world.entity(observationId)"));
         assertFalse(rendered.contains("analyze-game-data"));
     }
 

@@ -25,6 +25,7 @@ import dev.openallay.tool.ToolDescriptor;
 import dev.openallay.tool.ToolResult;
 import dev.openallay.tool.RequestScopeParticipant;
 import dev.openallay.tool.ModelFacingToolOutput;
+import dev.openallay.world.WorldObservationRuntime;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -101,12 +102,14 @@ public final class RunJavascriptTool
                     ContextCapability.PLAYER,
                     ContextCapability.OBSERVABLE_GAME_STATE));
     private static final String COMMANDS_BINDING = "commands";
+    private static final String WORLD_BINDING = "world";
 
     private final RhinoJavascriptRuntime runtime;
     private final Function<ToolInvocationContext, MinecraftAgentHostGraph> graphFactory;
     private final AgentResultWorkspaceRegistry workspaces;
     private final JavascriptResultPresenter presenter;
     private final CommandCapabilityRuntime commands;
+    private final WorldObservationRuntime worldObservations;
     private final ConcurrentMap<String, MinecraftAgentHostGraph> graphs =
             new ConcurrentHashMap<>();
 
@@ -120,7 +123,8 @@ public final class RunJavascriptTool
                 graphFactory,
                 workspaces,
                 presenter,
-                new CommandCapabilityRuntime());
+                new CommandCapabilityRuntime(),
+                new WorldObservationRuntime());
     }
 
     public RunJavascriptTool(
@@ -129,11 +133,29 @@ public final class RunJavascriptTool
             AgentResultWorkspaceRegistry workspaces,
             JavascriptResultPresenter presenter,
             CommandCapabilityRuntime commands) {
+        this(
+                runtime,
+                graphFactory,
+                workspaces,
+                presenter,
+                commands,
+                new WorldObservationRuntime());
+    }
+
+    public RunJavascriptTool(
+            RhinoJavascriptRuntime runtime,
+            Function<ToolInvocationContext, MinecraftAgentHostGraph> graphFactory,
+            AgentResultWorkspaceRegistry workspaces,
+            JavascriptResultPresenter presenter,
+            CommandCapabilityRuntime commands,
+            WorldObservationRuntime worldObservations) {
         this.runtime = runtime;
         this.graphFactory = graphFactory;
         this.workspaces = workspaces;
         this.presenter = presenter;
         this.commands = java.util.Objects.requireNonNull(commands, "commands");
+        this.worldObservations =
+                java.util.Objects.requireNonNull(worldObservations, "worldObservations");
     }
 
     @Override
@@ -175,14 +197,23 @@ public final class RunJavascriptTool
             MinecraftAgentHostGraph graph = graphs.computeIfAbsent(
                     context.correlationId(), ignored -> graphFactory.apply(context));
             var commandBridge = commands.bridge(context.correlationId(), cancellation);
+            var worldBridge =
+                    worldObservations.bridge(context.correlationId(), cancellation);
             boolean commandsRequested = input.roots().contains(COMMANDS_BINDING);
             if (commandsRequested && commandBridge.isEmpty()) {
                 throw new JavascriptExecutionException(
                         "javascript_root_unavailable",
                         "Requested JavaScript binding is unavailable: commands");
             }
+            boolean worldRequested = input.roots().contains(WORLD_BINDING);
+            if (worldRequested && worldBridge.isEmpty()) {
+                throw new JavascriptExecutionException(
+                        "javascript_root_unavailable",
+                        "Requested JavaScript binding is unavailable: world");
+            }
             List<String> minecraftRoots = input.roots().stream()
-                    .filter(root -> !COMMANDS_BINDING.equals(root))
+                    .filter(root -> !COMMANDS_BINDING.equals(root)
+                            && !WORLD_BINDING.equals(root))
                     .toList();
             var selectedRoots = graph.select(minecraftRoots);
             if (graph.evidence().isEmpty()) {
@@ -198,7 +229,8 @@ public final class RunJavascriptTool
                     workspace.select(input.handles()),
                     workspace.selectShapes(input.handles()),
                     cancellation,
-                    commandBridge.orElse(null));
+                    commandBridge.orElse(null),
+                    worldBridge.orElse(null));
             JsonElement canonical = execution.value();
             String handle = workspace.store(canonical, execution.shape());
             List<EvidenceMetadata> evidence = graph.evidence();
@@ -240,6 +272,7 @@ public final class RunJavascriptTool
         graphs.remove(correlationId);
         workspaces.close(correlationId);
         commands.closeRequest(correlationId);
+        worldObservations.closeRequest(correlationId);
     }
 
     private static String evidenceSummary(List<EvidenceMetadata> evidence) {
