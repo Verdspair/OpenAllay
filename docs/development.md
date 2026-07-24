@@ -648,6 +648,14 @@ navigation and native layouts. REI advertises item-focused recipe/usage
 navigation but explicitly reports that exact durable-reference navigation is
 unsupported. Losing either runtime degrades only that provider projection.
 
+External Extensions use the same loader-owned startup path. A Fabric
+`ModInitializer` calls `OpenAllayFabric.registerExtension(...)`; a NeoForge mod
+constructor calls `OpenAllayNeoForge.registerExtension(...)`. Registration may
+happen before or after OpenAllay bootstrap: early candidates are queued and
+late candidates are validated against the live registry. OpenAllay deliberately
+does not scan classes or hot-load packages, so installing or importing a JAR
+always requires a normal loader restart.
+
 EMI is not registered as a 26.2 Extension. Its official project and artifact
 catalog currently publish through Minecraft 1.21.x rather than a compatible
 26.2 public API artifact, so OpenAllay does not compile against, advertise, or
