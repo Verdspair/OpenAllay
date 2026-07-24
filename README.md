@@ -2,80 +2,103 @@
 
 [简体中文](README.zh-CN.md)
 
-OpenAllay is a modern Minecraft Agent for modded play. Ask a question in plain
-language and it can look at your game, search recipes and guides, check your
-inventory, and bring the useful details together in one answer.
-
-It works with the model you choose and is designed to grow with knowledge and
-integrations created by players, modpacks, and communities.
+OpenAllay is a modern Minecraft Agent built for modpacks. Ask naturally: it can
+understand the task, explore the game data available in your current instance,
+work through several steps, and turn the result into a useful in-game answer.
 
 ![OpenAllay brings Skills, Extensions, shared models, rich interfaces, and visual guidance into Minecraft](docs/media/openallay-banner.png)
 
-*Ask naturally, follow the progress, and explore rich answers without leaving
-Minecraft.*
+*One companion for the recipes, systems, settings, and knowledge spread across
+an entire modpack.*
 
-## Why OpenAllay?
+## A modern Agent inside Minecraft
 
-### Answers grounded in your game
+OpenAllay is more than a chat box with a collection of fixed look-up buttons.
+It combines model context, tool use, Skills, and an embedded JavaScript analysis
+runtime. When a question needs real game data, the Agent can write a focused
+analysis for that question, compare a whole dataset at once, and continue from
+the result.
 
-OpenAllay does more than generate Minecraft-flavoured text. It can inspect the
-mods and settings in your current instance, search recipes and guide books, and
-compare recipe requirements with the items you actually have. For more involved
-questions, it can work through several steps before giving you an answer.
-It can also compare whole sets of installed content at once—for example,
-ranking every sword by damage or finding the simplest recipe—rather than
-checking candidates one by one.
+That makes requests such as “rank every sword by damage” or “find the container
+with the cheapest recipe” one coherent analysis instead of dozens of repeated
+single-item searches.
 
-### A native in-game experience
+### Skills that teach workflows
+
+Skills give the Agent progressively disclosed instructions for a mod, activity,
+or type of problem. OpenAllay loads the relevant Skill when a task needs it,
+while simple questions can go straight to the available game data. Bundled
+Skills already cover game-data analysis, Minecraft questions, game-state
+inspection, and the optional command workflow.
+
+### Extensions that grow with your modpack
+
+OpenAllay Extensions provide typed game data, reusable JavaScript modules, mod
+integrations, and native result views. The in-game Extensions page shows what
+is currently connected and which data roots are available. This is the
+foundation for community-built integrations that can understand new mods
+without turning every capability into another one-purpose Agent tool.
+
+### Results made for Minecraft
 
 Answers can include item icons, ingredient slots, recipe layouts, tables,
-progress steps, and expandable details. The screen stays responsive while an
-answer is being prepared, and you can close it without cancelling the request.
+progress steps, and expandable details. Typed JavaScript results can become
+native recipe or item presentations automatically. In Debug mode, tool details
+also show the submitted JavaScript and the useful input and output behind the
+answer.
 
 ### Your model, your choice
 
 Connect an OpenAI-compatible Chat Completions or Anthropic Messages provider,
-keep several model profiles, and switch between them from the conversation.
-OpenAllay works in single-player and can also be used on ordinary multiplayer
-servers without requiring the server to install the mod. A server that does
-install OpenAllay may offer a shared model to its players.
+save several model profiles, and switch between them from the conversation.
+OpenAllay works in single-player and on ordinary multiplayer servers without
+requiring the server to install it. A server that does install OpenAllay may
+offer a shared model and additional server-side capabilities.
 
 ### Conversations that stay useful
 
-Keep different topics in separate sessions, return to saved conversations,
-copy useful messages, or export a session for later. Skills give OpenAllay
-extra guidance for particular activities, mods, and kinds of questions, and
-you can view or manage them in-game.
+Keep topics in separate sessions, return to saved conversations, copy useful
+messages, or export a complete session. Live status explains whether the Agent
+is loading guidance, analysing game data, waiting for the model, or completing
+an action.
 
-## What you can do today
+## What OpenAllay 0.2.0 can do
 
-- Find recipes and item uses, then check whether your inventory contains the
-  required ingredients.
-- Compare, rank, group, and connect information across all captured items,
-  effects, recipes, settings, and guides in one request.
-- Inspect installed mods, video settings, resource packs, coordinates, and
-  F3-style information.
-- Search supported guide-book content and local notes.
-- Follow multi-step requests through live progress and friendly tool details.
-- Use multiple conversations, saved history, model profiles, copy, and export
-  from the native OpenAllay screen.
-- Use recipe information from the game and compatible viewers, including JEI
-  and REI, while keeping the core recipe experience available without them.
+- Analyse and connect items, recipes, effects, tags, registries, guides,
+  settings, and player-visible game state with one JavaScript program.
+- Filter, group, sort, rank, aggregate, and compare whole collections instead
+  of querying one candidate per model round.
+- Discover the available data schema progressively, including typed fields
+  contributed by compatible Extensions.
+- Reuse bundled JavaScript modules for deterministic domain work such as recipe
+  and inventory calculations.
+- Inspect installed mods, video and gameplay settings, resource packs,
+  coordinates, dimension, and F3-style diagnostics.
+- Search supported guide-book content and use recipe information from the game,
+  JEI, REI, and recipe-rich mods such as Farmer's Delight.
+- Present trusted recipes, items, tables, compact values, and generic results
+  through data-driven native views.
+- Keep multiple conversations, durable history, model profiles, copy, export,
+  cancellation, and retry in the native OpenAllay screen.
+- Optionally expose the current Minecraft command set—including commands added
+  by mods—to the Agent. This experimental capability is disabled by default and
+  can be enabled from **Settings → Extensions**.
 
 ## Quick start
 
-Download the OpenAllay snapshot for **Fabric** or **NeoForge** from Modrinth.
-The current release targets Minecraft **26.2** and requires Java **25**. Fabric
-players also need the matching Fabric API.
+Download OpenAllay **0.2.0** for **Fabric** or **NeoForge** from Modrinth. This
+release targets Minecraft **26.2** and requires Java **25**. Fabric players also
+need the matching Fabric API.
 
-Place the downloaded JAR in your instance's `mods` folder and start Minecraft.
-Then connect a model:
+Place the downloaded JAR in your instance's `mods` folder, start Minecraft, and
+connect a model:
 
 1. Enter a world and press **K**, or run `/guide`.
-2. Select the gear button, open **Models**, and add a model profile.
-3. Choose **OpenAI-compatible Chat Completions** or **Anthropic Messages**.
+2. Select the gear button and open **Client Models**.
+3. Add an **OpenAI-compatible Chat Completions** or **Anthropic Messages**
+   profile.
 4. Enter the provider URL, model ID, context window, and API key, then save.
-5. Select the new profile and start asking questions.
+5. Select the profile from the conversation header and start asking questions.
 
 On Fabric, Architectury **21.0.2 and earlier** prevents text input on the
 OpenAllay screen. Upgrade to **21.0.4 or newer**, or remove Architectury.
@@ -83,69 +106,74 @@ OpenAllay screen. Upgrade to **21.0.4 or newer**, or remove Architectury.
 ## Try asking
 
 - “Which mods are installed, and what versions are they?”
+- “Which sword in this modpack has the highest base damage?”
+- “Which craftable container needs the fewest total ingredients?”
 - “How do I make apple cider? Do I already have the ingredients?”
-- “What can I craft with this item?”
-- “Why can't I find this recipe?”
+- “Compare every food from Farmer's Delight by nutrition.”
 - “Which resource packs are active?”
-- “Show my current coordinates and F3 information.”
+- “Show my coordinates, dimension, and F3 information.”
 - “Search my installed guide books for magical crops.”
-- “Which sword in this pack has the highest damage?”
-- “Which container needs the fewest materials to craft?”
+- “What fields are available for potion effects in this modpack?”
+
+With experimental commands enabled, you can also ask OpenAllay to perform an
+available Minecraft command and read the game's response.
 
 ## Using the in-game screen
 
-OpenAllay opens in a non-pausing Minecraft screen. The status bar shows what it
-is doing and how long the current request has been running.
+OpenAllay opens in a non-pausing Minecraft screen.
 
 - **Enter** sends a message; **Shift+Enter** adds a new line.
 - **Stop** cancels the current request; **Retry** starts it again.
 - **Escape** closes only the screen. Reopen it to see the continuing answer.
+- Select a tool card to inspect its input and actual output.
+- Enable **Debug mode** when you want to inspect the JavaScript written by the
+  Agent and the complete live diagnostics.
 - Use separate sessions for different topics, or switch to another configured
   model whenever you like.
 
 ## Mod and content support
 
-OpenAllay builds on content already present in your modded instance:
+OpenAllay builds on content already present in your modpack:
 
 - **JEI** recipes can use JEI's familiar layout inside OpenAllay.
 - **REI** can contribute recipe information to OpenAllay's recipe experience.
 - **Patchouli** guide-book content in active resources can be searched in-game.
-- Recipe-rich mods such as **Farmer's Delight** work with recipe search,
+- Recipe-rich mods such as **Farmer's Delight** work with recipe analysis,
   ingredient checks, and visual recipe pages.
+- Mod-added registries, fields, and commands can be discovered through the
+  typed Extension and command catalogs when their integrations are available.
 
-These integrations are optional. OpenAllay remains usable when one of them is
-not installed or is unavailable for your setup.
+These integrations are optional. OpenAllay remains useful when one of them is
+not installed or is unavailable for the current setup.
 
-## Where OpenAllay is headed
+## Roadmap
 
-OpenAllay is being developed as an open platform, but the larger platform is a
-roadmap rather than a promise about the current snapshot:
+OpenAllay is growing into an open Agent platform for Minecraft:
 
-- **OpenAllay Skills** will become easier for players and communities to
-  create, improve, share, and discover.
-- **OpenAllay Extensions** are planned to add community-built tools, knowledge
-  sources, mod integrations, and game-native interface components.
-- **OpenAllay Host** is the planned server experience for shared models and a
-  centrally managed companion service.
-- **OpenAllay Studio** is the future creative toolkit for richer in-game
-  content, dynamic interfaces, and reusable guided experiences.
+- **OpenAllay Skills** — workflows and domain knowledge that players, modpack
+  authors, and communities can create, improve, and share.
+- **OpenAllay Extensions** — new game-data adapters, reusable modules, mod
+  integrations, Agent capabilities, and native result experiences.
+- **OpenAllay Host** — shared models and centrally managed Agent services for
+  servers and communities.
+- **OpenAllay Studio** — a creative environment for rich in-game experiences,
+  dynamic interfaces, and reusable visual guidance.
 
 ### Next
 
-- Player memory that you can review, correct, pin, or forget.
-- Better workflows for creating and sharing community Skills.
-- More knowledge sources and integrations for mods, guides, and Minecraft
-  content.
-- The first supported paths for community Extensions.
+- A player memory system that you can review, correct, pin, or forget.
+- Better workflows for creating, editing, and sharing Skills and Extensions.
+- More first-party data adapters, knowledge sources, and mod integrations.
+- A clearer experimental-action experience with player approvals.
 
 ### Longer term
 
 - Understand maps, nearby environments, structures, blocks, and containers.
 - Turn structures and documentation into step-by-step visual tutorials,
   including Ponder-style guidance when a compatible integration is available.
-- Help plan production chains across machines, intermediate materials, and
-  large technology trees.
-- Grow OpenAllay Host, Studio, and the wider Extensions ecosystem.
+- Plan production chains across machines, intermediate materials, and large
+  technology trees.
+- Grow OpenAllay Host, Studio, and the wider community ecosystem.
 
 OpenAllay is an independent project and is not affiliated with or endorsed by
 Mojang Studios or Microsoft.

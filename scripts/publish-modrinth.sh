@@ -72,7 +72,7 @@ payload = {
     "project_type": "mod",
     "slug": "openallay",
     "title": "OpenAllay",
-    "description": "A modern Minecraft Agent for modded play.",
+    "description": "A modern Minecraft Agent with Skills, Extensions, and data-driven game analysis.",
     "body": body,
     "categories": ["utility"],
     "additional_categories": ["fabric", "neoforge"],
@@ -104,12 +104,55 @@ print(value)
 PY
 ) || fail 'project response did not contain an ID'
 
-# A newly created project is submitted for moderation after its version files
-# exist. Existing approved/processing projects ignore this step below.
-project_was_created=false
-if [[ "$project_status" == 200 ]] && [[ -f "$work/project.json" ]]; then
-  project_was_created=true
-fi
+project_review_status=$(python3 - "$project_response" <<'PY'
+import json
+import sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("status", "unknown"))
+PY
+) || fail 'project response did not contain a readable status'
+
+# Keep the Modrinth page synchronized with the player-facing README on every
+# release. The project may be invisible to anonymous callers while it is still
+# a draft or in moderation, so this update uses the authenticated project ID.
+python3 - "$repository" "$work/project-update.json" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+output = pathlib.Path(sys.argv[2])
+body = (root / "README.md").read_text(encoding="utf-8")
+body = body.replace(
+    "docs/media/openallay-banner.png",
+    "https://raw.githubusercontent.com/nkanf-dev/OpenAllay/main/docs/media/openallay-banner.png",
+).replace(
+    "README.zh-CN.md",
+    "https://github.com/nkanf-dev/OpenAllay/blob/main/README.zh-CN.md",
+).replace(
+    "docs/development.md",
+    "https://github.com/nkanf-dev/OpenAllay/blob/main/docs/development.md",
+).replace(
+    "LICENSE",
+    "https://github.com/nkanf-dev/OpenAllay/blob/main/LICENSE",
+)
+payload = {
+    "description": "A modern Minecraft Agent with Skills, Extensions, and data-driven game analysis.",
+    "body": body,
+    "categories": ["utility"],
+    "additional_categories": ["fabric", "neoforge"],
+    "client_side": "required",
+    "server_side": "optional",
+    "source_url": "https://github.com/nkanf-dev/OpenAllay",
+    "issues_url": "https://github.com/nkanf-dev/OpenAllay/issues",
+}
+output.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+PY
+project_update_status=$(api_status PATCH "$api/project/$project_id" \
+  "$work/project-update-response.json" \
+  --header 'Content-Type: application/json' \
+  --data-binary "@$work/project-update.json")
+[[ "$project_update_status" == 204 ]] \
+  || fail "project metadata update returned HTTP $project_update_status"
 
 release_type=release
 if [[ "$version" == *-* ]]; then
@@ -182,7 +225,7 @@ publish_loader fabric \
 publish_loader neoforge \
   "neoforge/build/libs/openallay-neoforge-${minecraft_version}-${version}.jar"
 
-if [[ "$project_was_created" == true ]]; then
+if [[ "$project_review_status" == draft ]]; then
   printf '{"requested_status":"approved"}' > "$work/submit.json"
   submit_status=$(api_status PATCH "$api/project/$project_id" "$work/submit-response.json" \
     --header 'Content-Type: application/json' \
@@ -192,5 +235,6 @@ if [[ "$project_was_created" == true ]]; then
 fi
 
 printf 'modrinth_project_id=%s\n' "$project_id"
+printf 'modrinth_project_status_before_release=%s\n' "$project_review_status"
 printf 'modrinth_version=%s\n' "$version"
 printf 'modrinth_publication=passed\n'
