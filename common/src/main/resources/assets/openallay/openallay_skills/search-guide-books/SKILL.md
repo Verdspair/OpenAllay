@@ -1,12 +1,12 @@
 ---
 name: search-guide-books
-description: Find and synthesize relevant entries from Patchouli and other indexed in-game guide books.
+description: Use when a player needs entries from Patchouli or another indexed in-game guide book.
 allowed-tools: "openallay:run_javascript"
 ---
-Use one JavaScript program to resolve useful exact item/block/effect IDs from
-registry arrays, then search `mc.knowledge` by those IDs, localized names, title,
-body, namespace, and mechanic terms. Rank compact candidate records before
-returning complete bodies; do not return the entire guide corpus.
+Resolve useful exact item/block/effect IDs, then search `mc.knowledge` by those
+IDs, localized names, title, body, namespace, and mechanic terms. Rank
+candidate records before opening complete bodies; do not treat a search snippet
+as the complete guide entry.
 
 Enumerate only matches within the captured evidence scope. Preserve sourceId,
 documentId, structureRef, provenance, and evidence. Treat missing, malformed,

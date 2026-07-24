@@ -67,6 +67,13 @@ final class AgentSkillsSubsetTest {
                         "guide/SKILL.md", minimal("guide", "description"),
                         "guide/scripts/run.sh", "danger"),
                 SkillSource.Origin.LOCAL)));
+        assertThrows(IllegalArgumentException.class, () -> parser.parse(new SkillSource(
+                "local:test",
+                "guide/SKILL.md",
+                Map.of(
+                        "guide/SKILL.md", minimal("guide", "description"),
+                        "guide/assets/payload.js", "danger"),
+                SkillSource.Origin.LOCAL)));
         assertThrows(IllegalArgumentException.class, () -> parser.parse(source(
                 "guide", minimal("guide", "description").replace(
                         "allowed-tools:", "metadata:\n  numeric: 42\nallowed-tools:"))));

@@ -1,5 +1,8 @@
 package dev.openallay.settings.skill;
 
+import dev.openallay.community.CommunityCatalogClient;
+import dev.openallay.community.CommunityCatalogManifest;
+import dev.openallay.model.CancellationSignal;
 import dev.openallay.skill.BundledSkillLoader;
 import dev.openallay.skill.FilesystemSkillLoader;
 import dev.openallay.skill.SkillDocument;
@@ -7,6 +10,7 @@ import dev.openallay.skill.SkillParser;
 import dev.openallay.skill.SkillRepository;
 import dev.openallay.skill.SkillSettingsStore;
 import dev.openallay.skill.SkillSource;
+import dev.openallay.skill.install.SkillPackageInstaller;
 import dev.openallay.settings.ClientSettingsService;
 import dev.openallay.tool.ToolResult;
 import java.nio.file.Path;
@@ -17,9 +21,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.net.URI;
+import java.time.Duration;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /** Player-owned Skill document editing outside the Agent tool surface. */
 public final class SkillSettingsBackend implements ClientSettingsService.SkillActions {
+    public static final URI DEFAULT_CATALOG_URI = URI.create(
+            "https://raw.githubusercontent.com/nkanf-dev/OpenAllay-Skills/main/catalog.json");
     private final SkillRepository repository;
     private final SkillParser parser;
     private final List<SkillSource> bundledSources;
@@ -27,7 +37,10 @@ public final class SkillSettingsBackend implements ClientSettingsService.SkillAc
     private final Set<String> installedMods;
     private final FilesystemSkillLoader localLoader;
     private final SkillSettingsStore store;
+    private final CommunityCatalogClient communityCatalog;
+    private final SkillPackageInstaller installer;
     private volatile SkillSettingsView current = SkillSettingsView.empty();
+    private volatile SkillCommunityView community = SkillCommunityView.unavailable();
 
     public SkillSettingsBackend(
             Path localRoot,
@@ -39,7 +52,9 @@ public final class SkillSettingsBackend implements ClientSettingsService.SkillAc
                 new SkillParser(),
                 new BundledSkillLoader().load(),
                 installedMods,
-                new FilesystemSkillLoader());
+                new FilesystemSkillLoader(),
+                defaultCatalog(localRoot),
+                new SkillPackageInstaller(localRoot, new SkillParser(), installedMods));
     }
 
     public SkillSettingsBackend(
@@ -48,7 +63,15 @@ public final class SkillSettingsBackend implements ClientSettingsService.SkillAc
             SkillParser parser,
             Collection<SkillSource> bundledSources,
             Set<String> installedMods) {
-        this(localRoot, repository, parser, bundledSources, installedMods, new FilesystemSkillLoader());
+        this(
+                localRoot,
+                repository,
+                parser,
+                bundledSources,
+                installedMods,
+                new FilesystemSkillLoader(),
+                null,
+                new SkillPackageInstaller(localRoot, parser, installedMods));
     }
 
     SkillSettingsBackend(
@@ -58,6 +81,26 @@ public final class SkillSettingsBackend implements ClientSettingsService.SkillAc
             Collection<SkillSource> bundledSources,
             Set<String> installedMods,
             FilesystemSkillLoader localLoader) {
+        this(
+                localRoot,
+                repository,
+                parser,
+                bundledSources,
+                installedMods,
+                localLoader,
+                null,
+                new SkillPackageInstaller(localRoot, parser, installedMods));
+    }
+
+    SkillSettingsBackend(
+            Path localRoot,
+            SkillRepository repository,
+            SkillParser parser,
+            Collection<SkillSource> bundledSources,
+            Set<String> installedMods,
+            FilesystemSkillLoader localLoader,
+            CommunityCatalogClient communityCatalog,
+            SkillPackageInstaller installer) {
         this.localRoot = Objects.requireNonNull(localRoot, "localRoot")
                 .toAbsolutePath()
                 .normalize();
@@ -67,11 +110,83 @@ public final class SkillSettingsBackend implements ClientSettingsService.SkillAc
         this.installedMods = Set.copyOf(installedMods);
         this.localLoader = Objects.requireNonNull(localLoader, "localLoader");
         this.store = new SkillSettingsStore(this.localRoot, parser);
+        this.communityCatalog = communityCatalog;
+        this.installer = Objects.requireNonNull(installer, "installer");
         reloadInternal();
+        community = buildCommunity(Optional.empty());
     }
 
     public SkillSettingsView currentView() {
         return current;
+    }
+
+    public SkillCommunityView currentCommunityView() {
+        return community;
+    }
+
+    @Override
+    public SkillCommunityView communityView() {
+        return community;
+    }
+
+    @Override
+    public CompletableFuture<ToolResult<SkillCommunityView>> refreshCommunity(
+            CancellationSignal cancellation) {
+        if (communityCatalog == null) {
+            return CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "catalog_unavailable", "The Skill community catalog is not configured"));
+        }
+        return communityCatalog.refresh(cancellation).thenApply(result -> {
+            if (result instanceof ToolResult.Success<CommunityCatalogManifest>) {
+                community = buildCommunity(Optional.empty());
+                return new ToolResult.Success<>(community);
+            }
+            ToolResult.Failure<CommunityCatalogManifest> failure =
+                    (ToolResult.Failure<CommunityCatalogManifest>) result;
+            community = buildCommunity(Optional.of(
+                    new SkillCommunityView.Notice(failure.code(), failure.message())));
+            return new ToolResult.Failure<>(failure.code(), failure.message());
+        });
+    }
+
+    @Override
+    public CompletableFuture<ToolResult<SkillCommunityView>> installCommunity(
+            String id, CancellationSignal cancellation) {
+        if (communityCatalog == null) {
+            return CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "catalog_unavailable", "The Skill community catalog is not configured"));
+        }
+        CommunityCatalogManifest.PackageEntry entry = communityCatalog.current()
+                .flatMap(catalog -> catalog.packages().stream()
+                        .filter(candidate -> candidate.id().equals(id))
+                        .filter(candidate -> candidate.compatibility().minecraft().equals("26.2")
+                                && candidate.compatibility().openallayApi().equals("0.2"))
+                        .max((left, right) -> compareVersions(
+                                left.version(), right.version())))
+                .orElse(null);
+        if (entry == null) {
+            return CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "skill_package_not_found", "The selected community Skill is unavailable"));
+        }
+        return installer.install(entry, cancellation).thenApply(result -> {
+            if (result instanceof ToolResult.Failure<SkillPackageInstaller.InstallResult> failure) {
+                return new ToolResult.Failure<SkillCommunityView>(failure.code(), failure.message());
+            }
+            reloadInternal();
+            community = buildCommunity(Optional.empty());
+            return new ToolResult.Success<>(community);
+        });
+    }
+
+    @Override
+    public synchronized ToolResult<SkillCommunityView> importLocalPackage(Path source) {
+        ToolResult<SkillPackageInstaller.InstallResult> result = installer.importLocal(source);
+        if (result instanceof ToolResult.Failure<SkillPackageInstaller.InstallResult> failure) {
+            return new ToolResult.Failure<>(failure.code(), failure.message());
+        }
+        reloadInternal();
+        community = buildCommunity(Optional.empty());
+        return new ToolResult.Success<>(community);
     }
 
     @Override
@@ -170,6 +285,59 @@ public final class SkillSettingsBackend implements ClientSettingsService.SkillAc
         FilesystemSkillLoader.LoadResult local = localLoader.load(localRoot);
         repository.reload(bundledSources, local, installedMods);
         current = buildView(local);
+    }
+
+    private SkillCommunityView buildCommunity(Optional<SkillCommunityView.Notice> notice) {
+        if (communityCatalog == null || communityCatalog.current().isEmpty()) {
+            return new SkillCommunityView(false, Optional.empty(), List.of(), notice);
+        }
+        CommunityCatalogManifest catalog = communityCatalog.current().orElseThrow();
+        List<SkillCommunityView.Package> packages = catalog.packages().stream().map(entry -> {
+            Optional<String> installedVersion = current.find(entry.id())
+                    .flatMap(skill -> Optional.ofNullable(
+                            skill.metadata().attributes().get("openallay/version")));
+            boolean installed = current.find(entry.id()).isPresent();
+            boolean compatible = entry.compatibility().minecraft().equals("26.2")
+                    && entry.compatibility().openallayApi().equals("0.2");
+            return SkillCommunityView.Package.from(
+                    entry, installed, installedVersion, compatible);
+        }).toList();
+        return new SkillCommunityView(
+                true, Optional.of(catalog.generatedAt()), packages, notice);
+    }
+
+    private static CommunityCatalogClient defaultCatalog(Path localRoot) {
+        Path root = Objects.requireNonNull(localRoot, "localRoot").toAbsolutePath().normalize();
+        Path config = root.getParent();
+        if (config == null) {
+            throw new IllegalArgumentException("Skill root requires a configuration directory");
+        }
+        return new CommunityCatalogClient(
+                DEFAULT_CATALOG_URI,
+                config.resolve("catalogs/skills.json"),
+                Duration.ofSeconds(10),
+                Duration.ofSeconds(30));
+    }
+
+    private static int compareVersions(String left, String right) {
+        String[] leftParts = left.split("[.-]");
+        String[] rightParts = right.split("[.-]");
+        int length = Math.max(leftParts.length, rightParts.length);
+        for (int index = 0; index < length; index++) {
+            String a = index < leftParts.length ? leftParts[index] : "0";
+            String b = index < rightParts.length ? rightParts[index] : "0";
+            int comparison;
+            if (a.chars().allMatch(Character::isDigit)
+                    && b.chars().allMatch(Character::isDigit)) {
+                comparison = new java.math.BigInteger(a).compareTo(new java.math.BigInteger(b));
+            } else {
+                comparison = a.compareTo(b);
+            }
+            if (comparison != 0) {
+                return comparison;
+            }
+        }
+        return 0;
     }
 
     private SkillSettingsView buildView(FilesystemSkillLoader.LoadResult local) {

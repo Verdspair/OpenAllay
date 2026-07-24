@@ -15,6 +15,9 @@ public final class SkillParser {
     private static final Set<String> AGENT_SKILL_FIELDS = Set.of(
             "name", "description", "license", "compatibility", "metadata", "allowed-tools");
     private static final String REQUIRED_MODS_ATTRIBUTE = "openallay/required-mods";
+    private static final Set<String> EXECUTABLE_EXTENSIONS = Set.of(
+            "sh", "bash", "zsh", "fish", "command", "bat", "cmd", "ps1", "exe", "dll",
+            "dylib", "so", "class", "jar", "py", "pyc", "js", "mjs", "cjs");
 
     public SkillDocument parse(SkillSource source) {
         String entry = source.files().get(source.entryPath());
@@ -28,6 +31,28 @@ public final class SkillParser {
         return agentSkillsFormat
                 ? parseAgentSkill(source, root, parsed)
                 : parseLegacySkill(source, root, parsed);
+    }
+
+    /**
+     * Parses an import package whose files are relative to its package root. The declared Skill
+     * name becomes the managed directory identity, so a downloaded ZIP need not add a redundant
+     * wrapper directory around its root {@code SKILL.md}.
+     */
+    public SkillDocument parsePackage(
+            String provenance, Map<String, String> relativeFiles, SkillSource.Origin origin) {
+        Map<String, String> files = Map.copyOf(relativeFiles);
+        String markdown = files.get("SKILL.md");
+        if (markdown == null) {
+            throw new IllegalArgumentException("Skill package requires root SKILL.md");
+        }
+        String name = frontmatter(markdown).requiredScalar("name");
+        LinkedHashMap<String, String> rooted = new LinkedHashMap<>();
+        files.forEach((path, contents) -> rooted.put(name + "/" + path, contents));
+        return parse(new SkillSource(
+                provenance,
+                name + "/SKILL.md",
+                rooted,
+                origin));
     }
 
     private static SkillDocument parseAgentSkill(
@@ -101,6 +126,12 @@ public final class SkillParser {
             }
             String relative = path.substring(root.length());
             String lower = relative.toLowerCase(Locale.ROOT);
+            String filename = lower.substring(lower.lastIndexOf('/') + 1);
+            int extension = filename.lastIndexOf('.');
+            if (extension >= 0
+                    && EXECUTABLE_EXTENSIONS.contains(filename.substring(extension + 1))) {
+                throw new IllegalArgumentException("Executable Skill files are not supported: " + rawPath);
+            }
             if (lower.startsWith("scripts/") || lower.equals("scripts")) {
                 throw new IllegalArgumentException("Skill scripts are not supported: " + rawPath);
             }

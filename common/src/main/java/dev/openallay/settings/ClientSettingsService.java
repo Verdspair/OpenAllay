@@ -25,6 +25,7 @@ import dev.openallay.settings.diagnostics.SettingsDiagnosticsAggregator;
 import dev.openallay.settings.extension.ExtensionSettingsView;
 import dev.openallay.settings.history.HistorySettingsView;
 import dev.openallay.settings.skill.SkillSettingsView;
+import dev.openallay.settings.skill.SkillCommunityView;
 import dev.openallay.script.command.CommandCapabilityConfig;
 import dev.openallay.recipe.config.RecipeClientConfig;
 import dev.openallay.tool.ToolResult;
@@ -121,6 +122,27 @@ public final class ClientSettingsService implements AutoCloseable {
         ToolResult<SkillSettingsView> deleteOverride(String name);
 
         ToolResult<SkillSettingsView> reloadSkills();
+
+        default SkillCommunityView communityView() {
+            return SkillCommunityView.unavailable();
+        }
+
+        default CompletableFuture<ToolResult<SkillCommunityView>> refreshCommunity(
+                CancellationSignal cancellation) {
+            return CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "catalog_unavailable", "The Skill community catalog is unavailable"));
+        }
+
+        default CompletableFuture<ToolResult<SkillCommunityView>> installCommunity(
+                String id, CancellationSignal cancellation) {
+            return CompletableFuture.completedFuture(new ToolResult.Failure<>(
+                    "catalog_unavailable", "The Skill community catalog is unavailable"));
+        }
+
+        default ToolResult<SkillCommunityView> importLocalPackage(java.nio.file.Path source) {
+            return new ToolResult.Failure<>(
+                    "skill_import_unavailable", "Local Skill import is unavailable");
+        }
     }
 
     public interface DisplayActions {
@@ -661,6 +683,29 @@ public final class ClientSettingsService implements AutoCloseable {
                     reservation.id(), loaded, result, "skills_reloaded"));
         });
         return result;
+    }
+
+    public SkillCommunityView skillCommunity() {
+        return skillActions.communityView();
+    }
+
+    public CompletableFuture<ToolResult<SkillCommunityView>> refreshSkillCommunity(
+            CancellationSignal cancellation) {
+        return skillActions.refreshCommunity(Objects.requireNonNull(cancellation, "cancellation"));
+    }
+
+    public CompletableFuture<ToolResult<SkillCommunityView>> installCommunitySkill(
+            String id, CancellationSignal cancellation) {
+        return skillActions.installCommunity(
+                Objects.requireNonNull(id, "id"),
+                Objects.requireNonNull(cancellation, "cancellation"));
+    }
+
+    public CompletableFuture<ToolResult<SkillCommunityView>> importLocalSkillPackage(
+            java.nio.file.Path source) {
+        Objects.requireNonNull(source, "source");
+        return CompletableFuture.supplyAsync(
+                () -> skillActions.importLocalPackage(source), worker);
     }
 
     public CompletableFuture<ToolResult<Boolean>> saveDisplay(GuideDisplayConfig candidate) {

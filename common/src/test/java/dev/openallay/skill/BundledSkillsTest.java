@@ -20,19 +20,19 @@ final class BundledSkillsTest {
         for (SkillMetadata metadata : repository.metadata()) {
             SkillDocument document = repository.find(metadata.name()).orElseThrow();
             assertFalse(document.instructions().isBlank());
+            assertTrue(metadata.name().equals("analyze-game-data")
+                    || metadata.description().startsWith("Use when "));
             assertTrue(metadata.allowedTools().stream()
                     .allMatch(tool -> tool.equals("openallay:run_javascript")));
             assertFalse(repository.metadataPrompt().contains(document.instructions()));
+            assertFalse(document.instructions().contains("one JavaScript program"));
         }
 
         assertFalse(repository.find("analyze-game-data").isPresent());
         assertFalse(repository.metadataPrompt().contains("<name>analyze-game-data</name>"));
         assertFalse(repository.metadataPrompt().contains("ordinary modern JavaScript"));
 
-        SkillDocument fallback = repository.find("answer-modded-minecraft-question")
-                .orElseThrow();
-        assertTrue(fallback.instructions().contains("Choose one"));
-        assertTrue(fallback.instructions().contains("one `run_javascript` program"));
+        assertTrue(repository.find("answer-modded-minecraft-question").isEmpty());
         SkillDocument gameState = repository.find("inspect-game-state").orElseThrow();
         assertTrue(gameState.instructions().contains("`mc.game.diagnostics`"));
         assertFalse(gameState.instructions().contains("`openallay:inspect_game_state`"));

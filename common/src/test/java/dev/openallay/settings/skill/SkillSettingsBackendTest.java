@@ -9,6 +9,15 @@ import dev.openallay.skill.SkillParser;
 import dev.openallay.skill.SkillRepository;
 import dev.openallay.skill.SkillSource;
 import dev.openallay.tool.ToolResult;
+import dev.openallay.community.CommunityCatalogClient;
+import dev.openallay.model.CancellationSignal;
+import dev.openallay.net.HttpExchangeRequest;
+import dev.openallay.net.HttpTransport;
+import dev.openallay.skill.FilesystemSkillLoader;
+import dev.openallay.skill.install.SkillPackageInstaller;
+import java.net.URI;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -111,6 +120,58 @@ final class SkillSettingsBackendTest {
         assertEquals("survives restart", restartedRepository.find("guide").orElseThrow().instructions());
     }
 
+    @Test
+    void backendListsCachedCommunityAndImportsThroughManagedInstaller() throws Exception {
+        Path root = temporaryDirectory.resolve("skills");
+        Path cache = temporaryDirectory.resolve("catalogs/skills.json");
+        Files.createDirectories(cache.getParent());
+        Files.writeString(cache, """
+                {"schemaVersion":1,"kind":"skill","generatedAt":"2026-07-25T00:00:00Z",
+                 "packages":[{"id":"demo","version":"1.0.0",
+                 "archive":"https://example.test/demo.zip",
+                 "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                 "compatibility":{"minecraft":"26.2","openallayApi":"0.2"},
+                 "source":"https://example.test/demo"}]}
+                """);
+        HttpTransport unused = new HttpTransport() {
+            @Override
+            public <T> CompletableFuture<T> execute(
+                    HttpExchangeRequest request,
+                    dev.openallay.net.HttpCancellation cancellation,
+                    ResponseDecoder<T> decoder) {
+                return CompletableFuture.failedFuture(new IOException("offline"));
+            }
+        };
+        CommunityCatalogClient catalog = new CommunityCatalogClient(
+                URI.create("https://example.test/catalog.json"),
+                cache,
+                unused,
+                Duration.ofSeconds(5));
+        SkillSettingsBackend backend = new SkillSettingsBackend(
+                root,
+                repository(),
+                new SkillParser(),
+                List.of(bundled()),
+                Set.of(),
+                new FilesystemSkillLoader(),
+                catalog,
+                new SkillPackageInstaller(root, new SkillParser()));
+        Path imported = temporaryDirectory.resolve("demo");
+        Files.createDirectories(imported);
+        Files.writeString(imported.resolve("SKILL.md"), skill("demo", "community body"));
+
+        assertTrue(backend.currentCommunityView().available());
+        assertFalse(backend.currentCommunityView().packages().getFirst().installed());
+        SkillCommunityView after = successCommunity(backend.importLocalPackage(imported));
+        assertTrue(after.packages().getFirst().installed());
+
+        ToolResult<SkillCommunityView> failed =
+                backend.refreshCommunity(new CancellationSignal()).join();
+        assertEquals("catalog_refresh_failed",
+                assertInstanceOf(ToolResult.Failure.class, failed).code());
+        assertTrue(backend.currentCommunityView().available());
+    }
+
     private SkillSettingsBackend backend(Path root, SkillRepository repository) {
         return new SkillSettingsBackend(
                 root,
@@ -157,5 +218,11 @@ final class SkillSettingsBackendTest {
             ToolResult<SkillSettingsView> result) {
         return (ToolResult.Failure<SkillSettingsView>)
                 assertInstanceOf(ToolResult.Failure.class, result);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static SkillCommunityView successCommunity(ToolResult<SkillCommunityView> result) {
+        return ((ToolResult.Success<SkillCommunityView>)
+                assertInstanceOf(ToolResult.Success.class, result)).value();
     }
 }

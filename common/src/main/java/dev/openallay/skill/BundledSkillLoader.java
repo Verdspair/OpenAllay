@@ -10,7 +10,6 @@ import java.util.Map;
 
 public final class BundledSkillLoader {
     public static final List<String> NAMES = List.of(
-            "answer-modded-minecraft-question",
             "explain-machine-usage",
             "diagnose-missing-recipe",
             "guide-ftb-progression",

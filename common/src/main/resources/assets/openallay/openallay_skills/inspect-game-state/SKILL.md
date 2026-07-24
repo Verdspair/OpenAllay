@@ -1,6 +1,6 @@
 ---
 name: inspect-game-state
-description: Multi-section troubleshooting that correlates two or more Minecraft client, settings, and F3 areas; direct one-field lookups do not need this Skill.
+description: Use when troubleshooting requires correlating two or more Minecraft client, settings, HUD, or F3 areas.
 allowed-tools: "openallay:run_javascript"
 ---
 Use this Skill for multi-step diagnosis or correlation across Minecraft menus,
@@ -8,8 +8,7 @@ the player's own UI, HUD/F3, installed-content screens, and closed
 non-mutating queries. Do not load it for an obvious direct lookup such as
 “list my installed mods” or “what biome am I in”; query `mc.game` directly.
 
-Use one JavaScript program to select and correlate only the required detached
-sections:
+Select and correlate only the required sections:
 
 - `mc.game.runtime`: version, loader, topology, and runtime identity.
 - `mc.game.mods.installed`: installed mod metadata. This direct exact-path
