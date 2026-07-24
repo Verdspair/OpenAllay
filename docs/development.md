@@ -197,17 +197,13 @@ execution and potentially large normalization/chunk encoding run on a virtual
 worker, and packet sends are marshalled back to the client thread. Invalid
 settings fail closed to an empty advertised client Tool set.
 
-The top-level settings sections are General, Models, Tools, Skills, History,
-and Diagnostics. Tools and Skills are separate master-detail pages. Selecting a
-Tool in the left pane shows its description, explicit enable control, settings,
-and source editor on the right; selection never implicitly toggles the Tool.
-Local Tool enablement remains a deny-only restriction over registered code and
-cannot register a Tool or widen its authority. Tool enablement and its sources
-are saved together in the Tool-owned file described below, so there is no
-second generic Tool/Skill toggle document. Server-owned capabilities remain
-read-only advertised state. Skills are documents rather than Tool-style
-toggles; their filesystem packages, validation, provenance, and override rules
-are described below.
+The top-level settings sections are General, Models, Extensions, Skills,
+History, Diagnostics, and About. Extensions is a master-detail projection of
+the JavaScript host, reusable modules, registered detached adapters, pending
+community packages, and opt-in experimental capabilities. It is not a legacy
+per-Tool enablement page. Skills remain a separate installed/community
+document surface; their filesystem packages, validation, provenance, and
+override rules are described below.
 
 The connection test displays a cost warning and requires a second confirmation.
 It sends one non-streaming, non-retrying request capped at 64 output tokens with
