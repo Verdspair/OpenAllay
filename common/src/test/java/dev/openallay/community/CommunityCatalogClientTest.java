@@ -3,6 +3,7 @@ package dev.openallay.community;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.openallay.model.CancellationSignal;
 import dev.openallay.net.HttpExchangeRequest;
@@ -23,6 +24,31 @@ import org.junit.jupiter.api.io.TempDir;
 
 final class CommunityCatalogClientTest {
     @TempDir Path temporaryDirectory;
+
+    @Test
+    void schemaOneCacheIsAbsentStateAndOnlySchemaTwoRefreshReplacesIt() throws Exception {
+        Path cache = temporaryDirectory.resolve("skills.json");
+        Files.writeString(
+                cache,
+                catalog("legacy").replace("\"schemaVersion\":2", "\"schemaVersion\":1"));
+
+        CommunityCatalogClient client = new CommunityCatalogClient(
+                URI.create("https://example.test/catalog.json"),
+                cache,
+                transport(200, catalog("current")),
+                Duration.ofSeconds(5));
+
+        assertTrue(client.current().isEmpty());
+        assertInstanceOf(
+                ToolResult.Success.class,
+                client.refresh(new CancellationSignal()).join());
+        assertEquals(
+                "current",
+                client.current().orElseThrow().packages().getFirst().id());
+        assertEquals(
+                CommunityCatalogManifest.SCHEMA_VERSION,
+                new CommunityCatalogCodec().decode(Files.readString(cache)).schemaVersion());
+    }
 
     @Test
     void failedRefreshRetainsLastValidatedCache() throws Exception {
