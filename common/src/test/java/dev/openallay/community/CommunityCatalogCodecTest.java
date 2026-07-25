@@ -57,20 +57,10 @@ final class CommunityCatalogCodecTest {
     }
 
     @Test
-    void readsSchemaOneCacheIntoTheCanonicalSchemaTwoView() {
-        CommunityCatalogManifest manifest = codec.decode(validSchemaOne());
-
-        assertEquals(CommunityCatalogManifest.SCHEMA_VERSION, manifest.schemaVersion());
-        assertEquals("Alpha", manifest.packages().getFirst().displayName());
-        assertEquals("Community Skill", manifest.packages().getFirst().description());
-        assertEquals("OpenAllay Community", manifest.packages().getFirst().publisher());
-        assertEquals(2, codec.decode(codec.encode(manifest)).schemaVersion());
-    }
-
-    @Test
     void rejectsUnknownFieldsVersionsDuplicateIdsAndUnsafeUris() {
         assertThrows(IllegalArgumentException.class, () -> codec.decode(valid()
                 .replace("\"packages\"", "\"unknown\":true,\"packages\"")));
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(validSchemaOne()));
         assertThrows(IllegalArgumentException.class, () -> codec.decode(valid()
                 .replace("\"schemaVersion\":2", "\"schemaVersion\":3")));
         assertThrows(IllegalArgumentException.class, () -> codec.decode(valid()

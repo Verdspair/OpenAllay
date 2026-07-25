@@ -126,8 +126,10 @@ final class SkillSettingsBackendTest {
         Path cache = temporaryDirectory.resolve("catalogs/skills.json");
         Files.createDirectories(cache.getParent());
         Files.writeString(cache, """
-                {"schemaVersion":1,"kind":"skill","generatedAt":"2026-07-25T00:00:00Z",
-                 "packages":[{"id":"demo","version":"1.0.0",
+                {"schemaVersion":2,"kind":"skill","generatedAt":"2026-07-25T00:00:00Z",
+                 "packages":[{"id":"demo","displayName":"Demo Skill",
+                 "description":"A test community Skill.","publisher":"Test Publisher",
+                 "version":"1.0.0",
                  "archive":"https://example.test/demo.zip",
                  "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                  "compatibility":{"minecraft":"26.2","openallayApi":"0.2"},

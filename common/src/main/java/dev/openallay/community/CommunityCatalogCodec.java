@@ -11,12 +11,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-/** Strict schema-1 codec; package ordering is canonicalized by the manifest. */
+/** Strict schema-2 codec; package ordering is canonicalized by the manifest. */
 public final class CommunityCatalogCodec {
     private static final Set<String> ROOT_FIELDS =
             Set.of("schemaVersion", "kind", "generatedAt", "packages");
-    private static final Set<String> SCHEMA_ONE_PACKAGE_FIELDS =
-            Set.of("id", "version", "archive", "sha256", "compatibility", "source");
     private static final Set<String> PACKAGE_FIELDS =
             Set.of(
                     "id",
@@ -37,7 +35,7 @@ public final class CommunityCatalogCodec {
             JsonObject root = object(JsonParser.parseString(json), "catalog");
             exactFields(root, ROOT_FIELDS, "catalog");
             int schema = integer(root, "schemaVersion");
-            if (schema != 1 && schema != CommunityCatalogManifest.SCHEMA_VERSION) {
+            if (schema != CommunityCatalogManifest.SCHEMA_VERSION) {
                 throw new IllegalArgumentException("Unsupported community catalog schema");
             }
             String kind = string(root, "kind");
@@ -49,22 +47,14 @@ public final class CommunityCatalogCodec {
             List<CommunityCatalogManifest.PackageEntry> packages = new ArrayList<>();
             for (JsonElement encoded : encodedPackages.getAsJsonArray()) {
                 JsonObject entry = object(encoded, "package");
-                exactFields(
-                        entry,
-                        schema == 1 ? SCHEMA_ONE_PACKAGE_FIELDS : PACKAGE_FIELDS,
-                        "package");
+                exactFields(entry, PACKAGE_FIELDS, "package");
                 JsonObject compatibility = object(entry.get("compatibility"), "compatibility");
                 exactFields(compatibility, COMPATIBILITY_FIELDS, "compatibility");
-                String id = string(entry, "id");
                 packages.add(new CommunityCatalogManifest.PackageEntry(
-                        id,
-                        schema == 1 ? legacyDisplayName(id) : string(entry, "displayName"),
-                        schema == 1
-                                ? "Community Skill"
-                                : string(entry, "description"),
-                        schema == 1
-                                ? "OpenAllay Community"
-                                : string(entry, "publisher"),
+                        string(entry, "id"),
+                        string(entry, "displayName"),
+                        string(entry, "description"),
+                        string(entry, "publisher"),
                         string(entry, "version"),
                         URI.create(string(entry, "archive")),
                         string(entry, "sha256"),
@@ -73,11 +63,7 @@ public final class CommunityCatalogCodec {
                                 string(compatibility, "openallayApi")),
                         URI.create(string(entry, "source"))));
             }
-            return new CommunityCatalogManifest(
-                    CommunityCatalogManifest.SCHEMA_VERSION,
-                    kind,
-                    generated,
-                    packages);
+            return new CommunityCatalogManifest(schema, kind, generated, packages);
         } catch (RuntimeException failure) {
             if (failure instanceof IllegalArgumentException) {
                 throw failure;
@@ -140,17 +126,6 @@ public final class CommunityCatalogCodec {
             throw new IllegalArgumentException(field + " must be an integer");
         }
         return parsed;
-    }
-
-    private static String legacyDisplayName(String id) {
-        StringBuilder display = new StringBuilder();
-        for (String word : id.split("-")) {
-            if (!display.isEmpty()) {
-                display.append(' ');
-            }
-            display.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
-        }
-        return display.toString();
     }
 
     private static void exactFields(JsonObject object, Set<String> expected, String label) {

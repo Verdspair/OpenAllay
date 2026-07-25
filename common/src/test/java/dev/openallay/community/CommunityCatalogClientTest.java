@@ -112,8 +112,10 @@ final class CommunityCatalogClientTest {
 
     static String catalog(String id) {
         return """
-                {"schemaVersion":1,"kind":"skill","generatedAt":"2026-07-25T00:00:00Z",
-                 "packages":[{"id":"%s","version":"1.0.0",
+                {"schemaVersion":2,"kind":"skill","generatedAt":"2026-07-25T00:00:00Z",
+                 "packages":[{"id":"%s","displayName":"Test Skill",
+                 "description":"A test community Skill.","publisher":"Test Publisher",
+                 "version":"1.0.0",
                  "archive":"https://example.test/%s.zip",
                  "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                  "compatibility":{"minecraft":"26.2","openallayApi":"0.2"},
