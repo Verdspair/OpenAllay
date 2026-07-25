@@ -286,7 +286,7 @@
   "screen.openallay.settings.diagnostics.debug.presentation": "Presentation performance",
   "screen.openallay.settings.diagnostics.debug.source": "Source snapshot",
   "screen.openallay.settings.diagnostics.debug.failure": "Failure code",
-  "screen.openallay.settings.models.profiles": "Client model profiles",
+  "screen.openallay.settings.models.profiles": "Model profiles",
   "screen.openallay.settings.models.add": "Add profile",
   "screen.openallay.settings.models.id": "Profile ID",
   "screen.openallay.settings.models.name": "Name",

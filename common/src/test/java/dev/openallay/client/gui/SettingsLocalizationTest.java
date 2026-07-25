@@ -24,6 +24,7 @@ final class SettingsLocalizationTest {
             "screen.openallay.settings.history",
             "screen.openallay.settings.diagnostics",
             "screen.openallay.settings.about",
+            "screen.openallay.settings.models.profiles",
             "screen.openallay.settings.models.add",
             "screen.openallay.settings.models.base_url",
             "screen.openallay.settings.models.api_key",
@@ -89,6 +90,12 @@ final class SettingsLocalizationTest {
             assertTrue(!english.get(key).getAsString().isBlank(), key);
             assertTrue(!chinese.get(key).getAsString().isBlank(), key);
         }
+        assertEquals(
+                "Model profiles",
+                english.get("screen.openallay.settings.models.profiles").getAsString());
+        assertEquals(
+                "模型配置",
+                chinese.get("screen.openallay.settings.models.profiles").getAsString());
     }
 
     private static JsonObject read(String file) throws Exception {

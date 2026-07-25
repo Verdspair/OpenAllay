@@ -87,6 +87,15 @@ public final class MinecraftClientWorldObservationCoordinator
                         box,
                         entity -> request.entityType().isEmpty()
                                 || request.entityType().equals(entityType(entity)));
+                WorldObservationCoverage coverage =
+                        WorldObservationCoverageCalculator.calculate(
+                                bounds,
+                                level.getMinY(),
+                                level.getMaxY(),
+                                (chunkX, chunkZ) -> level.hasChunkAt(new BlockPos(
+                                        chunkX << 4,
+                                        Math.max(bounds.from().y(), level.getMinY()),
+                                        chunkZ << 4)));
                 ArrayList<WorldEntitySummary> summaries = new ArrayList<>(captured.size());
                 for (Entity entity : captured) {
                     cancellation.throwIfCancelled();
@@ -105,8 +114,7 @@ public final class MinecraftClientWorldObservationCoordinator
                 result.complete(new EntityObservation(
                         bounds,
                         summaries,
-                        new WorldObservationCoverage(
-                                bounds.volume(), bounds.volume(), true, List.of()),
+                        coverage,
                         evidence(DataCompleteness.PARTIAL, "minecraft:client_entities")));
             } catch (RuntimeException failure) {
                 result.completeExceptionally(translate(failure));

@@ -286,7 +286,7 @@
   "screen.openallay.settings.diagnostics.debug.presentation": "展示性能",
   "screen.openallay.settings.diagnostics.debug.source": "来源快照",
   "screen.openallay.settings.diagnostics.debug.failure": "失败代码",
-  "screen.openallay.settings.models.profiles": "客户端模型配置",
+  "screen.openallay.settings.models.profiles": "模型配置",
   "screen.openallay.settings.models.add": "添加配置",
   "screen.openallay.settings.models.id": "配置 ID",
   "screen.openallay.settings.models.name": "名称",
