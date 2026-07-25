@@ -46,6 +46,23 @@ OPENALLAY_BENCHMARK_REPEATS=3 \
 scripts/run-agent-benchmark.sh live
 ```
 
+The preferred reproducible form reuses the credential-free schema-2
+`models.json` format and selects one named profile. Its `credentialRef` must
+resolve an environment variable in the benchmark process:
+
+```bash
+OPENROUTER_API_KEY='...' \
+scripts/run-agent-benchmark.sh live \
+  --profile config/openallay/models.json \
+  --profile-id openrouter-main \
+  --repeats 3
+```
+
+`--cases`, `--include-commands`, and `--output` make case selection, the
+experimental write-capable fixture, and retained-report location explicit.
+The schema-3 live report records the selected profile ID and canonical model
+identity without retaining the credential.
+
 `OPENALLAY_BENCHMARK_CASES` may contain a comma-separated subset of exact case
 IDs. Experimental command cases are excluded unless
 `OPENALLAY_BENCHMARK_INCLUDE_COMMANDS=true`. Server routing is exercised by

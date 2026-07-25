@@ -44,7 +44,9 @@ import dev.openallay.model.CancellationSignal;
 import dev.openallay.model.ModelClient;
 import dev.openallay.model.anthropic.AnthropicMessagesClient;
 import dev.openallay.model.config.ModelConfig;
+import dev.openallay.model.config.ModelProfilesConfigLoader;
 import dev.openallay.model.config.ModelProtocol;
+import dev.openallay.model.config.ResolvedModelProfile;
 import dev.openallay.model.config.SecretValue;
 import dev.openallay.model.openai.OpenAiChatClient;
 import dev.openallay.model.scheduling.ModelRequestScheduler;
@@ -66,6 +68,7 @@ import dev.openallay.skill.SkillRepository;
 import dev.openallay.testing.GroundedTestFixtures;
 import dev.openallay.testing.JavascriptAgentTestFixtures;
 import dev.openallay.tool.ToolRegistry;
+import dev.openallay.tool.ToolResult;
 import dev.openallay.tool.builtin.RunJavascriptTool;
 import dev.openallay.world.BlockObservation;
 import dev.openallay.world.EntityObservation;
@@ -97,6 +100,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Explicit, billable corpus benchmark over the production Agent loop and model transports.
@@ -160,6 +164,77 @@ final class LiveAgentBenchmarkAcceptanceTest {
     }
 
     @Test
+    void namedProfileReferenceUsesProductionSchemaAndEnvironmentCredential(
+            @TempDir Path directory) throws Exception {
+        Path profiles = directory.resolve("models.json");
+        Files.writeString(profiles, """
+                {
+                  "schemaVersion": 2,
+                  "defaultProfileId": "default-profile",
+                  "profiles": [{
+                    "id": "default-profile",
+                    "displayName": "Default",
+                    "enabled": true,
+                    "protocol": "openai_chat",
+                    "baseUrl": "https://provider.example/v1/",
+                    "model": "provider/default",
+                    "credentialRef": "env:DEFAULT_KEY",
+                    "contextWindowTokens": 128000,
+                    "maxOutputTokens": 4096,
+                    "connectTimeoutSeconds": 30,
+                    "requestTimeoutSeconds": 300
+                  }, {
+                    "id": "benchmark-profile",
+                    "displayName": "Benchmark",
+                    "enabled": true,
+                    "protocol": "anthropic_messages",
+                    "baseUrl": "https://benchmark.example/v1/",
+                    "model": "provider/benchmark",
+                    "credentialRef": "env:BENCHMARK_KEY",
+                    "contextWindowTokens": 256000,
+                    "maxOutputTokens": 8192,
+                    "connectTimeoutSeconds": 20,
+                    "requestTimeoutSeconds": 240
+                  }]
+                }
+                """, StandardCharsets.UTF_8);
+
+        BenchmarkModelProfile selected = modelProfile(Map.of(
+                "OPENALLAY_BENCHMARK_PROFILE_FILE", profiles.toString(),
+                "OPENALLAY_BENCHMARK_PROFILE_ID", "benchmark-profile",
+                "DEFAULT_KEY", "unused",
+                "BENCHMARK_KEY", "secret"));
+
+        assertEquals("benchmark-profile", selected.profileId());
+        assertEquals("provider/benchmark", selected.canonicalModelId());
+        assertEquals(ModelProtocol.ANTHROPIC_MESSAGES, selected.config().protocol());
+        assertEquals(256_000, selected.config().contextWindowTokens());
+
+        BenchmarkCorpus corpus = corpus();
+        BenchmarkSelector.Selection selection = select(
+                corpus,
+                Map.of(),
+                fixtureCapabilities(false),
+                1);
+        Path retained = retain(
+                Map.of(
+                        "OPENALLAY_PRODUCT_COMMIT", "test-commit",
+                        "OPENALLAY_BENCHMARK_OUTPUT", directory.resolve("reports").toString()),
+                selected,
+                corpus,
+                selection,
+                new BenchmarkReport(corpus.version(), List.of()),
+                List.of(),
+                new GsonBuilder().setPrettyPrinting().create());
+        String report = Files.readString(retained, StandardCharsets.UTF_8);
+        assertTrue(report.contains("\"schemaVersion\": 3"));
+        assertTrue(report.contains("\"profileId\": \"benchmark-profile\""));
+        assertTrue(report.contains("\"canonicalModelId\": \"provider/benchmark\""));
+        assertTrue(report.contains("\"provider\": \"https://benchmark.example\""));
+        assertFalse(report.contains("secret"));
+    }
+
+    @Test
     void realProviderRunsEveryApplicableCorpusCaseAndRetainsRedactedTraces()
             throws Exception {
         Map<String, String> environment = System.getenv();
@@ -176,7 +251,8 @@ final class LiveAgentBenchmarkAcceptanceTest {
         List<BenchmarkCase> cases = selection.selected();
         assertFalse(cases.isEmpty(), "No applicable benchmark cases were selected");
 
-        ModelClient rawModel = model(environment, gson);
+        BenchmarkModelProfile modelProfile = modelProfile(environment);
+        ModelClient rawModel = model(modelProfile.config(), gson);
         JavascriptDataModuleRegistry extensions = extensions();
         CommandCapabilityRuntime commands = new CommandCapabilityRuntime();
         commands.replace(new CommandCapabilityConfig(
@@ -229,7 +305,8 @@ final class LiveAgentBenchmarkAcceptanceTest {
                         includeCommands,
                         traces));
 
-        Path retained = retain(environment, corpus, selection, report, traces, gson);
+        Path retained = retain(
+                environment, modelProfile, corpus, selection, report, traces, gson);
         selection.skipped().forEach(value -> System.out.println(
                 "OPENALLAY_BENCHMARK_SKIPPED"
                         + " id=" + value.caseId()
@@ -535,22 +612,25 @@ final class LiveAgentBenchmarkAcceptanceTest {
 
     private static Path retain(
             Map<String, String> environment,
+            BenchmarkModelProfile modelProfile,
             BenchmarkCorpus corpus,
             BenchmarkSelector.Selection selection,
             BenchmarkReport report,
             List<AttemptTrace> traces,
             Gson gson)
             throws Exception {
-        URI endpoint = URI.create(required(environment, "OPENALLAY_MODEL_BASE_URL"));
+        ModelConfig config = modelProfile.config();
+        URI endpoint = config.baseUri();
         String provider = endpoint.getScheme() + "://" + endpoint.getHost()
                 + (endpoint.getPort() < 0 ? "" : ":" + endpoint.getPort());
         LiveReport retained = new LiveReport(
-                2,
+                3,
                 corpus.version(),
                 FIXTURE,
                 environment.getOrDefault("OPENALLAY_PRODUCT_COMMIT", "unknown"),
                 provider,
-                required(environment, "OPENALLAY_MODEL"),
+                modelProfile.profileId(),
+                modelProfile.canonicalModelId(),
                 new SelectionSummary(
                         selection.selected().stream().map(BenchmarkCase::id).toList(),
                         selection.skipped()),
@@ -566,7 +646,45 @@ final class LiveAgentBenchmarkAcceptanceTest {
         return path;
     }
 
-    private static ModelClient model(Map<String, String> environment, Gson gson) {
+    private static BenchmarkModelProfile modelProfile(Map<String, String> environment) {
+        String profileFile = environment
+                .getOrDefault("OPENALLAY_BENCHMARK_PROFILE_FILE", "")
+                .strip();
+        if (!profileFile.isEmpty()) {
+            Path profiles = Path.of(profileFile);
+            ToolResult<ModelProfilesConfigLoader.Load> loaded =
+                    new ModelProfilesConfigLoader().load(
+                            profiles,
+                            profiles.resolveSibling(".openallay-benchmark-no-legacy.json"),
+                            environment);
+            if (loaded instanceof ToolResult.Failure<ModelProfilesConfigLoader.Load> failure) {
+                throw new IllegalArgumentException(
+                        "Benchmark profile load failed: " + failure.code() + ": "
+                                + failure.message());
+            }
+            ModelProfilesConfigLoader.Load value =
+                    ((ToolResult.Success<ModelProfilesConfigLoader.Load>) loaded).value();
+            String requested = environment
+                    .getOrDefault(
+                            "OPENALLAY_BENCHMARK_PROFILE_ID",
+                            value.config().defaultProfileId())
+                    .strip();
+            ResolvedModelProfile profile = value.profiles().stream()
+                    .filter(candidate -> candidate.definition().id().equals(requested))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Benchmark profile does not exist: " + requested));
+            if (!profile.available()) {
+                throw new IllegalArgumentException(
+                        "Benchmark profile is unavailable: " + profile.failure().code() + ": "
+                                + profile.failure().message());
+            }
+            return new BenchmarkModelProfile(
+                    profile.definition().id(),
+                    profile.canonicalModelId(),
+                    profile.runtimeConfig());
+        }
+
         ModelProtocol protocol = ModelProtocol.valueOf(environment
                 .getOrDefault("OPENALLAY_MODEL_PROTOCOL", "OPENAI_CHAT")
                 .toUpperCase());
@@ -584,7 +702,11 @@ final class LiveAgentBenchmarkAcceptanceTest {
                         "OPENALLAY_MAX_OUTPUT_TOKENS"),
                 Duration.ofSeconds(30),
                 Duration.ofMinutes(5));
-        return switch (protocol) {
+        return new BenchmarkModelProfile("environment", config.model(), config);
+    }
+
+    private static ModelClient model(ModelConfig config, Gson gson) {
+        return switch (config.protocol()) {
             case ANTHROPIC_MESSAGES -> new AnthropicMessagesClient(config, gson);
             case OPENAI_CHAT -> new OpenAiChatClient(config, gson);
         };
@@ -607,6 +729,11 @@ final class LiveAgentBenchmarkAcceptanceTest {
     private record AttemptTrace(
             String caseId, int attempt, dev.openallay.agent.trace.LiveAgentTrace trace) {}
 
+    private record BenchmarkModelProfile(
+            String profileId,
+            String canonicalModelId,
+            ModelConfig config) {}
+
     private record SelectionSummary(
             List<String> selectedCaseIds,
             List<BenchmarkSelector.SkippedCase> skipped) {
@@ -622,7 +749,8 @@ final class LiveAgentBenchmarkAcceptanceTest {
             String fixture,
             String productCommit,
             String provider,
-            String model,
+            String profileId,
+            String canonicalModelId,
             SelectionSummary selection,
             BenchmarkReport benchmark,
             List<AttemptTrace> traces) {}
