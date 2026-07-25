@@ -22,6 +22,8 @@ import dev.openallay.benchmark.BenchmarkOutcome;
 import dev.openallay.benchmark.BenchmarkReport;
 import dev.openallay.benchmark.BenchmarkRunner;
 import dev.openallay.benchmark.BenchmarkSelector;
+import dev.openallay.benchmark.BenchmarkTraceAudit;
+import dev.openallay.benchmark.BenchmarkTraceAuditor;
 import dev.openallay.benchmark.BenchmarkVerifier;
 import dev.openallay.context.DataAuthority;
 import dev.openallay.context.DataCompleteness;
@@ -227,11 +229,16 @@ final class LiveAgentBenchmarkAcceptanceTest {
                 List.of(),
                 new GsonBuilder().setPrettyPrinting().create());
         String report = Files.readString(retained, StandardCharsets.UTF_8);
+        String audit = Files.readString(auditPath(retained), StandardCharsets.UTF_8);
         assertTrue(report.contains("\"schemaVersion\": 4"));
         assertTrue(report.contains("\"profileId\": \"benchmark-profile\""));
         assertTrue(report.contains("\"canonicalModelId\": \"provider/benchmark\""));
         assertTrue(report.contains("\"provider\": \"https://benchmark.example\""));
         assertFalse(report.contains("secret"));
+        assertTrue(audit.contains("\"schemaVersion\": 1"));
+        assertTrue(audit.contains("\"corpusVersion\": \""
+                + corpus.version() + "\""));
+        assertFalse(audit.contains("secret"));
     }
 
     @Test
@@ -289,7 +296,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
                                 benchmarkContext("descriptor"), extensions)));
         boolean stream = Boolean.parseBoolean(
                 environment.getOrDefault("OPENALLAY_LIVE_STREAM", "true"));
-        List<AttemptTrace> traces = new CopyOnWriteArrayList<>();
+        List<BenchmarkTraceAuditor.TraceRef> traces = new CopyOnWriteArrayList<>();
 
         BenchmarkReport report = new BenchmarkRunner(new BenchmarkVerifier()).run(
                 corpus.version(),
@@ -321,6 +328,8 @@ final class LiveAgentBenchmarkAcceptanceTest {
                         + " median_model_turns=" + value.medianModelTurns()
                         + " median_tool_calls=" + value.medianToolCalls()));
         System.out.println("OPENALLAY_BENCHMARK_REPORT " + retained.toAbsolutePath());
+        System.out.println("OPENALLAY_BENCHMARK_AUDIT "
+                + auditPath(retained).toAbsolutePath());
     }
 
     private static BenchmarkOutcome execute(
@@ -332,7 +341,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
             CommandCapabilityRuntime commands,
             WorldObservationRuntime world,
             boolean includeCommands,
-            List<AttemptTrace> traces) {
+            List<BenchmarkTraceAuditor.TraceRef> traces) {
         String correlationId = "benchmark-" + testCase.id() + "-" + attempt;
         AgentBenchmarkRecorder recorder = new AgentBenchmarkRecorder();
         world.capture(correlationId, new FixtureWorld());
@@ -371,7 +380,8 @@ final class LiveAgentBenchmarkAcceptanceTest {
                     "Benchmark attempt did not reach an Agent terminal result",
                     null);
         }
-        traces.add(new AttemptTrace(testCase.id(), attempt, result.trace()));
+        traces.add(new BenchmarkTraceAuditor.TraceRef(
+                testCase.id(), attempt, result.trace()));
         return recorder.outcome(result);
     }
 
@@ -616,7 +626,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
             BenchmarkCorpus corpus,
             BenchmarkSelector.Selection selection,
             BenchmarkReport report,
-            List<AttemptTrace> traces,
+            List<BenchmarkTraceAuditor.TraceRef> traces,
             Gson gson)
             throws Exception {
         ModelConfig config = modelProfile.config();
@@ -643,7 +653,20 @@ final class LiveAgentBenchmarkAcceptanceTest {
         Path path = directory.resolve(
                 "live-" + Instant.now().toString().replace(':', '-') + ".json");
         Files.writeString(path, gson.toJson(retained), StandardCharsets.UTF_8);
+        BenchmarkTraceAudit audit = new BenchmarkTraceAuditor().audit(report, traces);
+        Files.writeString(
+                auditPath(path),
+                gson.toJson(audit),
+                StandardCharsets.UTF_8);
         return path;
+    }
+
+    private static Path auditPath(Path reportPath) {
+        String name = reportPath.getFileName().toString();
+        String stem = name.endsWith(".json")
+                ? name.substring(0, name.length() - ".json".length())
+                : name;
+        return reportPath.resolveSibling(stem + "-audit.json");
     }
 
     private static BenchmarkModelProfile modelProfile(Map<String, String> environment) {
@@ -726,9 +749,6 @@ final class LiveAgentBenchmarkAcceptanceTest {
         return parsed;
     }
 
-    private record AttemptTrace(
-            String caseId, int attempt, dev.openallay.agent.trace.LiveAgentTrace trace) {}
-
     private record BenchmarkModelProfile(
             String profileId,
             String canonicalModelId,
@@ -753,7 +773,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
             String canonicalModelId,
             SelectionSummary selection,
             BenchmarkReport benchmark,
-            List<AttemptTrace> traces) {}
+            List<BenchmarkTraceAuditor.TraceRef> traces) {}
 
     private static final class FixtureWorld implements WorldObservationCoordinator {
         private static final EvidenceMetadata EVIDENCE = new EvidenceMetadata(

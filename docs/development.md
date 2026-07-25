@@ -60,8 +60,11 @@ scripts/run-agent-benchmark.sh live \
 
 `--cases`, `--include-commands`, and `--output` make case selection, the
 experimental write-capable fixture, and retained-report location explicit.
-The schema-3 live report records the selected profile ID and canonical model
-identity without retaining the credential.
+The schema-4 live report records the selected profile ID, canonical model
+identity, typed per-attempt result, and raw provider-neutral trace without
+retaining the credential. A sibling `*-audit.json` file classifies only
+unambiguous stable terminal/Tool error codes; unresolved or multi-domain
+failures remain `UNRESOLVED` for engineering review.
 
 `OPENALLAY_BENCHMARK_CASES` may contain a comma-separated subset of exact case
 IDs. Experimental command cases are excluded unless
@@ -79,9 +82,10 @@ Reports under
 `build/reports/openallay/benchmarks/` retain corpus
 version, commit, redacted provider authority, canonical model ID, complete
 provider-neutral Agent traces, success probability, per-attempt counters, and
-median model/Tool calls. Wall-clock values remain trace diagnostics and are not
-benchmark score inputs. API keys and authorization data are never written to
-the report.
+median model/Tool calls. The audit sidecar retains evidence source, code, event
+index, and Tool ID so it can be traced back to the raw report. Wall-clock
+values remain trace diagnostics and are not benchmark score inputs. API keys
+and authorization data are never written to either file.
 
 ## Continuous integration and releases
 
