@@ -6,15 +6,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.openallay.guide.ui.GuideDisplayConfig;
 import dev.openallay.client.gui.settings.SettingsSection;
+import dev.openallay.client.gui.settings.ExtensionSettingsProjection;
+import dev.openallay.client.gui.settings.SkillSettingsProjection;
 import dev.openallay.model.config.ModelProfileDefinition;
 import dev.openallay.model.config.ModelProfilesConfig;
 import dev.openallay.model.config.ModelProtocol;
 import dev.openallay.settings.ClientSettingsSnapshot;
 import dev.openallay.settings.SettingsOperation;
 import dev.openallay.settings.model.ModelProfileSettingsView;
+import dev.openallay.settings.skill.SkillCommunityView;
+import dev.openallay.settings.skill.SkillSettingsView;
 import java.net.URI;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 final class OpenAllaySettingsScreenProjectionTest {
@@ -88,6 +94,55 @@ final class OpenAllaySettingsScreenProjectionTest {
             if (prior == null) System.clearProperty(key);
             else System.setProperty(key, prior);
         }
+    }
+
+    @Test
+    void communityTabsRefreshOnceWhileKeepingCachedCatalogsVisible() {
+        SkillSettingsProjection.Community cachedSkills = SkillSettingsProjection.from(
+                        SkillSettingsView.empty(),
+                        new SkillCommunityView(
+                                true,
+                                Optional.of(Instant.EPOCH),
+                                List.of(),
+                                Optional.empty()),
+                        false)
+                .community();
+        ExtensionSettingsProjection.CatalogCard cachedExtensions =
+                new ExtensionSettingsProjection.CatalogCard(
+                        true, true, Instant.EPOCH.toString(), "", "");
+
+        assertTrue(OpenAllaySettingsScreen.shouldRefreshSkillCommunity(
+                cachedSkills, false));
+        assertFalse(OpenAllaySettingsScreen.shouldRefreshSkillCommunity(
+                cachedSkills, true));
+        assertTrue(OpenAllaySettingsScreen.shouldRefreshExtensionCommunity(
+                cachedExtensions, false));
+        assertFalse(OpenAllaySettingsScreen.shouldRefreshExtensionCommunity(
+                cachedExtensions, true));
+        assertFalse(OpenAllaySettingsScreen.shouldRefreshExtensionCommunity(
+                new ExtensionSettingsProjection.CatalogCard(
+                        false, false, "", "", ""),
+                false));
+        SkillSettingsProjection.Community failedSkills = SkillSettingsProjection.from(
+                        SkillSettingsView.empty(),
+                        new SkillCommunityView(
+                                false,
+                                Optional.empty(),
+                                List.of(),
+                                Optional.of(new SkillCommunityView.Notice(
+                                        "catalog_refresh_failed", "offline"))),
+                        false)
+                .community();
+        assertFalse(OpenAllaySettingsScreen.shouldRefreshSkillCommunity(
+                failedSkills, false));
+        assertFalse(OpenAllaySettingsScreen.shouldRefreshExtensionCommunity(
+                new ExtensionSettingsProjection.CatalogCard(
+                        true,
+                        false,
+                        "",
+                        "catalog_refresh_failed",
+                        "offline"),
+                false));
     }
 
     private static ModelProfileDefinition profile(String id) {

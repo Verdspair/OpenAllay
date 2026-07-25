@@ -726,6 +726,11 @@ projection remains
 `restart_required` until a later loader startup actually registers the
 Extension; it never claims hot activation.
 
+The first visit to either community tab starts one non-blocking catalog
+refresh. Any cached Skill or Extension generation remains immediately usable
+while the refresh runs. A failure keeps that cache and shows one diagnostic
+instead of repeatedly retrying; the refresh button is the explicit retry.
+
 The public authoring repository includes an independent dual-loader example at
 `examples/hello-extension`. Its CI builds one shared typed contribution into
 separate Fabric and NeoForge packages, verifies each embedded manifest and
@@ -819,6 +824,10 @@ version. A legacy package without the key has an unknown installed version and
 is offered one update; a matching installed version is current. Skill API
 compatibility is a separate `0.2` contract and is not inferred from the
 OpenAllay product patch version.
+
+The Skill community catalog is cached at
+`config/openallay/catalogs/skills.json`; refresh, install, and local import are
+configuration-layer operations and never become model Tools.
 
 Bundled packages under the mod resources are immutable and use uppercase
 `SKILL.md`. Local packages live under `config/openallay/skills/`; a valid local

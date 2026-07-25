@@ -72,6 +72,7 @@ public final class OpenAllaySettingsScreen extends Screen {
     private String selectedSkillName;
     private String selectedCommunitySkillId;
     private SkillTab skillTab = SkillTab.INSTALLED;
+    private boolean skillCommunityRefreshAttempted;
     private boolean skillEditing;
     private boolean narrowSkillDetail;
     private String skillDraftMarkdown = "";
@@ -80,6 +81,7 @@ public final class OpenAllaySettingsScreen extends Screen {
     private EditBox skillImportPath;
     private String selectedExtensionId;
     private ExtensionTab extensionTab = ExtensionTab.INSTALLED;
+    private boolean extensionCommunityRefreshAttempted;
     private boolean narrowExtensionDetail;
     private String extensionImportPathDraft = "";
     private EditBox extensionImportPath;
@@ -208,6 +210,7 @@ public final class OpenAllaySettingsScreen extends Screen {
             }
             if (layout != null) {
                 rebuildWidgets();
+                maybeRefreshVisibleCommunity();
             }
         });
     }
@@ -2501,6 +2504,7 @@ public final class OpenAllaySettingsScreen extends Screen {
         skillDraftMarkdown = "";
         localNotice = "";
         rebuildWidgets();
+        maybeRefreshVisibleCommunity();
     }
 
     private void selectExtensionTab(ExtensionTab replacement) {
@@ -2518,6 +2522,39 @@ public final class OpenAllaySettingsScreen extends Screen {
         selectedExtensionId = cards.isEmpty() ? null : cards.getFirst().id();
         localNotice = "";
         rebuildWidgets();
+        maybeRefreshVisibleCommunity();
+    }
+
+    private void maybeRefreshVisibleCommunity() {
+        if (snapshot.operation().kind() != SettingsOperation.Kind.IDLE) {
+            return;
+        }
+        if (section == SettingsSection.SKILLS
+                && skillTab == SkillTab.COMMUNITY
+                && shouldRefreshSkillCommunity(
+                        skillProjection().community(), skillCommunityRefreshAttempted)) {
+            skillCommunityRefreshAttempted = true;
+            accept(service.refreshSkillCommunity());
+        } else if (section == SettingsSection.EXTENSIONS
+                && extensionTab == ExtensionTab.COMMUNITY
+                && shouldRefreshExtensionCommunity(
+                        extensionProjection().catalog(),
+                        extensionCommunityRefreshAttempted)) {
+            extensionCommunityRefreshAttempted = true;
+            accept(service.refreshExtensionCommunity());
+        }
+    }
+
+    static boolean shouldRefreshSkillCommunity(
+            SkillSettingsProjection.Community community, boolean attempted) {
+        Objects.requireNonNull(community, "community");
+        return !attempted && community.notice().isEmpty();
+    }
+
+    static boolean shouldRefreshExtensionCommunity(
+            ExtensionSettingsProjection.CatalogCard catalog, boolean attempted) {
+        Objects.requireNonNull(catalog, "catalog");
+        return !attempted && catalog.configured() && catalog.noticeCode().isBlank();
     }
 
     private void importLocalExtension() {
