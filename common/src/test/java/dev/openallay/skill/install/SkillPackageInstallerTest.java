@@ -130,6 +130,9 @@ final class SkillPackageInstallerTest {
             String checksum, String minecraft) {
         return new CommunityCatalogManifest.PackageEntry(
                 "demo",
+                "Demo Skill",
+                "A demo vertical workflow.",
+                "Test Publisher",
                 "1.0.0",
                 URI.create("https://example.test/demo.zip"),
                 checksum,

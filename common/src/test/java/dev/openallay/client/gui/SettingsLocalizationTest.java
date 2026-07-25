@@ -73,6 +73,8 @@ final class SettingsLocalizationTest {
             "screen.openallay.settings.extensions.runtime.title",
             "screen.openallay.settings.extensions.runtime.description",
             "screen.openallay.settings.skills.create_override",
+            "screen.openallay.settings.skills.community.publisher",
+            "screen.openallay.settings.skills.community.id",
             "settings.openallay.capability.skill.search_guide_books.description");
 
     @Test

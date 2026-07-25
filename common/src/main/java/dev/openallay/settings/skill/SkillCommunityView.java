@@ -27,6 +27,9 @@ public record SkillCommunityView(
 
     public record Package(
             String id,
+            String displayName,
+            String description,
+            String publisher,
             String availableVersion,
             boolean installed,
             boolean updateAvailable,
@@ -36,6 +39,9 @@ public record SkillCommunityView(
             String sha256) {
         public Package {
             require(id, "id");
+            require(displayName, "displayName");
+            require(description, "description");
+            require(publisher, "publisher");
             require(availableVersion, "availableVersion");
             require(source, "source");
             require(archive, "archive");
@@ -49,6 +55,9 @@ public record SkillCommunityView(
                 boolean compatible) {
             return new Package(
                     entry.id(),
+                    entry.displayName(),
+                    entry.description(),
+                    entry.publisher(),
                     entry.version(),
                     installed,
                     installed

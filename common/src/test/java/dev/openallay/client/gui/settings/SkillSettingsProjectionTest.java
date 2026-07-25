@@ -41,6 +41,15 @@ final class SkillSettingsProjectionTest {
                 SkillSettingsProjection.PackageState.AVAILABLE,
                 projection.community().find("available").orElseThrow().state());
         assertEquals(
+                "Display available",
+                projection.community().find("available").orElseThrow().displayName());
+        assertEquals(
+                "Player-facing description for available",
+                projection.community().find("available").orElseThrow().description());
+        assertEquals(
+                "Community Publisher",
+                projection.community().find("available").orElseThrow().publisher());
+        assertEquals(
                 SkillSettingsProjection.PackageState.INSTALLED,
                 projection.community().find("installed").orElseThrow().state());
         assertEquals(
@@ -62,6 +71,9 @@ final class SkillSettingsProjectionTest {
             boolean compatible) {
         return new SkillCommunityView.Package(
                 id,
+                "Display " + id,
+                "Player-facing description for " + id,
+                "Community Publisher",
                 "1.0.0",
                 installed,
                 update,

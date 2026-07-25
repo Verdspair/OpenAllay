@@ -95,6 +95,9 @@ public record SkillSettingsProjection(
 
     public record Package(
             String id,
+            String displayName,
+            String description,
+            String publisher,
             String version,
             PackageState state,
             String source,
@@ -113,6 +116,9 @@ public record SkillSettingsProjection(
             }
             return new Package(
                     value.id(),
+                    value.displayName(),
+                    value.description(),
+                    value.publisher(),
                     value.availableVersion(),
                     state,
                     value.source(),

@@ -770,7 +770,7 @@ public final class OpenAllaySettingsScreen extends Screen {
         }
         if (showList && skillTab == SkillTab.COMMUNITY) {
             for (SkillSettingsProjection.Package skill : projection.community().packages()) {
-                Component label = Component.literal(skill.id()).copy().append(" · ")
+                Component label = Component.literal(skill.displayName()).copy().append(" · ")
                         .append(Component.translatable(skillStateKey(skill.state())));
                 Button button = addRenderableWidget(OpenAllayButton.create(label, ignored -> {
                             selectedCommunitySkillId = skill.id();
@@ -2205,12 +2205,31 @@ public final class OpenAllaySettingsScreen extends Screen {
         int x = area.x() + 10;
         int width = Math.max(80, area.width() - 20);
         int y = area.y() + 31;
-        graphics.text(font, skill.id(), x, y, TEXT, false);
+        graphics.text(font, skill.displayName(), x, y, TEXT, false);
         y += 14;
+        y = renderWrapped(
+                graphics,
+                Component.literal(skill.description()),
+                x,
+                y,
+                width,
+                MUTED,
+                10);
+        y += 4;
         graphics.text(
                 font,
                 Component.translatable("screen.openallay.settings.skills.community.version",
                         skill.version()),
+                x,
+                y,
+                MUTED,
+                false);
+        y += 13;
+        graphics.text(
+                font,
+                Component.translatable(
+                        "screen.openallay.settings.skills.community.publisher",
+                        skill.publisher()),
                 x,
                 y,
                 MUTED,
@@ -2235,6 +2254,16 @@ public final class OpenAllaySettingsScreen extends Screen {
                 10);
         if (skillProjection().debugMode()) {
             y += 7;
+            y = renderWrapped(
+                    graphics,
+                    Component.translatable(
+                            "screen.openallay.settings.skills.community.id",
+                            skill.id()),
+                    x,
+                    y,
+                    width,
+                    MUTED,
+                    10);
             y = renderWrapped(
                     graphics,
                     Component.translatable(

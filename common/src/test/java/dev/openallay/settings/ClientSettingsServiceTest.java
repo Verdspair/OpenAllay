@@ -999,6 +999,9 @@ final class ClientSettingsServiceTest {
                 Optional.of(Instant.EPOCH),
                 List.of(new SkillCommunityView.Package(
                         "demo",
+                        "Demo Skill",
+                        "A demo vertical workflow.",
+                        "Test Publisher",
                         "1.0.0",
                         false,
                         false,
@@ -1059,6 +1062,9 @@ final class ClientSettingsServiceTest {
                     community.generatedAt(),
                     List.of(new SkillCommunityView.Package(
                             prior.id(),
+                            prior.displayName(),
+                            prior.description(),
+                            prior.publisher(),
                             prior.availableVersion(),
                             true,
                             false,

@@ -26,6 +26,9 @@ final class SkillCommunityViewTest {
         CommunityCatalogManifest.PackageEntry entry =
                 new CommunityCatalogManifest.PackageEntry(
                         "demo",
+                        "Demo Skill",
+                        "A demo vertical workflow.",
+                        "Test Publisher",
                         "1.2.0",
                         URI.create("https://example.test/demo.zip"),
                         "a".repeat(64),

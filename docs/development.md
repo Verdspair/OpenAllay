@@ -285,6 +285,16 @@ per-Tool enablement page. Skills remain a separate installed/community
 document surface; their filesystem packages, validation, provenance, and
 override rules are described below.
 
+The public Skill community catalog is a strict schema-2 JSON document. Each
+entry includes the stable package ID plus a player-facing display name,
+description, and publisher, so the Community tab can explain a Skill before
+installation. Archive, SHA-256, compatibility, version, and source remain
+machine-validated package fields. A validated schema-1 cache is accepted
+read-only with conservative synthesized display metadata; successful refreshes
+and all codec output use schema 2. The installed package's validated root
+`SKILL.md`, not catalog display metadata, remains the Agent-instruction source
+of truth.
+
 The connection test displays a cost warning and requires a second confirmation.
 It sends one non-streaming, non-retrying request capped at 64 output tokens with
 no Guide history, Tools, Skills, game state, evidence, or trace. Assistant text

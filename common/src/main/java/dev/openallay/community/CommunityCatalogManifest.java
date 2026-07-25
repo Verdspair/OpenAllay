@@ -8,13 +8,13 @@ import java.util.List;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
-/** Canonical schema-1 manifest for one configuration-layer community catalog. */
+/** Canonical schema-2 manifest for one configuration-layer community catalog. */
 public record CommunityCatalogManifest(
         int schemaVersion,
         String kind,
         Instant generatedAt,
         List<PackageEntry> packages) {
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
 
     public CommunityCatalogManifest {
         if (schemaVersion != SCHEMA_VERSION || !"skill".equals(kind)) {
@@ -35,6 +35,9 @@ public record CommunityCatalogManifest(
 
     public record PackageEntry(
             String id,
+            String displayName,
+            String description,
+            String publisher,
             String version,
             URI archive,
             String sha256,
@@ -45,6 +48,9 @@ public record CommunityCatalogManifest(
 
         public PackageEntry {
             if (id == null || !ID.matcher(id).matches()
+                    || displayName == null || displayName.isBlank()
+                    || description == null || description.isBlank()
+                    || publisher == null || publisher.isBlank()
                     || version == null || version.isBlank()
                     || sha256 == null || !SHA256.matcher(sha256).matches()) {
                 throw new IllegalArgumentException("Invalid community package identity");
