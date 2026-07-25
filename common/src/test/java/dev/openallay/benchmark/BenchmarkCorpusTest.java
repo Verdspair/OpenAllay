@@ -37,9 +37,18 @@ final class BenchmarkCorpusTest {
         for (BenchmarkCase testCase : corpus.cases()) {
             assertFalse(testCase.prompt().contains("/give "));
             assertFalse(testCase.prompt().contains("return {"));
-            assertEquals("javascript-agent-v2", testCase.fixture());
             assertFalse(testCase.requiredCapabilities().isEmpty());
         }
+        assertEquals(
+                "server-model-routing-v1",
+                corpus.cases().stream()
+                        .filter(testCase -> testCase.id().equals("server-model-routing"))
+                        .findFirst()
+                        .orElseThrow()
+                        .fixture());
+        assertTrue(corpus.cases().stream()
+                .filter(testCase -> !testCase.id().equals("server-model-routing"))
+                .allMatch(testCase -> testCase.fixture().equals("javascript-agent-v2")));
     }
 
     @Test

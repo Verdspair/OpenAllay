@@ -21,6 +21,7 @@ import dev.openallay.benchmark.BenchmarkCorpusCodec;
 import dev.openallay.benchmark.BenchmarkOutcome;
 import dev.openallay.benchmark.BenchmarkReport;
 import dev.openallay.benchmark.BenchmarkRunner;
+import dev.openallay.benchmark.BenchmarkSelector;
 import dev.openallay.benchmark.BenchmarkVerifier;
 import dev.openallay.context.DataAuthority;
 import dev.openallay.context.DataCompleteness;
@@ -119,7 +120,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
     @Test
     void fixtureSelectionDeclaresEveryDefaultCoverageGap() {
         ToolInvocationContext context = benchmarkContext("fixture-audit");
-        SelectionPlan plan = select(
+        BenchmarkSelector.Selection plan = select(
                 corpus(),
                 Map.of(),
                 fixtureCapabilities(false),
@@ -139,8 +140,16 @@ final class LiveAgentBenchmarkAcceptanceTest {
                 "tree-cross-section",
                 "entity-detail"), selected);
         assertEquals(List.of(
-                new SkippedCase("server-model-routing", List.of("server-model")),
-                new SkippedCase("modern-command-components", List.of("commands"))),
+                new BenchmarkSelector.SkippedCase(
+                        "server-model-routing",
+                        "server-model-routing-v1",
+                        BenchmarkSelector.SkipReason.FIXTURE_MISMATCH,
+                        List.of("server-model")),
+                new BenchmarkSelector.SkippedCase(
+                        "modern-command-components",
+                        FIXTURE,
+                        BenchmarkSelector.SkipReason.MISSING_CAPABILITIES,
+                        List.of("commands"))),
                 plan.skipped());
         assertTrue(context.registries().orElseThrow().entries().stream()
                 .anyMatch(entry -> entry.id().equals("farmersdelight:roast_chicken")));
@@ -162,7 +171,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
                 "OPENALLAY_BENCHMARK_REPEATS", "3"), "OPENALLAY_BENCHMARK_REPEATS");
         boolean includeCommands = Boolean.parseBoolean(
                 environment.getOrDefault("OPENALLAY_BENCHMARK_INCLUDE_COMMANDS", "false"));
-        SelectionPlan selection =
+        BenchmarkSelector.Selection selection =
                 select(corpus, environment, fixtureCapabilities(includeCommands), repeats);
         List<BenchmarkCase> cases = selection.selected();
         assertFalse(cases.isEmpty(), "No applicable benchmark cases were selected");
@@ -224,6 +233,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
         selection.skipped().forEach(value -> System.out.println(
                 "OPENALLAY_BENCHMARK_SKIPPED"
                         + " id=" + value.caseId()
+                        + " reason=" + value.reason()
                         + " missing_capabilities="
                         + String.join(",", value.missingCapabilities())));
         report.cases().forEach(value -> System.out.println(
@@ -288,7 +298,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
         return recorder.outcome(result);
     }
 
-    private static SelectionPlan select(
+    private static BenchmarkSelector.Selection select(
             BenchmarkCorpus corpus,
             Map<String, String> environment,
             Set<String> capabilities,
@@ -300,37 +310,12 @@ final class LiveAgentBenchmarkAcceptanceTest {
                         .map(String::strip)
                         .filter(value -> !value.isEmpty())
                         .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        if (!requested.isEmpty()) {
-            Set<String> known = corpus.cases().stream()
-                    .map(BenchmarkCase::id)
-                    .collect(java.util.stream.Collectors.toSet());
-            Set<String> unknown = new java.util.TreeSet<>(requested);
-            unknown.removeAll(known);
-            if (!unknown.isEmpty()) {
-                throw new IllegalArgumentException("Unknown benchmark cases: " + unknown);
-            }
-        }
-        List<BenchmarkCase> considered = corpus.cases().stream()
-                .filter(value -> requested.isEmpty() || requested.contains(value.id()))
-                .toList();
-        List<BenchmarkCase> selected = considered.stream()
-                .filter(value -> value.applicableTo(FIXTURE, capabilities))
-                .map(value -> value.withAttempts(repeats))
-                .toList();
-        List<SkippedCase> skipped = considered.stream()
-                .filter(value -> !value.applicableTo(FIXTURE, capabilities))
-                .map(value -> new SkippedCase(
-                        value.id(),
-                        value.requiredCapabilities().stream()
-                                .filter(capability -> !capabilities.contains(capability))
-                                .sorted()
-                                .toList()))
-                .toList();
-        if (!requested.isEmpty() && selected.size() != requested.size()) {
-            throw new IllegalArgumentException(
-                    "Selected cases require unavailable fixture capabilities: " + skipped);
-        }
-        return new SelectionPlan(selected, skipped);
+        return new BenchmarkSelector().select(
+                corpus,
+                FIXTURE,
+                capabilities,
+                requested,
+                repeats);
     }
 
     private static BenchmarkCorpus corpus() {
@@ -551,7 +536,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
     private static Path retain(
             Map<String, String> environment,
             BenchmarkCorpus corpus,
-            SelectionPlan selection,
+            BenchmarkSelector.Selection selection,
             BenchmarkReport report,
             List<AttemptTrace> traces,
             Gson gson)
@@ -566,7 +551,9 @@ final class LiveAgentBenchmarkAcceptanceTest {
                 environment.getOrDefault("OPENALLAY_PRODUCT_COMMIT", "unknown"),
                 provider,
                 required(environment, "OPENALLAY_MODEL"),
-                selection.summary(),
+                new SelectionSummary(
+                        selection.selected().stream().map(BenchmarkCase::id).toList(),
+                        selection.skipped()),
                 report,
                 List.copyOf(traces));
         Path directory = Path.of(environment.getOrDefault(
@@ -620,33 +607,9 @@ final class LiveAgentBenchmarkAcceptanceTest {
     private record AttemptTrace(
             String caseId, int attempt, dev.openallay.agent.trace.LiveAgentTrace trace) {}
 
-    private record SkippedCase(String caseId, List<String> missingCapabilities) {
-        private SkippedCase {
-            if (caseId == null || caseId.isBlank()) {
-                throw new IllegalArgumentException("caseId must not be blank");
-            }
-            missingCapabilities = List.copyOf(missingCapabilities);
-        }
-    }
-
-    private record SelectionPlan(
-            List<BenchmarkCase> selected,
-            List<SkippedCase> skipped) {
-        private SelectionPlan {
-            selected = List.copyOf(selected);
-            skipped = List.copyOf(skipped);
-        }
-
-        private SelectionSummary summary() {
-            return new SelectionSummary(
-                    selected.stream().map(BenchmarkCase::id).toList(),
-                    skipped);
-        }
-    }
-
     private record SelectionSummary(
             List<String> selectedCaseIds,
-            List<SkippedCase> skipped) {
+            List<BenchmarkSelector.SkippedCase> skipped) {
         private SelectionSummary {
             selectedCaseIds = List.copyOf(selectedCaseIds);
             skipped = List.copyOf(skipped);

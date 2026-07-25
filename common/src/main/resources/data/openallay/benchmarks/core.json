@@ -66,7 +66,7 @@
       "id": "server-model-routing",
       "category": "model-routing",
       "prompt": "使用服务器提供的模型回答一句话，并保持当前会话。",
-      "fixture": "javascript-agent-v2",
+      "fixture": "server-model-routing-v1",
       "requiredCapabilities": ["server-model"],
       "attempts": 3,
       "maxModelTurns": 2,

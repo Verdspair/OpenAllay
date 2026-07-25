@@ -48,14 +48,16 @@ scripts/run-agent-benchmark.sh live
 
 `OPENALLAY_BENCHMARK_CASES` may contain a comma-separated subset of exact case
 IDs. Experimental command cases are excluded unless
-`OPENALLAY_BENCHMARK_INCLUDE_COMMANDS=true`; server-routing cases require a
-different server fixture and are not fabricated by the local JavaScript
-fixture. The default local fixture includes the Farmer's Delight-style food
+`OPENALLAY_BENCHMARK_INCLUDE_COMMANDS=true`. Server routing is exercised by
+the deterministic `server-model-routing-v1` GuideService fixture and remains
+explicitly outside the local JavaScript/provider fixture. The default local
+fixture includes the Farmer's Delight-style food
 ranking and recipe/inventory craftability cases as detached, generalized test
 data; it does not copy expected answers into model context. Default runs print
 an `OPENALLAY_BENCHMARK_SKIPPED` line for every unavailable case and retain a
-schema-2 selection plan with its missing capabilities, so fixture coverage
-cannot shrink silently. Explicitly selected unavailable cases still fail fast.
+schema-2 selection plan with its required fixture, skip reason, and missing
+capabilities, so fixture coverage cannot shrink silently. Explicitly selected
+unavailable cases still fail fast.
 Reports under
 `build/reports/openallay/benchmarks/` retain corpus
 version, commit, redacted provider authority, canonical model ID, complete
