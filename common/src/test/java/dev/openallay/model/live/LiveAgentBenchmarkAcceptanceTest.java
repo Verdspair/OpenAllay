@@ -227,7 +227,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
                 List.of(),
                 new GsonBuilder().setPrettyPrinting().create());
         String report = Files.readString(retained, StandardCharsets.UTF_8);
-        assertTrue(report.contains("\"schemaVersion\": 3"));
+        assertTrue(report.contains("\"schemaVersion\": 4"));
         assertTrue(report.contains("\"profileId\": \"benchmark-profile\""));
         assertTrue(report.contains("\"canonicalModelId\": \"provider/benchmark\""));
         assertTrue(report.contains("\"provider\": \"https://benchmark.example\""));
@@ -624,7 +624,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
         String provider = endpoint.getScheme() + "://" + endpoint.getHost()
                 + (endpoint.getPort() < 0 ? "" : ":" + endpoint.getPort());
         LiveReport retained = new LiveReport(
-                3,
+                4,
                 corpus.version(),
                 FIXTURE,
                 environment.getOrDefault("OPENALLAY_PRODUCT_COMMIT", "unknown"),

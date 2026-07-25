@@ -43,7 +43,7 @@
               "kind": {
                 "enum": [
                   "JSON_PATH_EQUALS",
-                  "RESULT_CONTAINS",
+                  "ANSWER_CONTAINS",
                   "EFFECT_CONTAINS",
                   "NON_EMPTY_RESULT"
                 ]

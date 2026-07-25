@@ -39,6 +39,11 @@ final class BenchmarkCorpusTest {
             assertFalse(testCase.prompt().contains("return {"));
             assertFalse(testCase.requiredCapabilities().isEmpty());
         }
+        assertTrue(corpus.cases().stream()
+                .filter(testCase ->
+                        testCase.verifier().kind() != BenchmarkCase.Kind.EFFECT_CONTAINS)
+                .allMatch(testCase ->
+                        testCase.verifier().kind() == BenchmarkCase.Kind.ANSWER_CONTAINS));
         assertEquals(
                 "server-model-routing-v1",
                 corpus.cases().stream()
@@ -80,6 +85,26 @@ final class BenchmarkCorpusTest {
         assertThrows(IllegalArgumentException.class, () -> new BenchmarkCorpusCodec().decode(
                 new java.io.StringReader("""
                         {"schemaVersion":2,"version":"v","cases":[]}
+                        """)));
+        assertThrows(IllegalArgumentException.class, () -> new BenchmarkCorpusCodec().decode(
+                new java.io.StringReader("""
+                        {
+                          "schemaVersion": 1,
+                          "version": "v",
+                          "cases": [{
+                            "id": "weak",
+                            "category": "core",
+                            "prompt": "answer",
+                            "fixture": "fixture",
+                            "requiredCapabilities": ["game"],
+                            "attempts": 1,
+                            "maxModelTurns": 1,
+                            "verifier": {
+                              "kind": "RESULT_CONTAINS",
+                              "contains": "target"
+                            }
+                          }]
+                        }
                         """)));
     }
 }

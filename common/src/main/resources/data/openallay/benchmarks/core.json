@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "openallay-core-2026-07-25",
+  "version": "openallay-core-2026-07-25-r2",
   "cases": [
     {
       "id": "exact-installed-mod",
@@ -10,7 +10,7 @@
       "requiredCapabilities": ["game"],
       "attempts": 3,
       "maxModelTurns": 3,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "farmersdelight"}
+      "verifier": {"kind": "ANSWER_CONTAINS", "contains": "farmersdelight"}
     },
     {
       "id": "highest-damage-sword",
@@ -20,7 +20,7 @@
       "requiredCapabilities": ["registries"],
       "attempts": 3,
       "maxModelTurns": 4,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "example:obsidian_sword"}
+      "verifier": {"kind": "ANSWER_CONTAINS", "contains": "example:obsidian_sword"}
     },
     {
       "id": "least-material-container",
@@ -30,7 +30,7 @@
       "requiredCapabilities": ["registries", "recipes"],
       "attempts": 3,
       "maxModelTurns": 5,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "example:small_pouch"}
+      "verifier": {"kind": "ANSWER_CONTAINS", "contains": "example:small_pouch"}
     },
     {
       "id": "farmers-delight-food-ranking",
@@ -40,7 +40,7 @@
       "requiredCapabilities": ["registries", "content-profile"],
       "attempts": 3,
       "maxModelTurns": 5,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "farmersdelight:roast_chicken"}
+      "verifier": {"kind": "ANSWER_CONTAINS", "contains": "farmersdelight:roast_chicken"}
     },
     {
       "id": "dynamic-extension-schema",
@@ -50,7 +50,7 @@
       "requiredCapabilities": ["extensions"],
       "attempts": 3,
       "maxModelTurns": 4,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "benchmark:machines"}
+      "verifier": {"kind": "ANSWER_CONTAINS", "contains": "benchmark:machines"}
     },
     {
       "id": "recipe-craftability",
@@ -60,7 +60,7 @@
       "requiredCapabilities": ["recipes", "player", "inventory-rich"],
       "attempts": 3,
       "maxModelTurns": 5,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "farmersdelight:apple_cider"}
+      "verifier": {"kind": "ANSWER_CONTAINS", "contains": "farmersdelight:apple_cider"}
     },
     {
       "id": "server-model-routing",
@@ -90,7 +90,7 @@
       "requiredCapabilities": ["extensions", "recipe-viewer"],
       "attempts": 3,
       "maxModelTurns": 4,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "openallay:jei"}
+      "verifier": {"kind": "ANSWER_CONTAINS", "contains": "openallay:jei"}
     },
     {
       "id": "tree-cross-section",
@@ -100,7 +100,7 @@
       "requiredCapabilities": ["world"],
       "attempts": 3,
       "maxModelTurns": 5,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "_log"}
+      "verifier": {"kind": "ANSWER_CONTAINS", "contains": "_log"}
     },
     {
       "id": "entity-detail",
@@ -110,7 +110,7 @@
       "requiredCapabilities": ["world"],
       "attempts": 3,
       "maxModelTurns": 5,
-      "verifier": {"kind": "RESULT_CONTAINS", "contains": "minecraft:cow"}
+      "verifier": {"kind": "ANSWER_CONTAINS", "contains": "minecraft:cow"}
     }
   ]
 }

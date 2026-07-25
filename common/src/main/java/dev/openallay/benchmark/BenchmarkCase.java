@@ -73,7 +73,7 @@ public record BenchmarkCase(
                 throw new IllegalArgumentException(
                         "json_path_equals requires path and expected");
             }
-            if ((kind == Kind.RESULT_CONTAINS || kind == Kind.EFFECT_CONTAINS)
+            if ((kind == Kind.ANSWER_CONTAINS || kind == Kind.EFFECT_CONTAINS)
                     && contains.isBlank()) {
                 throw new IllegalArgumentException(kind + " requires contains");
             }
@@ -87,7 +87,7 @@ public record BenchmarkCase(
 
     public enum Kind {
         JSON_PATH_EQUALS,
-        RESULT_CONTAINS,
+        ANSWER_CONTAINS,
         EFFECT_CONTAINS,
         NON_EMPTY_RESULT
     }

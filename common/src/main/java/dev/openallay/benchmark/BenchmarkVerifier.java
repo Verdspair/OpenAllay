@@ -11,10 +11,10 @@ public final class BenchmarkVerifier {
             case NON_EMPTY_RESULT -> outcome.canonicalResult().isJsonNull()
                     ? Verification.failure("canonical result is empty")
                     : Verification.success();
-            case RESULT_CONTAINS -> contains(
-                            outcome.canonicalResult().toString(), verifier.contains())
+            case ANSWER_CONTAINS -> answerContains(
+                            outcome.canonicalResult(), verifier.contains())
                     ? Verification.success()
-                    : Verification.failure("canonical result does not contain expected value");
+                    : Verification.failure("final answer does not contain expected value");
             case EFFECT_CONTAINS -> outcome.observedEffects().stream()
                     .anyMatch(effect -> contains(effect, verifier.contains()))
                     ? Verification.success()
@@ -41,6 +41,16 @@ public final class BenchmarkVerifier {
 
     private static boolean contains(String value, String expected) {
         return value.toLowerCase(Locale.ROOT).contains(expected.toLowerCase(Locale.ROOT));
+    }
+
+    private static boolean answerContains(JsonElement canonicalResult, String expected) {
+        if (!(canonicalResult instanceof JsonObject object)
+                || !object.has("answer")
+                || !object.get("answer").isJsonPrimitive()
+                || !object.getAsJsonPrimitive("answer").isString()) {
+            return false;
+        }
+        return contains(object.get("answer").getAsString(), expected);
     }
 
     public record Verification(boolean passed, String diagnostic) {
