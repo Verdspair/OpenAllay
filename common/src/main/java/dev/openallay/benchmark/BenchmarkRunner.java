@@ -24,8 +24,7 @@ public final class BenchmarkRunner {
         Objects.requireNonNull(executor, "executor");
         ArrayList<BenchmarkReport.CaseReport> reports = new ArrayList<>();
         for (BenchmarkCase testCase : List.copyOf(cases)) {
-            ArrayList<BenchmarkMetrics> metrics = new ArrayList<>();
-            ArrayList<String> diagnostics = new ArrayList<>();
+            ArrayList<BenchmarkReport.AttemptReport> attemptReports = new ArrayList<>();
             int successes = 0;
             long modelTurns = 0;
             long toolCalls = 0;
@@ -34,20 +33,20 @@ public final class BenchmarkRunner {
                         executor.execute(testCase, attempt), "benchmark outcome");
                 BenchmarkVerifier.Verification verification =
                         verifier.verify(testCase, outcome);
-                boolean success = outcome.metrics().success()
-                        && verification.passed()
-                        && outcome.metrics().modelTurns() <= testCase.maxModelTurns();
+                BenchmarkReport.FailureKind failureKind =
+                        failureKind(testCase, outcome, verification);
+                boolean success = failureKind == BenchmarkReport.FailureKind.NONE;
                 BenchmarkMetrics measured = withSuccess(outcome.metrics(), success);
-                metrics.add(measured);
+                attemptReports.add(new BenchmarkReport.AttemptReport(
+                        attempt,
+                        success,
+                        failureKind,
+                        diagnostic(failureKind, outcome, verification),
+                        measured));
                 modelTurns += measured.modelTurns();
                 toolCalls += measured.toolCalls();
                 if (success) {
                     successes++;
-                    diagnostics.add("");
-                } else if (!verification.passed()) {
-                    diagnostics.add(verification.diagnostic());
-                } else {
-                    diagnostics.add("model turn budget exceeded");
                 }
             }
             int attempts = testCase.attempts();
@@ -57,17 +56,48 @@ public final class BenchmarkRunner {
                     successes,
                     successes / (double) attempts,
                     modelTurns / (double) attempts,
-                    median(metrics.stream()
+                    median(attemptReports.stream()
+                            .map(BenchmarkReport.AttemptReport::metrics)
                             .map(BenchmarkMetrics::modelTurns)
                             .toList()),
                     toolCalls / (double) attempts,
-                    median(metrics.stream()
+                    median(attemptReports.stream()
+                            .map(BenchmarkReport.AttemptReport::metrics)
                             .map(BenchmarkMetrics::toolCalls)
                             .toList()),
-                    metrics,
-                    diagnostics));
+                    attemptReports));
         }
         return new BenchmarkReport(corpusVersion, reports);
+    }
+
+    private static BenchmarkReport.FailureKind failureKind(
+            BenchmarkCase testCase,
+            BenchmarkOutcome outcome,
+            BenchmarkVerifier.Verification verification) {
+        if (!outcome.metrics().success()) {
+            return BenchmarkReport.FailureKind.RUNTIME_TERMINAL;
+        }
+        if (!verification.passed()) {
+            return BenchmarkReport.FailureKind.VERIFICATION;
+        }
+        if (outcome.metrics().modelTurns() > testCase.maxModelTurns()) {
+            return BenchmarkReport.FailureKind.MODEL_TURN_BUDGET;
+        }
+        return BenchmarkReport.FailureKind.NONE;
+    }
+
+    private static String diagnostic(
+            BenchmarkReport.FailureKind failureKind,
+            BenchmarkOutcome outcome,
+            BenchmarkVerifier.Verification verification) {
+        return switch (failureKind) {
+            case NONE -> "";
+            case RUNTIME_TERMINAL -> outcome.metrics().terminalCode().isBlank()
+                    ? "runtime terminal failure"
+                    : "runtime terminal: " + outcome.metrics().terminalCode();
+            case VERIFICATION -> verification.diagnostic();
+            case MODEL_TURN_BUDGET -> "model turn budget exceeded";
+        };
     }
 
     private static double median(List<Integer> values) {

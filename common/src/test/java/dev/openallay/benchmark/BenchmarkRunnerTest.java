@@ -39,6 +39,14 @@ final class BenchmarkRunnerTest {
         assertEquals(3.0, result.medianModelTurns(), 0.0001);
         assertEquals(4.0, result.averageToolCalls(), 0.0001);
         assertEquals(4.0, result.medianToolCalls(), 0.0001);
+        assertEquals(
+                java.util.List.of(
+                        BenchmarkReport.FailureKind.NONE,
+                        BenchmarkReport.FailureKind.VERIFICATION,
+                        BenchmarkReport.FailureKind.NONE),
+                result.attemptReports().stream()
+                        .map(BenchmarkReport.AttemptReport::failureKind)
+                        .toList());
         assertFalse(java.util.Arrays.stream(BenchmarkMetrics.class.getRecordComponents())
                 .anyMatch(component -> component.getName().toLowerCase().contains("time")));
     }
@@ -66,7 +74,53 @@ final class BenchmarkRunnerTest {
                         .getFirst();
 
         assertEquals(0, report.successes());
+        assertEquals(
+                BenchmarkReport.FailureKind.MODEL_TURN_BUDGET,
+                report.attemptReports().getFirst().failureKind());
         assertEquals("model turn budget exceeded", report.diagnostics().getFirst());
+    }
+
+    @Test
+    void preservesRuntimeTerminalFailureInsteadOfMisreportingTurnBudget() {
+        BenchmarkCase testCase = new BenchmarkCase(
+                "provider",
+                "core",
+                "answer",
+                1,
+                3,
+                new BenchmarkCase.Verifier(
+                        BenchmarkCase.Kind.NON_EMPTY_RESULT, "", null, ""));
+
+        BenchmarkReport.AttemptReport attempt =
+                new BenchmarkRunner(new BenchmarkVerifier()).run(
+                                "fixture-v1",
+                                List.of(testCase),
+                                (ignored, number) -> new BenchmarkOutcome(
+                                        JsonParser.parseString("{\"partial\":true}"),
+                                        List.of(),
+                                        new BenchmarkMetrics(
+                                                false,
+                                                1,
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                                "model_transport_unavailable")))
+                        .cases()
+                        .getFirst()
+                        .attemptReports()
+                        .getFirst();
+
+        assertFalse(attempt.success());
+        assertEquals(
+                BenchmarkReport.FailureKind.RUNTIME_TERMINAL,
+                attempt.failureKind());
+        assertEquals(
+                "runtime terminal: model_transport_unavailable",
+                attempt.diagnostic());
     }
 
     private static BenchmarkMetrics metrics(
