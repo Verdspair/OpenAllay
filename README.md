@@ -83,8 +83,9 @@ an action.
   and inventory calculations.
 - Inspect installed mods, video and gameplay settings, resource packs,
   coordinates, dimension, and F3-style diagnostics.
-- Inspect a focused region of blocks or entities, then filter and compare the
-  observed data with JavaScript instead of flooding the conversation.
+- Inspect a focused region of blocks or entities, then filter, compare, and
+  verify the observed result with JavaScript instead of flooding the
+  conversation.
 - Search supported guide-book content and use recipe information from the game,
   JEI, REI, and recipe-rich mods such as Farmer's Delight.
 - Present trusted recipes, items, tables, compact values, and generic results
@@ -92,8 +93,9 @@ an action.
 - Keep multiple conversations, durable history, model profiles, copy, export,
   cancellation, and retry in the native OpenAllay screen.
 - Optionally expose the current Minecraft command set—including commands added
-  by mods—to the Agent. This experimental capability is disabled by default and
-  can be enabled from **Settings → Extensions**.
+  by mods—to the Agent, and let it read Minecraft's feedback before reporting
+  what happened. This experimental capability is disabled by default and can
+  be enabled from **Settings → Extensions**.
 
 ## Quick start
 
@@ -127,7 +129,8 @@ OpenAllay screen. Upgrade to **21.0.4 or newer**, or remove Architectury.
 - “What fields are available for potion effects in this modpack?”
 
 With experimental commands enabled, you can also ask OpenAllay to perform an
-available Minecraft command and read the game's response.
+available Minecraft command, read the game's response, and distinguish
+confirmed feedback from a command that produced no visible reply.
 
 ## Using the in-game screen
 

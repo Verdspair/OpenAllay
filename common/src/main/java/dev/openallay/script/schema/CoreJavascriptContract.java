@@ -29,6 +29,20 @@ public final class CoreJavascriptContract {
                   world.entities({from:{x,y,z},to:{x,y,z}}, {type:"namespace:id"}) returns entity summaries with request-scoped observationId values.
                   world.entity(observationId) returns the detached detail for one entity from that same request.
 
+                For a focused region relative to the current player, select Tool roots: ["player", "world"] and use this exact shape:
+                var origin = mc.player.position;
+                var observed = world.inspect(
+                  {from:{x:origin.x-8,y:origin.y+1,z:origin.z-8},
+                   to:{x:origin.x+8,y:origin.y+16,z:origin.z+8}},
+                  {includeAir:false});
+                return {
+                  blocks: observed.blocks.filter(function (block) {
+                    return block.id !== "minecraft:air";
+                  }),
+                  coverage: observed.coverage
+                };
+                Change only the task-focused offsets and filtering. Do not invent mc.world, getBlock, or live client objects.
+
                 Host arrays support non-mutating filter, map, flatMap, slice, reduce, some, and includes.
                 Copy a host array before sort, reverse, splice, push, or index assignment.
                 Prefer one complete filter/join/aggregate program and return answer-sized data.

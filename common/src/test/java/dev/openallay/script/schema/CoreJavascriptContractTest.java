@@ -28,6 +28,10 @@ final class CoreJavascriptContractTest {
         assertTrue(rendered.contains("world.entity(observationId)"));
         assertTrue(rendered.contains("roots [\"world\"]"));
         assertTrue(rendered.contains("never mc.world"));
+        assertTrue(rendered.contains("roots: [\"player\", \"world\"]"));
+        assertTrue(rendered.contains("var origin = mc.player.position;"));
+        assertTrue(rendered.contains("world.inspect("));
+        assertTrue(rendered.contains("coverage: observed.coverage"));
         assertFalse(rendered.contains("analyze-game-data"));
     }
 

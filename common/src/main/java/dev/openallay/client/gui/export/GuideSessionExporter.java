@@ -125,6 +125,10 @@ public final class GuideSessionExporter {
                             .append("\n\n");
                 }
             }
+            if (request.status() == dev.openallay.guide.GuideRequestStatus.CANCELLED
+                    || request.status() == dev.openallay.guide.GuideRequestStatus.INTERRUPTED) {
+                result.append("[This request ended before the response completed.]\n\n");
+            }
         }
         return result.toString();
     }

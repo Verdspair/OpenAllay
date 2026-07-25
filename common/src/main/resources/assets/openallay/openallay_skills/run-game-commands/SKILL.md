@@ -2,7 +2,7 @@
 name: run-game-commands
 description: Use when a player explicitly asks to discover or execute a Minecraft command through the enabled experimental command capability.
 metadata:
-  openallay/version: "0.2.1"
+  openallay/version: "0.2.2"
 allowed-tools: "openallay:run_javascript"
 ---
 Use this Skill when the player explicitly asks OpenAllay to execute a Minecraft
@@ -20,6 +20,18 @@ command capability for this request:
   waits off the render thread for the associated client-visible feedback window,
   and returns the messages that Minecraft produced. A single optional leading
   `/` is removed; the remaining string is unchanged.
+
+The canonical execution form is:
+
+```javascript
+var command = "time set day";
+return commands.run(command);
+```
+
+`commands.run(...)` is synchronous from JavaScript's point of view: the returned
+object already contains `state`, `messages`, and timing. Never call `commands` as a function.
+Never poll for a later result, and never run a second script only to retrieve
+feedback from the first.
 
 For a command-only `run_javascript` call, set the Tool input `roots` to
 `["commands"]`. The binding is named `commands` directly; there is no
@@ -41,7 +53,9 @@ Always inspect and return the `commands.run` result. `state: "feedback"` means
 Minecraft emitted one or more messages in the command feedback window;
 `state: "no_feedback"` means the command produced no observable message before
 that window closed. Do not describe a command as successful merely because it
-was submitted.
+was submitted. Report only the outcome actually stated by the feedback. A
+structure, inventory, or attribute is independently verified only when the
+feedback says so or a separate world/data observation sees the resulting state.
 
 Minecraft remains authoritative for parsing and permissions. Submissions are
 not transactional: if a later statement fails or the Agent is cancelled,

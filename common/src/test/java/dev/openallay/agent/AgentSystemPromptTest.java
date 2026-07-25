@@ -38,6 +38,11 @@ final class AgentSystemPromptTest {
         assertTrue(prompt.contains("roots [\"world\"]"));
         assertTrue(prompt.contains("there is no mc.world"));
         assertTrue(prompt.contains("no Skill preflight is required"));
+        assertTrue(prompt.contains("Retry, continue, do it again"));
+        assertTrue(prompt.contains("installed instance represented by its evidence"));
+        assertTrue(prompt.contains("Do not relabel that scope as vanilla-only"));
+        assertTrue(prompt.contains("submitted without observable confirmation"));
+        assertTrue(prompt.contains("independent world.inspect evidence"));
         assertTrue(prompt.contains("current request's Tool definitions"));
         assertTrue(prompt.contains("mc.game.mods.installed"));
         assertTrue(prompt.contains("schema.describe(path)"));

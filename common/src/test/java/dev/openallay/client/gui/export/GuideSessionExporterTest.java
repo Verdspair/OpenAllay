@@ -66,6 +66,29 @@ final class GuideSessionExporterTest {
         assertFalse(Files.exists(game.resolve("openallay/exports")));
     }
 
+    @Test
+    void marksCancelledPartialResponsesWithoutChangingCompletedExports() {
+        GuideSessionExportSnapshot.Request completed = new GuideSessionExportSnapshot.Request(
+                NOW,
+                GuideRequestStatus.COMPLETED,
+                "complete",
+                List.of(new GuideSessionExportSnapshot.Entry.Assistant("finished", false)));
+        GuideSessionExportSnapshot.Request cancelled = new GuideSessionExportSnapshot.Request(
+                NOW.plusSeconds(1),
+                GuideRequestStatus.CANCELLED,
+                "cancelled",
+                List.of(new GuideSessionExportSnapshot.Entry.Assistant("partial ans", false)));
+
+        String text = GuideSessionExporter.format(new GuideSessionExportSnapshot(
+                "main", List.of(completed, cancelled), NOW.plusSeconds(2)));
+
+        assertEquals(1, text.split(
+                "\\[This request ended before the response completed\\.]", -1).length - 1);
+        assertTrue(text.indexOf("finished") < text.indexOf("=== Request 2"));
+        assertTrue(text.indexOf("partial ans")
+                < text.indexOf("[This request ended before the response completed.]"));
+    }
+
     private static GuideSessionExportSnapshot snapshot(String user, String assistant) {
         GuideSessionExportSnapshot.Request request = new GuideSessionExportSnapshot.Request(
                 NOW,

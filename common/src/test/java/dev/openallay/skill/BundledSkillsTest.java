@@ -45,10 +45,14 @@ final class BundledSkillsTest {
         assertTrue(commands.instructions().contains("never rolled back"));
         assertTrue(commands.instructions().contains("this main document is enough"));
         assertTrue(commands.instructions().contains("modern item/text component"));
+        assertTrue(commands.instructions().contains("`commands.run(...)` is synchronous"));
+        assertTrue(commands.instructions().contains("Never call `commands` as a function"));
+        assertTrue(commands.instructions().contains("return commands.run(command);"));
         String commandReference = commands.references().get("references/commands.md");
         assertTrue(commandReference.contains("<component-id>=<SNBT value>"));
         assertTrue(commandReference.contains("commands.describe(\"give <targets> <item>\")"));
         assertTrue(commandReference.contains("retry at most once"));
+        assertTrue(commandReference.contains("Do not poll"));
         assertFalse(commandReference.contains("enchanted-item-created"));
     }
 

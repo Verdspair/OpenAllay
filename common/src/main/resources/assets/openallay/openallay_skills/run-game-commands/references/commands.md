@@ -107,7 +107,9 @@ Each result has:
 `commands.run` is synchronous from JavaScript's point of view, but command
 submission and feedback happen asynchronously with respect to the Minecraft
 render thread. OpenAllay waits on its worker thread, so the script can use the
-returned result immediately without promises or polling.
+returned result immediately without promises or polling. Do not poll, call
+`commands` as a function, or issue a later JavaScript call to collect the first
+call's result.
 
 `commands.run` adds no OpenAllay allowlist, argument filter, or call-count cap.
 Minecraft's command parser, connection state, registered command tree, and
