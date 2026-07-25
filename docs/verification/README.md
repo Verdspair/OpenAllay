@@ -7,3 +7,11 @@ historical test runs and are not current product metadata or compatibility
 aliases.
 
 Post-cutover evidence is stored under `openallay-cutover/`.
+
+Current 0.2 platform evidence:
+
+- [`2026-07-25-community-catalogs.md`](2026-07-25-community-catalogs.md)
+  verifies anonymous public catalog access, every Skill package checksum, and
+  both loader-specific example Extension artifacts.
+- [`2026-07-25-fabric-26.2-content-profile.md`](2026-07-25-fabric-26.2-content-profile.md)
+  records the opt-in content-rich Fabric test profile.
