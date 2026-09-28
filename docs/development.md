@@ -501,12 +501,15 @@ the selected graphical development client:
 Connect the launched client to a disposable world or test server, or set
 `OPENALLAY_E2E_QUICK_PLAY_WORLD` to an existing disposable single-player world.
 The fixture waits for durable hydration and every enabled installed recipe
-viewer to publish a non-empty current catalog. It streams deliberately split
-Markdown/component tokens through a grounded five-tool chronology: recipe
-search, exact lookup, inventory, deterministic craftability, and knowledge
-sources. The report records redacted semantic/component/fallback counts and
-history-window/cache metrics, and the script rejects any outcome other than
-`COMPLETED`.
+viewer to publish a non-empty current catalog. It requests one
+`openallay:run_javascript` call over the detached recipe, player, and knowledge
+roots, then uses the exact current-capture recipe reference and computed result
+in deterministic pre-authored component responses. The loopback fixture is not
+a model and does not test model planning, answer quality, or live provider
+behavior. It does exercise the production Tool, current game capture, evidence
+binding, UI chronology, and native presentation path. The report records
+redacted semantic/component/fallback counts and history-window/cache metrics,
+and the script rejects any outcome other than `COMPLETED`.
 
 The default retained recipe is `minecraft:iron_block`. A compatible mod recipe
 can exercise native viewer embedding without changing the fixture, for example:
@@ -519,8 +522,8 @@ OPENALLAY_E2E_RECIPE_LABEL=苹果酒 \
 ```
 
 These variables affect only the deterministic loopback scenario. The exact
-reference is still discovered from a real current recipe-provider generation;
-the fixture never fabricates the viewer handle.
+reference is read from the current JavaScript capture result; the fixture never
+fabricates a viewer handle or craftability result.
 
 Set `OPENALLAY_E2E_HISTORY_SEED_REQUESTS` to create sequential durable seed
 requests before the reported scenario. `OPENALLAY_E2E_MIN_HISTORY_REQUESTS`

@@ -8,14 +8,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-STEP_NAMES = (
-    "openallay__search_recipes",
-    "openallay__get_recipe",
-    "openallay__inspect_inventory",
-    "openallay__calculate_craftability",
-    "openallay__list_knowledge_sources",
-)
-
+JAVASCRIPT_TOOL = "openallay__run_javascript"
 GAME_STATE_STEPS = (
     ("openallay__inspect_game_state", {"section": "OVERVIEW", "query": "summary"}),
     ("openallay__inspect_game_state", {"section": "MODS", "query": "list"}),
@@ -35,287 +28,157 @@ RECIPE_LABEL = os.environ.get("OPENALLAY_E2E_RECIPE_LABEL", "铁块")
 RECIPE_SOURCE = os.environ.get("OPENALLAY_E2E_RECIPE_SOURCE")
 
 
-def recipe_reference(request, output_item=None, recipe_id=None, recipe_type=None):
-    matching_search = None
-    observed_tools = []
-    for message in reversed(request.get("messages", [])):
-        if message.get("role") != "tool":
-            continue
-        try:
-            normalized = json.loads(message.get("content", ""))
-            observed_tools.append({
-                "status": normalized.get("status") if isinstance(normalized, dict) else None,
-                "code": normalized.get("code") if isinstance(normalized, dict) else None,
-                "outputType": normalized.get("outputType") if isinstance(normalized, dict) else None,
-                "valueKeys": sorted(normalized.get("value", {}).keys())
-                if isinstance(normalized, dict)
-                and isinstance(normalized.get("value"), dict) else [],
-            })
-            if output_item is not None:
-                query = normalized["value"]["query"]
-                if query.get("outputItem") != output_item:
-                    continue
-            matching_search = normalized
-            recipes = normalized["value"]["recipes"]
-            for recipe in recipes:
-                if recipe_id is not None and recipe.get("id") != recipe_id:
-                    continue
-                if recipe_type is not None and recipe.get("type") != recipe_type:
-                    continue
-                references = recipe.get("references", [recipe["reference"]])
-                reference = next((value for value in references
-                                  if RECIPE_SOURCE is None
-                                  or value.get("sourceId") == RECIPE_SOURCE), None)
-                if reference is not None:
-                    return {key: reference[key]
-                            for key in ("sourceId", "generation", "recipeId")}
-        except (KeyError, IndexError, TypeError, json.JSONDecodeError):
-            continue
-    if matching_search is not None:
-        providers = matching_search.get("value", {}).get("catalog", {}).get("providers", [])
-        summary = [{
-            "sourceId": provider.get("sourceId"),
-            "state": provider.get("state"),
-            "recipeCount": provider.get("recipeCount"),
-            "diagnostics": [diagnostic.get("code")
-                            for diagnostic in provider.get("diagnostics", [])[:3]],
-        } for provider in providers]
-        candidates = [{"id": recipe.get("id"), "type": recipe.get("type")}
-                      for recipe in matching_search.get("value", {}).get("recipes", [])]
-        raise ValueError("search returned no matching recipe reference; candidates="
-                         + json.dumps(candidates, separators=(",", ":"))
-                         + "; providers="
-                         + json.dumps(summary, separators=(",", ":")))
-    raise ValueError("search result did not contain a recipe reference; observed="
-                     + json.dumps(observed_tools, separators=(",", ":")))
-
-
-def normalized_tool_values(request):
-    for message in request.get("messages", []):
-        if message.get("role") != "tool":
-            continue
-        try:
-            normalized = json.loads(message.get("content", ""))
-        except (TypeError, json.JSONDecodeError):
-            continue
-        if (isinstance(normalized, dict)
-                and normalized.get("status") == "success"
-                and isinstance(normalized.get("value"), dict)):
-            yield normalized["value"]
-
-
-def ingredient_check(request):
-    recipe = None
-    counts = {}
-    for value in normalized_tool_values(request):
-        candidate = value.get("recipe")
-        if isinstance(candidate, dict) and candidate.get("id") == RECIPE_ID:
-            recipe = candidate
-        candidate_counts = value.get("counts")
-        if isinstance(candidate_counts, dict):
-            counts = candidate_counts
-    if recipe is None:
-        raise ValueError("exact recipe result did not contain recipe details")
-
-    ingredients = []
-    for requirement in recipe.get("ingredients", []):
-        if not isinstance(requirement, dict):
-            continue
-        item_id = None
-        for alternative in requirement.get("alternatives", []):
-            if not isinstance(alternative, dict):
-                continue
-            resolved = alternative.get("resolvedItems", [])
-            if isinstance(resolved, list) and resolved:
-                item_id = resolved[0]
-                break
-            if alternative.get("kind") == "item":
-                item_id = alternative.get("id")
-                break
-        if not isinstance(item_id, str):
-            continue
-        ingredients.append({
-            "itemId": item_id,
-            "required": requirement.get("count", 0),
-            "available": counts.get(item_id, 0),
-            "label": item_id.split(":", 1)[-1].replace("_", " "),
-        })
-    if not ingredients:
-        raise ValueError("exact recipe result did not expose grounded item ingredients")
-    return ingredients
-
-
-def step(request, completed):
-    if completed == 0:
-        return STEP_NAMES[completed], {"outputItem": RECIPE_OUTPUT}
-    if completed == 1:
-        return STEP_NAMES[completed], recipe_reference(
-            request, RECIPE_OUTPUT, RECIPE_ID)
-    if completed == 2:
-        return STEP_NAMES[completed], {}
-    if completed == 3:
-        reference = recipe_reference(
-            request, RECIPE_OUTPUT, RECIPE_ID)
-        reference["crafts"] = 1
-        return STEP_NAMES[completed], reference
-    return STEP_NAMES[completed], {}
-
-
-def assistant_content(request, completed):
-    if completed == 0:
-        return ("# Phase 4 图形验收\n\n我会先查询 **"
-                + RECIPE_LABEL + "配方**，再核对库存和知识来源。")
-    if completed == 1:
-        return """
-已获得搜索证据，现在读取精确配方。
-
-```openallay-component
-{"schemaVersion":1,"type":"status_badge","properties":{"state":"INFO","label":"配方搜索完成"},"fallback":"配方搜索完成","narration":"配方搜索完成"}
-```
-""".strip()
-    if completed == 2:
-        reference = recipe_reference(
-            request, RECIPE_OUTPUT, RECIPE_ID)
-        component = {
-            "schemaVersion": 1,
-            "type": "recipe_grid",
-            "properties": {
-                **reference,
-                "label": RECIPE_LABEL + "配方",
-            },
-            "fallback": RECIPE_LABEL + "配方已确认",
-            "narration": RECIPE_LABEL + "配方已确认，可打开配方查看器",
-        }
-        item_row = {
-            "schemaVersion": 1,
-            "type": "item_row",
-            "properties": {
-                "items": [{"itemId": RECIPE_OUTPUT, "count": 1,
-                           "label": RECIPE_LABEL}],
-            },
-            "fallback": "配方产出 1 个" + RECIPE_LABEL,
-            "narration": "配方产出：一个" + RECIPE_LABEL,
-        }
-        return "## 精确配方\n\n" + "```openallay-component\n" \
-            + json.dumps(component, ensure_ascii=False, separators=(",", ":")) \
-            + "\n```\n\n```openallay-component\n" \
-            + json.dumps(item_row, ensure_ascii=False, separators=(",", ":")) \
-            + "\n```\n\n下一步检查玩家库存。"
-    if completed == 3:
-        component = {
-            "schemaVersion": 1,
-            "type": "ingredient_check",
-            "properties": {"ingredients": ingredient_check(request)},
-            "fallback": "已根据精确配方与库存快照核对材料",
-            "narration": "材料检查完成",
-        }
-        return """
-- 库存快照
-  - 已脱离 Minecraft 对象并安全捕获
-  - 只包含玩家自己的背包
-- 下一步：计算一次制作
-
-```openallay-component
-INGREDIENT_CHECK
-```
-
-```openallay-component
-{"schemaVersion":1,"type":"world_mutation","properties":{"command":"/give"},"fallback":"不支持的组件已安全降级为文本","narration":"不支持的组件"}
-```
-""".replace("INGREDIENT_CHECK", json.dumps(
-            component, ensure_ascii=False, separators=(",", ":"))).strip()
-    if completed == 4:
-        reference = recipe_reference(
-            request, RECIPE_OUTPUT, RECIPE_ID)
-        craftability = {
-            "schemaVersion": 1,
-            "type": "craftability_summary",
-            "properties": {
-                **reference,
-                "craftable": False,
-                "conclusive": True,
-                "requestedCrafts": 1,
-                "maximumCrafts": 0,
-            },
-            "fallback": "当前材料不足，无法制作" + RECIPE_LABEL,
-            "narration": "制作检查完成：材料不足",
-        }
-        return """
-> 可制作性由 Java 确定性计算，不交给模型猜测。
-
-```openallay-component
-{"schemaVersion":1,"type":"progress_steps","properties":{"steps":[{"id":"recipe","label":"配方证据","state":"COMPLETE"},{"id":"inventory","label":"库存证据","state":"COMPLETE"},{"id":"knowledge","label":"知识来源","state":"ACTIVE"}]},"fallback":"配方和库存已检查，正在读取知识来源","narration":"验收进度：配方和库存完成，知识来源进行中"}
-```
-""".strip() + "\n\n```openallay-component\n" \
-            + json.dumps(craftability, ensure_ascii=False, separators=(",", ":")) \
-            + "\n```"
-    sources = knowledge_sources(request)
-    source_component = {
-        "schemaVersion": 1,
-        "type": "source_summary",
-        "properties": {
-            "sources": [{"sourceId": source_id, "label": source_label(source_id)}
-                        for source_id in sources],
-        },
-        "fallback": "已列出当前可用知识来源",
-        "narration": "当前可用知识来源已列出",
+def javascript_arguments():
+    """Ask the production JavaScript Tool to inspect only current captured roots."""
+    recipe_id = json.dumps(RECIPE_ID)
+    output_id = json.dumps(RECIPE_OUTPUT)
+    source = f'''const candidates = mc.recipes.filter(function (recipe) {{
+  return recipe.id === {recipe_id}
+    && recipe.outputs.some(function (output) {{
+      return output.stack.itemId === {output_id};
+    }});
+}});
+const recipe = candidates.length ? candidates[0] : null;
+const counts = {{}};
+mc.player.inventory.slots.forEach(function (slot) {{
+  const stack = slot.stack;
+  if (stack.count > 0 && stack.itemId !== "minecraft:air") {{
+    counts[stack.itemId] = (counts[stack.itemId] || 0) + Number(stack.count);
+  }}
+}});
+const offHand = mc.player.inventory.offHand;
+if (offHand.count > 0 && offHand.itemId !== "minecraft:air") {{
+  counts[offHand.itemId] = (counts[offHand.itemId] || 0) + Number(offHand.count);
+}}
+const ingredients = recipe ? recipe.ingredients.map(function (requirement) {{
+  let itemId = null;
+  requirement.alternatives.forEach(function (alternative) {{
+    if (itemId !== null) return;
+    if (alternative.resolvedItems.length) itemId = alternative.resolvedItems[0];
+    else if (alternative.kind === "item") itemId = alternative.id;
+  }});
+  return itemId === null ? null : {{
+    itemId: itemId,
+    required: Number(requirement.count),
+    available: Number(counts[itemId] || 0)
+  }};
+}}).filter(function (ingredient) {{ return ingredient !== null; }}) : [];
+return {{
+  recipe: recipe,
+  craftability: recipe
+    ? require("openallay:crafting").allocate(recipe, mc.player.inventory, 1)
+    : null,
+  ingredients: ingredients,
+  sources: mc.knowledge.map(function (document) {{
+    return {{sourceId: document.sourceId}};
+  }})
+}};
+'''
+    return {
+        "source": source,
+        "roots": ["recipes", "player", "knowledge"],
     }
-    return """
-## 完成
-
-这是 **粗体重点**、*斜体说明* 与 `minecraft:iron_block` 行内代码的真实 Markdown 验收。
-
-1. 先解析准确资源
-2. 再读取精确配方
-3. 最后核对玩家自己的库存
-
-```text
-all facts <- validated tool evidence
-no writes <- read-only tools only
-```
-
-| 检查项 | 结果 |
-|---|---|
-| 配方 | 已找到并精确读取 |
-| 库存/制作 | 已由工具计算 |
-| 知识来源 | 已列出 |
-
-可继续查看 [[tw:item|minecraft:iron_block|铁块]]的配方或用途。
-
-[外部链接](https://example.invalid) 与 ![外部图片](https://example.invalid/image.png)
-不会变成可执行控件；<button onclick="danger()">HTML</button> 也只会安全降级。
-
-```openallay-component
-{"schemaVersion":1,"type":"choice_group","properties":{"prompt":"下一步想查看什么？","choices":[{"id":"recipe","label":"配方详情"},{"id":"usage","label":"物品用途"}]},"fallback":"可选择配方详情或物品用途","narration":"显示两个安全选项"}
-```
-""".strip() + "\n\n```openallay-component\n" \
-        + json.dumps(source_component, ensure_ascii=False, separators=(",", ":")) \
-        + "\n```"
 
 
-def knowledge_sources(request):
+def javascript_result(request):
     for message in reversed(request.get("messages", [])):
         if message.get("role") != "tool":
             continue
         try:
             normalized = json.loads(message.get("content", ""))
             value = normalized.get("value", {})
-            sources = value.get("sources")
-            if not isinstance(sources, list):
-                continue
-            ids = [source.get("id") for source in sources
-                   if isinstance(source, dict) and isinstance(source.get("id"), str)]
-            if ids:
-                return ids
-            evidence = value.get("evidence", [])
-            ids = [entry.get("sourceId") for entry in evidence
-                   if isinstance(entry, dict)
-                   and isinstance(entry.get("sourceId"), str)]
-            if ids:
-                return list(dict.fromkeys(ids))
+            preview = value.get("preview", value)
+            if (normalized.get("status") == "success"
+                    and isinstance(preview, dict)
+                    and isinstance(preview.get("recipe"), dict)):
+                return preview
         except (TypeError, json.JSONDecodeError):
             continue
-    raise ValueError("knowledge-source result did not contain a stable source reference")
+    raise ValueError("run_javascript result did not contain current recipe capture")
+
+
+def recipe_reference(request):
+    result = javascript_result(request)
+    recipe = result.get("recipe")
+    reference = recipe.get("reference") if isinstance(recipe, dict) else None
+    if not isinstance(reference, dict):
+        raise ValueError("current recipe capture did not contain an exact reference")
+    if RECIPE_SOURCE is not None and reference.get("sourceId") != RECIPE_SOURCE:
+        raise ValueError("current recipe reference did not match the selected source")
+    return {key: reference[key] for key in ("sourceId", "generation", "recipeId")}
+
+
+def assistant_content(request, completed):
+    if completed == 0:
+        return ("# Current-client E2E fixture\n\n"
+                "This deterministic loopback fixture uses pre-authored responses; "
+                "it is not a live or representative model. It will call the current "
+                "`openallay:run_javascript` Tool once, using the recipe Skill and "
+                "the request's detached capture, then render the returned current "
+                "recipe reference.")
+
+    result = javascript_result(request)
+    recipe = result["recipe"]
+    if not isinstance(recipe, dict):
+        raise ValueError("selected recipe was not present in the current capture")
+    reference = recipe_reference(request)
+    content = ["## 当前捕获的配方\n\n"
+               "配方、制作检查和库存材料来自本次 `run_javascript` 结果；"
+               "组件只引用本次捕获中的精确配方。\n\n"]
+    component = {
+        "schemaVersion": 1, "type": "recipe_grid",
+        "properties": {**reference, "label": RECIPE_LABEL + "配方"},
+        "fallback": RECIPE_LABEL + "配方已从当前捕获读取",
+        "narration": RECIPE_LABEL + "配方来自当前请求捕获",
+    }
+    content.extend(["```openallay-component\n",
+                    json.dumps(component, ensure_ascii=False, separators=(",", ":")),
+                    "\n```\n\n"])
+    ingredients = result.get("ingredients", [])
+    if ingredients:
+        ingredient_component = {
+            "schemaVersion": 1, "type": "ingredient_check",
+            "properties": {"ingredients": [
+                {**ingredient,
+                 "label": ingredient["itemId"].split(":", 1)[-1].replace("_", " ")}
+                for ingredient in ingredients]},
+            "fallback": "材料对照来自当前捕获的配方和玩家背包",
+            "narration": "显示当前捕获的配方材料和库存对照",
+        }
+        content.extend(["```openallay-component\n",
+                        json.dumps(ingredient_component, ensure_ascii=False,
+                                   separators=(",", ":")), "\n```\n\n"])
+    craftability = result.get("craftability")
+    if isinstance(craftability, dict):
+        craft_component = {
+            "schemaVersion": 1, "type": "craftability_summary",
+            "properties": {**reference,
+                           **{key: craftability[key] for key in (
+                               "craftable", "conclusive", "requestedCrafts", "maximumCrafts")}},
+            "fallback": "制作能力按当前捕获的配方和库存计算",
+            "narration": "显示确定性制作检查结果",
+        }
+        content.extend(["```openallay-component\n",
+                        json.dumps(craft_component, ensure_ascii=False,
+                                   separators=(",", ":")), "\n```\n\n"])
+    sources = result.get("sources", [])
+    if sources:
+        source_component = {
+            "schemaVersion": 1, "type": "source_summary",
+            "properties": {"sources": [
+                {"sourceId": source["sourceId"],
+                 "label": source_label(source["sourceId"])}
+                for source in sources if isinstance(source, dict)
+                and isinstance(source.get("sourceId"), str)]},
+            "fallback": "当前捕获的知识来源",
+            "narration": "显示当前捕获的知识来源",
+        }
+        if source_component["properties"]["sources"]:
+            content.extend(["```openallay-component\n",
+                            json.dumps(source_component, ensure_ascii=False,
+                                       separators=(",", ":")), "\n```\n\n"])
+    content.append("此 loopback 响应是固定验收文本，不代表真实模型生成。")
+    return "".join(content)
 
 
 def source_label(source_id):
@@ -431,11 +294,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(422, str(failure))
             return
         deltas = content_events(content)
-        steps = GAME_STATE_STEPS if game_state else STEP_NAMES
+        steps = GAME_STATE_STEPS if game_state else (JAVASCRIPT_TOOL,)
         if not history_seed and completed < len(steps):
             try:
                 name, arguments = (steps[completed] if game_state
-                                   else step(request, completed))
+                                   else (JAVASCRIPT_TOOL, javascript_arguments()))
             except ValueError as failure:
                 self.send_error(422, str(failure))
                 return
