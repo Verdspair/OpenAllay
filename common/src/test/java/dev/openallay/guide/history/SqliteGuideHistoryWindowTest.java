@@ -222,20 +222,17 @@ final class SqliteGuideHistoryWindowTest {
     }
 
     @Test
-    void currentSchemaRebuildsRecognizedDevelopmentSchemasRejectsFutureAndUsesPagingIndex()
-            throws Exception {
+    void recognizedOldSchemasRemainUnchangedAndFutureSchemasFailClosed() throws Exception {
         for (int version : List.of(1, 2, 3, 4)) {
             Path database = temporary.resolve("schema-" + version + ".db");
             LegacyGuideHistorySchemaFixtures.create(database, version);
+            byte[] original = java.nio.file.Files.readAllBytes(database);
             SqliteGuideHistoryStore store = store(database);
 
-            assertTrue(store.metadata(SCOPE).isEmpty());
-            try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
-                    var result = connection.createStatement().executeQuery(
-                            "select schema_version from schema_metadata")) {
-                assertTrue(result.next());
-                assertEquals(GuideHistoryPartition.SCHEMA_VERSION, result.getInt(1));
-            }
+            GuideHistoryException unsupported = assertThrows(
+                    GuideHistoryException.class, () -> store.metadata(SCOPE));
+            assertEquals("history_schema_unsupported", unsupported.code());
+            assertTrue(java.util.Arrays.equals(original, java.nio.file.Files.readAllBytes(database)));
         }
 
         Path future = temporary.resolve("schema-99.db");
@@ -245,34 +242,11 @@ final class SqliteGuideHistoryWindowTest {
                 var statement = connection.createStatement()) {
             statement.executeUpdate("update schema_metadata set schema_version = 99");
         }
+        byte[] originalFuture = java.nio.file.Files.readAllBytes(future);
         GuideHistoryException failure = assertThrows(
                 GuideHistoryException.class, () -> futureStore.metadata(SCOPE));
         assertEquals("history_schema_unsupported", failure.code());
-        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + future);
-                var result = connection.createStatement().executeQuery(
-                        "select schema_version from schema_metadata")) {
-            assertTrue(result.next());
-            assertEquals(99, result.getInt(1));
-        }
-
-        Path indexed = temporary.resolve("indexed.db");
-        store(indexed).save(partition(3, false, false));
-        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + indexed);
-                var query = connection.prepareStatement("""
-                        explain query plan select request_id from requests
-                        where scope_id = ? and session_id = ? and sequence < ?
-                        order by sequence desc limit ?
-                        """)) {
-            query.setString(1, SCOPE.scopeId());
-            query.setString(2, "main");
-            query.setLong(3, 2);
-            query.setInt(4, 1);
-            try (var result = query.executeQuery()) {
-                StringBuilder plan = new StringBuilder();
-                while (result.next()) plan.append(result.getString("detail"));
-                assertTrue(plan.toString().contains("requests_order_lookup"), plan.toString());
-            }
-        }
+        assertTrue(java.util.Arrays.equals(originalFuture, java.nio.file.Files.readAllBytes(future)));
     }
 
     @Test

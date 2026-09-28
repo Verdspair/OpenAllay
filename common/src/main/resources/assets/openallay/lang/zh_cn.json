@@ -43,7 +43,7 @@
   "screen.openallay.progress.attempt": "第 %s 次尝试",
   "screen.openallay.history.loading": "正在加载对话历史...",
   "screen.openallay.history.saving": "正在保存对话历史...",
-  "screen.openallay.history.unavailable": "历史记录当前不可用；新消息暂时只保留在内存中。",
+  "screen.openallay.history.unavailable": "历史记录当前不可用；现有数据未被更改。请先备份 history.sqlite3，再使用调试模式下的显式重置；也可使用兼容该数据库架构的 OpenAllay 版本。新消息暂时保留在内存中。",
   "screen.openallay.history.interrupted": "游戏关闭时中断了这个请求；请手动重试以继续。",
   "screen.openallay.model.client": "客户端 · %s",
   "screen.openallay.model.server": "服务器提供",

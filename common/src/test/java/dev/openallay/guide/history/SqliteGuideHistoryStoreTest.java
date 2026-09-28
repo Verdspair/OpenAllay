@@ -53,67 +53,40 @@ final class SqliteGuideHistoryStoreTest {
     }
 
     @Test
-    void rebuildsRecognizedPreReleaseSchemasWithoutTouchingSiblingFiles() throws Exception {
+    void recognizedOlderSchemasFailClosedWithoutChangingDatabaseBytesOrRows() throws Exception {
         for (int oldVersion : List.of(1, 2, 3, 4)) {
             Path versionDatabase = temporary.resolve("history-v" + oldVersion + ".sqlite3");
             LegacyGuideHistorySchemaFixtures.create(versionDatabase, oldVersion);
-            SqliteGuideHistoryStore store = new SqliteGuideHistoryStore(
-                    versionDatabase,
-                    Clock.fixed(RECOVERY_TIME, ZoneOffset.UTC),
-                    new GuideHistoryCodec());
-            GuideHistoryPartition original = partition(
-                    "old-schema-" + oldVersion + ".example",
-                    "main",
-                    completed("main", "saved"));
+            insertLegacyRows(versionDatabase);
             Path retained = temporary.resolve("retained-v" + oldVersion + ".txt");
             Files.writeString(retained, "retained");
+            byte[] databaseBefore = Files.readAllBytes(versionDatabase);
+            LegacyRows rowsBefore = legacyRows(versionDatabase);
 
-            assertTrue(store.load(original.scope()).partition().isEmpty());
+            GuideHistoryException failure = assertThrows(
+                    GuideHistoryException.class,
+                    () -> store(versionDatabase).load(scope("old-schema-" + oldVersion + ".example")));
 
-            try (var connection = DriverManager.getConnection(
-                            "jdbc:sqlite:" + versionDatabase);
-                    var statement = connection.createStatement()) {
-                assertEquals(GuideHistoryPartition.SCHEMA_VERSION, queryInt(
-                        statement,
-                        "select schema_version from schema_metadata where singleton = 1"));
-                assertEquals(0, queryInt(statement, "select count(*) from partitions"));
-            }
+            assertEquals("history_schema_unsupported", failure.code());
+            assertTrue(failure.getMessage().contains("was not changed"));
+            assertEquals(databaseBefore.length, Files.size(versionDatabase));
+            assertTrue(java.util.Arrays.equals(databaseBefore, Files.readAllBytes(versionDatabase)));
+            assertEquals(rowsBefore, legacyRows(versionDatabase));
             assertEquals("retained", Files.readString(retained));
         }
     }
 
     @Test
-    void recognizedSchemaRebuildFailureRollsBackWithSpecificFailure() throws Exception {
+    void currentSchemaLoadsAndRemainsWritable() throws Exception {
         SqliteGuideHistoryStore store = store();
-        GuideHistoryPartition original =
-                partition("old-rollback.example", "main", completed("main", "saved"));
-        store.save(original);
-        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database());
-                var statement = connection.createStatement()) {
-            statement.executeUpdate(
-                    "update schema_metadata set schema_version = 4 where singleton = 1");
-        }
-        SqliteGuideHistoryStore failing = new SqliteGuideHistoryStore(
-                database(),
-                Clock.fixed(RECOVERY_TIME, ZoneOffset.UTC),
-                new GuideHistoryCodec(),
-                mutation -> {
-                    if (mutation == SqliteGuideHistoryStore.Mutation.RESET) {
-                        throw new java.sql.SQLException("injected rebuild failure");
-                    }
-                });
+        GuideHistoryPartition saved = partition(
+                "current-schema.example", "main", completed("main", "saved"));
 
-        GuideHistoryException failure = assertThrows(
-                GuideHistoryException.class, () -> failing.load(original.scope()));
+        store.save(saved);
 
-        assertEquals("history_schema_rebuild_failed", failure.code());
-        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database());
-                var statement = connection.createStatement()) {
-            assertEquals(4, queryInt(
-                    statement,
-                    "select schema_version from schema_metadata where singleton = 1"));
-            assertEquals(1, queryInt(statement, "select count(*) from partitions"));
-        }
+        assertEquals(saved, store.load(saved.scope()).partition().orElseThrow());
+        assertEquals(GuideHistoryPartition.SCHEMA_VERSION,
+                queryInt("select schema_version from schema_metadata where singleton = 1"));
     }
 
     @Test
@@ -632,6 +605,56 @@ final class SqliteGuideHistoryStoreTest {
     private Path database() {
         return temporary.resolve("history.sqlite3");
     }
+
+    private int queryInt(String query) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database());
+                var statement = connection.createStatement()) {
+            return queryInt(statement, query);
+        }
+    }
+
+    private static void insertLegacyRows(Path database) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+                var statement = connection.createStatement()) {
+            statement.execute("insert into partitions values ('scope', 'actor', 'MULTIPLAYER', 'main'"
+                    + (oldSchemaHasModelMode(database) ? ", 'CLIENT', 'NORMAL', '2026-07-18T00:00:00Z')"
+                            : ", 'NORMAL', '2026-07-18T00:00:00Z')"));
+            if (oldSchemaHasModelMode(database)) {
+                statement.execute("insert into sessions(scope_id, session_id, ordinal) values ('scope', 'main', 0)");
+            } else if (hasColumn(database, "sessions", "model_selection_json")) {
+                statement.execute("insert into sessions values ('scope', 'main', 0, '{}')");
+            } else {
+                statement.execute("insert into sessions values ('scope', 'main', 0)");
+            }
+        }
+    }
+
+    private static boolean oldSchemaHasModelMode(Path database) throws Exception {
+        return hasColumn(database, "partitions", "model_mode");
+    }
+
+    private static boolean hasColumn(Path database, String table, String column) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("pragma table_info('" + table + "')")) {
+            while (result.next()) if (column.equals(result.getString("name"))) return true;
+            return false;
+        }
+    }
+
+    private static LegacyRows legacyRows(Path database) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+                var statement = connection.createStatement()) {
+            int version = queryInt(statement,
+                    "select schema_version from schema_metadata where singleton = 1");
+            return new LegacyRows(version,
+                    queryInt(statement, "select count(*) from partitions"),
+                    queryInt(statement, "select count(*) from sessions"),
+                    queryInt(statement, "select count(*) from requests"));
+        }
+    }
+
+    private record LegacyRows(int version, int partitions, int sessions, int requests) {}
 
     private static int queryInt(java.sql.Statement statement, String query) throws Exception {
         try (var result = statement.executeQuery(query)) {

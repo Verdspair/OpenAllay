@@ -43,7 +43,7 @@
   "screen.openallay.progress.attempt": "attempt %s",
   "screen.openallay.history.loading": "Loading conversation history...",
   "screen.openallay.history.saving": "Saving conversation history...",
-  "screen.openallay.history.unavailable": "History is unavailable; new messages are currently kept only in memory.",
+  "screen.openallay.history.unavailable": "History is unavailable; existing data was not changed. Back up history.sqlite3 before using the explicit Debug Mode reset, or use an OpenAllay version compatible with its schema. New messages remain in memory.",
   "screen.openallay.history.interrupted": "This request was interrupted when the game closed. Retry it manually to continue.",
   "screen.openallay.model.client": "Client · %s",
   "screen.openallay.model.server": "Server-provided",

@@ -39,6 +39,7 @@ accepted and contains explicit approval evidence.
 | SKMB-2026-07-25-029 | accepted | 0.2.x core prompt, Skill/Extension communities, server models, world observation, and benchmark | B, C, D, E, F, G | decisions/2026-07-25-029-openallay-0.2-platform-iteration.md | e4b6164; implemented and released through 6db6b82 |
 | SKMB-2026-07-25-030 | accepted | loader-specific Extension catalog artifacts and package selection | B, D, F | decisions/2026-07-25-030-loader-specific-extension-artifacts.md | 5a1520f; implemented through 897bced |
 | SKMB-2026-07-25-031 | accepted | strict schema-2 client profiles and removal of unused compatibility APIs | B, E, F | decisions/2026-07-25-031-remove-unused-client-compatibility.md | pending |
+| SKMB-2026-07-29-032 | accepted | preserve released guide-history schemas and fail closed on old layouts | B, F, G | decisions/2026-07-29-032-preserve-released-history-schemas.md | pending |
 
 SKMB-2026-07-18-006 is implemented by `a0eaeff`, `19ab90f`, and `c6ca6bc`.
 Its deterministic clean-build and packaged-driver evidence is recorded in the
@@ -140,7 +141,7 @@ graphical evidence review all passed. Phase 4 is closed.
 | credential_staged | A new immutable local secret exists but no persisted profile references it yet | LocalCredentialStore | Safe to ignore/collect until atomic profile replacement succeeds | SKMB-2026-07-19-019 |
 | profile_referenced | A credential-free schema-2 model profile atomically references a resolvable local or external credential | ModelProfileSettingsStore | Raw secret remains outside model JSON and observable settings state | SKMB-2026-07-19-019 |
 | skill_reloading | A bundled/local Agent Skills package candidate is being validated | SkillRepository | Invalid override retains the previous valid or bundled package | SKMB-2026-07-19-019 |
-| history_schema_rebuilding | A recognized pre-release schema 1, 2, 3, or 4 is being transactionally recreated as the current schema | GuideHistoryStore | Rollback preserves the older database if rebuild fails | SKMB-2026-07-19-019 |
+| history_schema_unsupported | A recognized released guide-history schema is not the current writable schema | GuideHistoryStore | No migration, reset, or rewrite occurs automatically | SKMB-2026-07-29-032 |
 | response_streaming | A model response body is actively producing validated deltas under its dispatch deadline | ModelClient | Cancellable; last-progress is observable and late bytes are generation-fenced | SKMB-2026-07-19-020 |
 | observable_snapshot_ready | Player-observable game state has been detached into immutable registered sections | ClientContextCapture | Contains no live Minecraft objects, secrets, raw command strings, or spatial scans | SKMB-2026-07-19-020 |
 | model_catalog_loading | One authenticated non-inference provider model-list request is active | ClientSettingsService | Cancellable; publishes only model IDs or a stable redacted failure | SKMB-2026-07-19-021 |
@@ -195,7 +196,7 @@ graphical evidence review all passed. Phase 4 is closed.
 | T28 | preparing | deterministic context estimate exceeds configured input budget | compacting | Protect the current request and structural tool pairs, then reduce old tool results | SKMB-2026-07-18-008 |
 | T29 | compacting | deterministic projection still exceeds budget | compacting | Use the same selected model topology to create a source-hashed structured summary checkpoint | SKMB-2026-07-18-008 |
 | T30 | compacting | cancel arrives | cancelled | Cancel summary work, store no successful checkpoint, and suppress primary dispatch | SKMB-2026-07-18-008 |
-| T31 | history_loading | recognized OpenAllay schema 1, 2, 3, or 4 opens | history_schema_rebuilding | Transactionally drop only OpenAllay application tables and recreate the single current schema without migration | SKMB-2026-07-19-019 |
+| T31 | history_loading | recognized OpenAllay schema 1, 2, 3, or 4 opens | persistence_unavailable | Return `history_schema_unsupported`; preserve all application tables and rows | SKMB-2026-07-29-032 |
 | T32 | any non-active session state | selected model/provider changes | unchanged | Keep the provider-neutral transcript/checkpoints; assemble the next request with the new model and its budget | SKMB-2026-07-18-008 |
 | T33 | any session state | session model selection changes | unchanged | Store the preference for that session's future requests; an active request retains its captured runtime | SKMB-2026-07-18-009 |
 | T34 | any UI state | debug mode changes | unchanged | Rebuild only the local normal/debug projection; do not rewrite history or change active work | SKMB-2026-07-18-010 |
@@ -210,8 +211,9 @@ graphical evidence review all passed. Phase 4 is closed.
 | T44 | history_page_loading | page succeeds or fails | history window idle | Merge the matching page and preserve the anchor, or retain the prior window with a retryable diagnostic | SKMB-2026-07-18-018 |
 | T45 | preparing | selected topology requires durable context | context_loading | Stream a provider-neutral seed under the actual selected model budget before dispatch | SKMB-2026-07-18-018 |
 | T46 | context_loading | seed validates or fails | model_wait or failed | Dispatch exactly once with valid context, or fail before provider I/O and preserve history | SKMB-2026-07-18-018 |
-| T47 | history_schema_rebuilding | rebuild succeeds or fails | idle or persistence_unavailable | Publish the fresh current schema, or roll back and report `history_schema_rebuild_failed` | SKMB-2026-07-19-019 |
+
 | T48 | history_loading | future, corrupt, foreign, missing-metadata, or unrecognized database opens | persistence_unavailable | Fail closed without deleting or rewriting the file | SKMB-2026-07-19-019 |
+| T87 | history_loading | recognized older released schema 1–4 opens | persistence_unavailable | Report `history_schema_unsupported` and preserve all database contents | SKMB-2026-07-29-032 |
 | T49 | settings idle | player saves a model candidate with a replacement API key | credential_staged | Validate the complete candidate and insert a new immutable local secret without changing the active profile/runtime | SKMB-2026-07-19-019 |
 | T51 | bundled or local Skill selected | player creates/saves an override | skill_reloading | Validate uppercase `SKILL.md` package confinement and atomically publish the valid local override | SKMB-2026-07-19-019 |
 | T52 | credential_staged | profile replacement succeeds or fails | profile_referenced or unchanged | Publish only a fully resolvable profile/runtime; otherwise retain the prior reference/runtime and leave the staged row unreachable for later collection | SKMB-2026-07-19-019 |
@@ -295,10 +297,10 @@ graphical evidence review all passed. Phase 4 is closed.
 | I39 | Model selection is per session and mutable; active requests retain their captured runtime and never reroute | SKMB-2026-07-18-009 |
 | I40 | Explicit model limits outrank discovered metadata, and credentials are unrepresentable in persisted multi-profile configuration | SKMB-2026-07-18-009 |
 | I41 | Normal UI exposes friendly cards and narration but cannot represent raw technical evidence/JSON; debug mode remains redacted | SKMB-2026-07-18-010 |
-| I42 | Before the first formal release, durable storage has one current schema and no migration-only compatibility surface | SKMB-2026-07-18-011 |
+| I42 | Durable history has one current writable schema; compatibility for released schemas requires an explicit accepted policy and tests | SKMB-2026-07-18-011, SKMB-2026-07-29-032 |
 | I43 | Metadata cache/load/refresh is asynchronous, credential-free, source/model keyed, and subordinate to explicit limits | SKMB-2026-07-18-012 |
 | I44 | Shared HTTP transport grants no model tool, endpoint, credential, or evidence authority; each domain adapter must provide its own | SKMB-2026-07-18-013 |
-| I45 | Player-initiated normal history management is actor-scoped and whole-database reset is Debug Mode-only and separately confirmed; the only automatic destructive policy is the transactionally scoped rebuild of recognized unshipped schemas 1 through 4 | SKMB-2026-07-18-014, SKMB-2026-07-19-019, SKMB-2026-07-19-020 |
+| I45 | Player-initiated normal history management is actor-scoped and whole-database reset is Debug Mode-only and separately confirmed; startup never destructively rebuilds history | SKMB-2026-07-18-014, SKMB-2026-07-19-020, SKMB-2026-07-29-032 |
 | I46 | Profile replacement is candidate-validated, atomically persisted, and published as one prepared runtime state; failure retains the prior file/runtime | SKMB-2026-07-18-015 |
 | I47 | Connection testing is an explicit isolated real request with no Guide context/tools/history, no retry/fallback, and no retained secret/body/output | SKMB-2026-07-18-015 |
 | I48 | Native settings use one common operation/snapshot service while model/credential, recipe capture, Skill, Extension command capability, display, metadata, and history persistence remain independently versioned | SKMB-2026-07-18-016, SKMB-2026-07-19-019, SKMB-2026-07-25-028 |
@@ -313,7 +315,7 @@ graphical evidence review all passed. Phase 4 is closed.
 | I58 | Client model schema 2 and all observable settings state retain only qualified credential references/presence; raw API keys exist only in the transient masked input, SecretValue, provider header boundary, and local `credentials.sqlite3`, while `env:<name>` remains external/headless-only | SKMB-2026-07-19-019 |
 | I59 | The 0.2.0 runtime has no legacy Tool-family/source settings state; Extensions projects declared JavaScript roots, schemas, modules, and adapters without capturing live data or providing source CRUD | SKMB-2026-07-19-019, SKMB-2026-07-25-028 |
 | I60 | Bundled Skills are read-only Agent Skills packages with uppercase `SKILL.md`; local edits are external overrides and never grant scripts, paths, tools, or Agent write authority | SKMB-2026-07-19-019 |
-| I61 | Only recognized unshipped OpenAllay history schemas 1 through 4 rebuild automatically; future, corrupt, foreign, missing/inconsistent-metadata, or otherwise unrecognized databases remain untouched | SKMB-2026-07-19-019, SKMB-2026-07-19-020 |
+| I61 | Current guide-history schema 5 is the only writable schema; recognized older, future, corrupt, foreign, missing/inconsistent-metadata, or otherwise unrecognized databases remain untouched | SKMB-2026-07-19-020, SKMB-2026-07-29-032 |
 | I62 | Every active request has a redacted observable phase, elapsed basis, last-progress time and optional retry/deadline; clocks never create transcript or persistence writes | SKMB-2026-07-19-020 |
 | I63 | The configured model request timeout covers complete response-body consumption, and cancel/timeout/disconnect suppress every late stream event | SKMB-2026-07-19-020 |
 | I64 | Rendering never owns scroll mutation; streaming keeps a stable literal tail and preserves manual viewport anchors | SKMB-2026-07-19-020 |
@@ -402,7 +404,7 @@ graphical evidence review all passed. Phase 4 is closed.
 | F37 | Stored credential resolution or persistence fails | Keep prior profile/runtime where possible, expose a stable redacted failure, and send no provider request with a missing or guessed credential | SKMB-2026-07-19-019 |
 | F38 | A Tool source candidate is malformed, unavailable, or unauthorized | Reject/retain it with a source-scoped diagnostic and leave unrelated Tools/sources unchanged | SKMB-2026-07-19-019 |
 | F39 | A local Skill override is malformed or escapes the supported Agent Skills subset | Retain the prior valid/bundled Skill, expose a source-scoped validation diagnostic, and keep unrelated Skills available | SKMB-2026-07-19-019 |
-| F40 | A recognized older history schema cannot be rebuilt transactionally | Roll back, preserve the prior database, report `history_schema_rebuild_failed`, and make persistence unavailability visible | SKMB-2026-07-19-019 |
+| F40 | A recognized older released history schema is opened | Report `history_schema_unsupported`; preserve the database without migration, reset, or rewrite | SKMB-2026-07-29-032 |
 | F41 | A dispatched model response does not complete within its configured total deadline | Close the body, fail `model_timeout`, retain completed chronology, suppress late deltas, and require explicit retry | SKMB-2026-07-19-020 |
 | F42 | A player-observable section/query is unknown, malformed, unsupported, partial, or not authoritative in the current topology | Return strict invalid/unavailable/partial evidence for that section and keep every unrelated section usable; never guess or broaden access | SKMB-2026-07-19-020 |
 | F43 | Resource resolution is ambiguous or a corrected Tool search remains unchanged and empty/partial | Return every deterministic exact match for disambiguation, or stop after one corrected call and explain the missing evidence; never loop or choose arbitrarily | SKMB-2026-07-19-020 |

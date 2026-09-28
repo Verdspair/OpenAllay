@@ -347,6 +347,7 @@ public final class SqliteGuideHistoryStore implements GuideHistoryStore {
         Connection connection = openRaw();
         try {
             ensureSchema(connection);
+            configureJournalMode(connection);
             return connection;
         } catch (SQLException failure) {
             try {
@@ -389,8 +390,13 @@ public final class SqliteGuideHistoryStore implements GuideHistoryStore {
     private static void configure(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.execute("pragma foreign_keys=on");
-            statement.execute("pragma journal_mode=wal");
             statement.execute("pragma synchronous=full");
+        }
+    }
+
+    private static void configureJournalMode(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("pragma journal_mode=wal");
         }
     }
 
@@ -421,42 +427,12 @@ public final class SqliteGuideHistoryStore implements GuideHistoryStore {
         }
         requireRecognizedSignature(connection, version, tables);
         if (version > 0 && version < SCHEMA_VERSION) {
-            rebuildRecognizedSchema(connection, version, tables);
-            return;
+            throw unsupportedSchema(
+                    "Recognized guide history schema " + version
+                            + " is unsupported and was not changed; use a compatible OpenAllay version or back up the database before explicitly resetting history");
         }
         if (version != SCHEMA_VERSION) {
             throw unsupportedSchema("Unsupported guide history schema version " + version);
-        }
-    }
-
-    private void rebuildRecognizedSchema(
-            Connection connection, int version, List<String> tables) throws SQLException {
-        requireRecognizedSignature(connection, version, tables);
-        boolean autoCommit = connection.getAutoCommit();
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("pragma foreign_keys=off");
-        }
-        connection.setAutoCommit(false);
-        try {
-            for (String table : tables) {
-                try (Statement statement = connection.createStatement()) {
-                    statement.execute("drop table " + quoteIdentifier(table));
-                }
-            }
-            createSchemaObjects(connection);
-            failureInjector.beforeCommit(Mutation.RESET);
-            connection.commit();
-        } catch (SQLException | RuntimeException failure) {
-            rollback(connection, failure);
-            throw new GuideHistoryException(
-                    "history_schema_rebuild_failed",
-                    "Unable to rebuild pre-release guide history",
-                    failure);
-        } finally {
-            connection.setAutoCommit(autoCommit);
-            try (Statement statement = connection.createStatement()) {
-                statement.execute("pragma foreign_keys=on");
-            }
         }
     }
 

@@ -447,16 +447,16 @@ budget and canonical model identity, and splits the encoded request into indepen
 SHA-256-checked 24 KiB transport chunks so long histories do not depend on one
 Minecraft custom-payload string.
 
-Normal-mode guide history is stored at `config/openallay/history.sqlite3` in the
-single current pre-release SQLite schema, currently schema 5. Because OpenAllay
-has not shipped, recognized OpenAllay schemas 1, 2, 3, and 4 are not migrated: on
-startup their application tables are transactionally rebuilt as schema 5.
-Rollback preserves the recognized older database if rebuild fails and reports
-`history_schema_rebuild_failed`. A future schema, corrupt database, missing or
-inconsistent metadata, unrecognized tables, or foreign file still fails closed
-without deletion. This automatic rebuild policy must be removed or replaced by
-an explicit shipped-schema compatibility decision before formal release. Each
-partition key is a SHA-256 digest of the player
+Normal-mode guide history is stored at `config/openallay/history.sqlite3` in
+SQLite schema 5. This schema is the current format used by the released 0.2.2
+line. Recognized older OpenAllay schemas 1, 2, 3, and 4 return
+`history_schema_unsupported`; startup does not alter their tables, rows, or
+files. Future, corrupt, foreign, missing/inconsistent-metadata, and otherwise
+unrecognized databases also fail closed without mutation. To retain old history,
+back up the database and open it with a compatible OpenAllay version. To discard
+it, use the separately confirmed Debug Mode reset only after making any desired
+backup. There is no automatic migration or reset. Each partition key is a
+SHA-256 digest of the player
 UUID, connection kind, and normalized integrated-world path or multiplayer
 address; the raw path/address is not stored. Database work runs on one ordered
 background worker and never blocks the client or render thread.
