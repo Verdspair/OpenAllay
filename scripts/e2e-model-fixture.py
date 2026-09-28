@@ -32,46 +32,69 @@ def javascript_arguments():
     """Ask the production JavaScript Tool to inspect only current captured roots."""
     recipe_id = json.dumps(RECIPE_ID)
     output_id = json.dumps(RECIPE_OUTPUT)
-    source = f'''const candidates = mc.recipes.filter(function (recipe) {{
-  return recipe.id === {recipe_id}
-    && recipe.outputs.some(function (output) {{
-      return output.stack.itemId === {output_id};
-    }});
-}});
-const recipe = candidates.length ? candidates[0] : null;
-const counts = {{}};
-mc.player.inventory.slots.forEach(function (slot) {{
-  const stack = slot.stack;
+    source = f'''var candidates = [];
+for (var recipeIndex = 0; recipeIndex < mc.recipes.length; recipeIndex++) {{
+  var candidate = mc.recipes[recipeIndex];
+  if (candidate.id !== {recipe_id}) continue;
+  var matchingOutput = false;
+  for (var outputIndex = 0; outputIndex < candidate.outputs.length; outputIndex++) {{
+    if (candidate.outputs[outputIndex].stack.itemId === {output_id}) {{
+      matchingOutput = true;
+      break;
+    }}
+  }}
+  if (matchingOutput) candidates.push(candidate);
+}}
+var recipe = candidates.length ? candidates[0] : null;
+var counts = {{}};
+for (var slotIndex = 0; slotIndex < mc.player.inventory.slots.length; slotIndex++) {{
+  var stack = mc.player.inventory.slots[slotIndex].stack;
   if (stack.count > 0 && stack.itemId !== "minecraft:air") {{
     counts[stack.itemId] = (counts[stack.itemId] || 0) + Number(stack.count);
   }}
-}});
-const offHand = mc.player.inventory.offHand;
+}}
+var offHand = mc.player.inventory.offHand;
 if (offHand.count > 0 && offHand.itemId !== "minecraft:air") {{
   counts[offHand.itemId] = (counts[offHand.itemId] || 0) + Number(offHand.count);
 }}
-const ingredients = recipe ? recipe.ingredients.map(function (requirement) {{
-  let itemId = null;
-  requirement.alternatives.forEach(function (alternative) {{
-    if (itemId !== null) return;
-    if (alternative.resolvedItems.length) itemId = alternative.resolvedItems[0];
-    else if (alternative.kind === "item") itemId = alternative.id;
-  }});
-  return itemId === null ? null : {{
-    itemId: itemId,
-    required: Number(requirement.count),
-    available: Number(counts[itemId] || 0)
-  }};
-}}).filter(function (ingredient) {{ return ingredient !== null; }}) : [];
+var ingredients = [];
+if (recipe) {{
+  for (var ingredientIndex = 0; ingredientIndex < recipe.ingredients.length; ingredientIndex++) {{
+    var requirement = recipe.ingredients[ingredientIndex];
+    var itemId = null;
+    for (var alternativeIndex = 0; alternativeIndex < requirement.alternatives.length; alternativeIndex++) {{
+      var alternative = requirement.alternatives[alternativeIndex];
+      if (alternative.resolvedItems.length) {{
+        itemId = alternative.resolvedItems[0];
+        break;
+      }}
+      if (alternative.kind === "item") {{
+        itemId = alternative.id;
+        break;
+      }}
+    }}
+    if (itemId !== null) ingredients.push({{
+      itemId: itemId,
+      required: Number(requirement.count),
+      available: Number(counts[itemId] || 0)
+    }});
+  }}
+}}
+var sourcesById = {{}};
+for (var knowledgeIndex = 0; knowledgeIndex < mc.knowledge.length; knowledgeIndex++) {{
+  var document = mc.knowledge[knowledgeIndex];
+  sourcesById[document.sourceId] = true;
+}}
+var sources = Object.keys(sourcesById).sort().map(function (sourceId) {{
+  return {{sourceId: sourceId}};
+}});
 return {{
   recipe: recipe,
   craftability: recipe
     ? require("openallay:crafting").allocate(recipe, mc.player.inventory, 1)
     : null,
   ingredients: ingredients,
-  sources: mc.knowledge.map(function (document) {{
-    return {{sourceId: document.sourceId}};
-  }})
+  sources: sources
 }};
 '''
     return {
