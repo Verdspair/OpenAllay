@@ -63,16 +63,19 @@ with external file overrides.
 ## 1. Fabric Input Compatibility
 
 Architectury Fabric 21.0.2 creates a temporary `DelegateScreen` for character
-events without initializing Fabric Screen API event state. Architectury 21.0.3
-and 21.0.4 remove that implementation; 21.0.4 is the accepted current 26.2
-artifact.
+events without initializing Fabric Screen API event state. Source inspection
+noted that Architectury 21.0.3 and 21.0.4 remove that implementation, but no
+runtime text-input acceptance was performed with 21.0.3. Do not infer that
+21.0.3 is working or broken from that source change. Architectury 21.0.4 is the
+accepted current 26.2 artifact and acceptance-profile version.
 
 The full-mod development profile moves to Architectury Fabric 21.0.4. Fabric
-metadata declares Architectury versions through 21.0.2 incompatible when that
-optional mod is present, so affected packs fail during dependency resolution
-with an actionable upgrade instead of freezing every character event. OpenAllay
-does not gain a hard Architectury runtime dependency. NeoForge remains
-unchanged because the failing Fabric input delegate does not exist there.
+metadata declares only Architectury versions through 21.0.2 incompatible when
+that optional mod is present, so known affected packs fail during dependency
+resolution with an actionable upgrade instead of freezing character events.
+Version 21.0.3 is not blocked and remains unverified. OpenAllay does not gain a
+hard Architectury runtime dependency. NeoForge remains unchanged because the
+failing Fabric input delegate does not exist there.
 
 The deterministic boundary test checks the Fabric metadata conflict. The
 retained normal-client acceptance must type ASCII, Chinese IME text, backspace,

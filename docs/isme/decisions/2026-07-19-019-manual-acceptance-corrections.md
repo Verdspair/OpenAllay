@@ -30,9 +30,11 @@ Markdown packages rather than hard-coded option cards.
 
 ## Decision
 
-1. Fabric declares Architectury through 21.0.2 incompatible when present and
-   the accepted full-mod profile uses Architectury 21.0.4. OpenAllay does not
-   add a hard Architectury dependency.
+1. On Fabric, Architectury 21.0.2 and earlier is known to break character
+   input; metadata declares only that range incompatible when present.
+   Architectury 21.0.4 is the accepted full-mod profile. Version 21.0.3 has
+   not been verified, so its compatibility remains unknown and it is not
+   declared incompatible. OpenAllay does not add a hard Architectury dependency.
 2. The normal client model editor accepts a masked API key. Secrets are stored
    in the dedicated local `credentials.sqlite3` store; `models.json` schema 2
    retains only a qualified `credentialRef` such as `local:<uuid>`.

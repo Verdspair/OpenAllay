@@ -113,8 +113,11 @@ connect a model:
 4. Enter the provider URL, model ID, context window, and API key, then save.
 5. Select the profile from the conversation header and start asking questions.
 
-On Fabric, Architectury **21.0.2 and earlier** prevents text input on the
-OpenAllay screen. Upgrade to **21.0.4 or newer**, or remove Architectury.
+On Fabric, Architectury **21.0.2 and earlier** is known to prevent text input
+on the OpenAllay screen. Architectury **21.0.4** is the version used by the
+accepted full-mod profile. **21.0.3 has not been verified**: it is not blocked
+by OpenAllay metadata, but its text-input compatibility is unknown. OpenAllay
+metadata rejects only the known-broken versions through 21.0.2.
 
 ## Try asking
 

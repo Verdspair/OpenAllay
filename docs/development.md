@@ -132,10 +132,11 @@ development launcher is already headless and must be run without Gradle
 `--args`, because that option replaces its launch main class.
 
 The accepted Fabric 26.2 full-mod development profile uses Architectury Fabric
-21.0.4. Versions through 21.0.2 are declared incompatible when the optional mod
-is present because their screen-input delegate breaks character entry.
-OpenAllay does not require Architectury, and the NeoForge profile is unaffected
-by this Fabric-only compatibility boundary.
+21.0.4. Architectury Fabric 21.0.2 and earlier is known to break character
+input, so Fabric metadata marks only versions through 21.0.2 incompatible when
+the optional mod is present. Version 21.0.3 has not been verified: it is not
+blocked, but its compatibility is unknown. This boundary does not make
+Architectury a requirement. NeoForge is unaffected by this Fabric-only issue.
 
 ## Client model configuration
 

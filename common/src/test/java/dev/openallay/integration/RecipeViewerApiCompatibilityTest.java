@@ -1,5 +1,6 @@
 package dev.openallay.integration;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -57,14 +58,22 @@ final class RecipeViewerApiCompatibilityTest {
     }
 
     @Test
-    void fabricRejectsArchitecturyVersionsWithBrokenScreenInputDelegation() throws IOException {
+    void fabricMetadataRejectsOnlyKnownBrokenArchitecturyRange() throws IOException {
         Path root = repositoryRoot();
-        String metadata = Files.readString(root.resolve("fabric/src/main/resources/fabric.mod.json"));
+        var metadata = com.google.gson.JsonParser.parseString(Files.readString(
+                root.resolve("fabric/src/main/resources/fabric.mod.json"))).getAsJsonObject();
         String properties = Files.readString(root.resolve("gradle.properties"));
+        String readme = Files.readString(root.resolve("README.md"));
+        String development = Files.readString(root.resolve("docs/development.md"));
+        String chineseReadme = Files.readString(root.resolve("README.zh-CN.md"));
 
-        assertTrue(metadata.contains("\"breaks\""));
-        assertTrue(metadata.contains("\"architectury\": \"<=21.0.2\""));
+        assertEquals("<=21.0.2", metadata.getAsJsonObject("breaks")
+                .get("architectury").getAsString());
         assertTrue(properties.contains("architectury_version=21.0.4"));
+        assertTrue(readme.contains("21.0.3 has not been verified"));
+        assertTrue(readme.contains("metadata rejects only the known-broken versions through 21.0.2"));
+        assertTrue(development.contains("Version 21.0.3 has not been verified"));
+        assertTrue(chineseReadme.contains("21.0.3 尚未验证"));
     }
 
     private void assertSymbols(String className, String... symbols) throws IOException {
