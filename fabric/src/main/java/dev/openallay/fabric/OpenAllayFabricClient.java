@@ -84,15 +84,9 @@ public final class OpenAllayFabricClient implements ClientModInitializer {
                 gson,
                 OpenAllayFabricClient.class.getClassLoader(),
                 recipeClient);
-        dev.openallay.agent.tool.ToolRuntimeCatalog fallbackClientTools =
-                dev.openallay.agent.tool.ToolRuntimeCatalog.from(
-                        runtime.tools().registrations(),
-                        runtime.tools().descriptors().stream()
-                                .map(dev.openallay.tool.ToolDescriptor::id)
-                                .collect(java.util.stream.Collectors.toUnmodifiableSet()));
         bridge.configureClientTools(
                 () -> modelRegistry == null
-                        ? fallbackClientTools
+                        ? dev.openallay.agent.tool.ToolRuntimeCatalog.empty()
                         : modelRegistry.capabilities().localTools(),
                 (required, correlation, cancellation) -> {
                     java.util.concurrent.CompletableFuture<

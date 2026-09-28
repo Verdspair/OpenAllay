@@ -55,6 +55,13 @@ final class ClientArchitectureTest {
     }
 
     @Test
+    void emptyClientToolCatalogIsActuallyEmpty() {
+        var catalog = dev.openallay.agent.tool.ToolRuntimeCatalog.empty();
+        assertTrue(catalog.descriptors().isEmpty());
+        assertTrue(catalog.find("openallay:run_javascript").isEmpty());
+    }
+
+    @Test
     void bothLoadersShareSettingsHistoryAndDisplayRuntimesWithoutLoaderLeaks()
             throws Exception {
         Path root = repositoryRoot();
@@ -71,6 +78,10 @@ final class ClientArchitectureTest {
             assertEquals(1, occurrences(source, "historySettings.bind(services)"),
                     entrypoint::toString);
             assertTrue(source.contains("ClientModelRuntimeRegistry"), entrypoint::toString);
+            assertTrue(source.contains("ToolRuntimeCatalog.empty()"), entrypoint::toString);
+            assertTrue(source.contains("modelRegistry == null"), entrypoint::toString);
+            assertTrue(!source.contains("ToolRuntimeCatalog.from(\n                        runtime.tools().registrations()"),
+                    entrypoint::toString);
             assertTrue(source.contains("models.json"), entrypoint::toString);
             assertTrue(source.contains("model-metadata.json"), entrypoint::toString);
             assertTrue(source.contains("configDirectory.resolve(\"capabilities.json\")"),

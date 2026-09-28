@@ -27,6 +27,10 @@ public final class ToolRuntimeCatalog {
         this.knownIdByModelName = Map.copyOf(knownIdByModelName);
     }
 
+    public static ToolRuntimeCatalog empty() {
+        return from(List.of(), Set.of());
+    }
+
     public static ToolRuntimeCatalog from(
             Collection<RegisteredTool> registrations, Set<String> disabledToolIds) {
         Objects.requireNonNull(registrations, "registrations");
