@@ -31,7 +31,6 @@ import java.util.function.Function;
 /** Secure model-domain adapter used by the common settings coordinator. */
 public final class ModelSettingsBackend implements ClientSettingsService.ModelActions {
     private final Path profilesPath;
-    private final Path legacyPath;
     private final Supplier<Map<String, String>> environment;
     private final ClientModelRuntimeRegistry registry;
     private final LocalCredentialStore credentialStore;
@@ -44,13 +43,11 @@ public final class ModelSettingsBackend implements ClientSettingsService.ModelAc
 
     public ModelSettingsBackend(
             Path profilesPath,
-            Path legacyPath,
             Supplier<Map<String, String>> environment,
             ClientModelRuntimeRegistry registry,
             ModelConnectionProbe probe) {
         this(
                 profilesPath,
-                legacyPath,
                 environment,
                 registry,
                 probe,
@@ -63,14 +60,12 @@ public final class ModelSettingsBackend implements ClientSettingsService.ModelAc
 
     public ModelSettingsBackend(
             Path profilesPath,
-            Path legacyPath,
             Supplier<Map<String, String>> environment,
             ClientModelRuntimeRegistry registry,
             ModelConnectionProbe probe,
             LocalCredentialStore credentialStore) {
         this(
                 profilesPath,
-                legacyPath,
                 environment,
                 registry,
                 probe,
@@ -80,15 +75,12 @@ public final class ModelSettingsBackend implements ClientSettingsService.ModelAc
 
     public ModelSettingsBackend(
             Path profilesPath,
-            Path legacyPath,
             Supplier<Map<String, String>> environment,
             ClientModelRuntimeRegistry registry,
             ModelConnectionProbe probe,
             LocalCredentialStore credentialStore,
             Function<java.time.Duration, ProviderModelCatalogClient> catalogClients) {
         this.profilesPath = Objects.requireNonNull(profilesPath, "profilesPath")
-                .toAbsolutePath().normalize();
-        this.legacyPath = Objects.requireNonNull(legacyPath, "legacyPath")
                 .toAbsolutePath().normalize();
         this.environment = Objects.requireNonNull(environment, "environment");
         this.registry = Objects.requireNonNull(registry, "registry");
@@ -104,9 +96,7 @@ public final class ModelSettingsBackend implements ClientSettingsService.ModelAc
             Map<ModelMetadata.Key, ModelMetadata> metadata) {
         ToolResult<ModelProfilesConfigLoader.Load> loaded = loader.load(
                 profilesPath,
-                legacyPath,
                 credentials,
-                environmentSnapshot(),
                 Map.copyOf(metadata));
         if (loaded instanceof ToolResult.Success<ModelProfilesConfigLoader.Load> success) {
             collectUnreferenced(success.value().config());
@@ -177,9 +167,7 @@ public final class ModelSettingsBackend implements ClientSettingsService.ModelAc
             Map<ModelMetadata.Key, ModelMetadata> metadata) {
         ToolResult<ModelProfilesConfigLoader.Load> loaded = loader.load(
                 profilesPath,
-                legacyPath,
                 credentials,
-                environmentSnapshot(),
                 Map.copyOf(metadata));
         if (loaded instanceof ToolResult.Failure<ModelProfilesConfigLoader.Load> failure) {
             return new ToolResult.Failure<>(failure.code(), failure.message());

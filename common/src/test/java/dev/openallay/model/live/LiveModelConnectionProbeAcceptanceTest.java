@@ -26,7 +26,6 @@ final class LiveModelConnectionProbeAcceptanceTest {
         String configPath = required(environment, "OPENALLAY_SETTINGS_PROBE_CONFIG");
         ToolResult<ModelProfilesConfigLoader.Load> loaded = new ModelProfilesConfigLoader().load(
                 Path.of(configPath),
-                Path.of(configPath + ".no-legacy"),
                 environment);
         assertTrue(loaded instanceof ToolResult.Success<ModelProfilesConfigLoader.Load>,
                 "settings probe configuration is invalid");

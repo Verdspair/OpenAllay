@@ -27,7 +27,6 @@ final class ModelMetadataBootstrapTest {
         ModelMetadataBootstrap bootstrap = new ModelMetadataBootstrap(
                 new ModelMetadataCache(cachePath),
                 profiles,
-                temporary.resolve("model.json"),
                 Map.of("OPENROUTER_KEY", "secret"),
                 updates::add,
                 profile -> (model, explicitContext, explicitOutput, cancellation) -> {
@@ -64,7 +63,6 @@ final class ModelMetadataBootstrapTest {
         ModelMetadataBootstrap bootstrap = new ModelMetadataBootstrap(
                 new ModelMetadataCache(cachePath),
                 profiles,
-                temporary.resolve("model.json"),
                 Map.of("OPENROUTER_KEY", "secret"),
                 updates::add,
                 profile -> (model, explicitContext, explicitOutput, cancellation) -> {
@@ -105,11 +103,11 @@ final class ModelMetadataBootstrapTest {
     private Path profiles() throws Exception {
         Path path = temporary.resolve("models.json");
         Files.writeString(path, """
-                {"schemaVersion":1,"defaultProfileId":"main","profiles":[{
+                {"schemaVersion":2,"defaultProfileId":"main","profiles":[{
                   "id":"main","displayName":"Main","enabled":true,
                   "protocol":"openai_chat",
                   "baseUrl":"https://openrouter.ai/api/v1",
-                  "model":"vendor/model","apiKeyEnv":"OPENROUTER_KEY",
+                  "model":"vendor/model","credentialRef":"env:OPENROUTER_KEY",
                   "maxOutputTokens":8192,"connectTimeoutSeconds":5,
                   "requestTimeoutSeconds":60
                 }]}

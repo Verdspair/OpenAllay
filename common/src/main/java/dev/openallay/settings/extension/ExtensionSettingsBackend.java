@@ -200,17 +200,6 @@ public final class ExtensionSettingsBackend implements ClientSettingsService.Ext
         });
     }
 
-    /** Source-compatible aliases used by the focused backend contracts. */
-    public synchronized ToolResult<ExtensionSettingsView> stageLocal(
-            String extensionId, Path source) {
-        return importLocalPackage(extensionId, source);
-    }
-
-    public CompletableFuture<ToolResult<ExtensionSettingsView>> stageDownload(
-            String extensionId, CancellationSignal cancellation) {
-        return installCommunity(extensionId, cancellation);
-    }
-
     private ToolResult<ExtensionSettingsView> accept(
             Optional<ExtensionCatalogEntry> catalogEntry, ExtensionInstallResult result) {
         if (result.state() != ExtensionInstallState.RESTART_REQUIRED) {

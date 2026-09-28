@@ -61,7 +61,6 @@ public final class OpenAllayFabricClient implements ClientModInitializer {
         ToolResult<ClientSettingsRuntime> settingsResult = ClientSettingsRuntime.create(
                 runtime,
                 configDirectory.resolve("models.json"),
-                configDirectory.resolve("model.json"),
                 configDirectory.resolve("model-metadata.json"),
                 configDirectory.resolve("capabilities.json"),
                 configDirectory.resolve("recipes.json"),

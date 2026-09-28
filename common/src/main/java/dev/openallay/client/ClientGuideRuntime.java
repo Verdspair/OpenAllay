@@ -30,13 +30,8 @@ import dev.openallay.model.ModelClient;
 import dev.openallay.model.ModelContent;
 import dev.openallay.model.ModelMessage;
 import dev.openallay.model.ModelRole;
-import dev.openallay.model.anthropic.AnthropicMessagesClient;
-import dev.openallay.model.config.ModelConfig;
-import dev.openallay.model.config.ModelConfigLoader;
-import dev.openallay.model.openai.OpenAiChatClient;
 import dev.openallay.model.scheduling.ModelRequestScheduler;
 import dev.openallay.tool.ToolResult;
-import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
@@ -163,45 +158,6 @@ public final class ClientGuideRuntime implements GuideLocalEndpoint {
 
     Object endpointIdentity() {
         return endpoint.scheduler();
-    }
-
-    public static ToolResult<ClientGuideRuntime> create(
-            OpenAllayRuntime runtime,
-            Path configPath,
-            Map<String, String> environment,
-            ClientEventDispatcher dispatcher) {
-        return create(runtime, configPath, environment, dispatcher, null);
-    }
-
-    public static ToolResult<ClientGuideRuntime> create(
-            OpenAllayRuntime runtime,
-            Path configPath,
-            Map<String, String> environment,
-            ClientEventDispatcher dispatcher,
-            AgentToolExecutor extension) {
-        ToolResult<ModelConfig> loaded = new ModelConfigLoader().load(configPath, environment);
-        if (loaded instanceof ToolResult.Failure<ModelConfig> failure) {
-            return new ToolResult.Failure<>(failure.code(), failure.message());
-        }
-        ModelConfig config = ((ToolResult.Success<ModelConfig>) loaded).value();
-        if (!config.enabled()) {
-            return new ToolResult.Failure<>("model_disabled", "Client model is disabled");
-        }
-        Gson gson = new Gson();
-        ModelClient model = switch (config.protocol()) {
-            case ANTHROPIC_MESSAGES -> new AnthropicMessagesClient(config, gson);
-            case OPENAI_CHAT -> new OpenAiChatClient(config, gson);
-        };
-        return new ToolResult.Success<>(new ClientGuideRuntime(
-                runtime,
-                model,
-                new AgentSessionStore(),
-                gson,
-                dispatcher,
-                extension,
-                new LiveTraceStore(null, Set.of(config.apiKey().reveal())),
-                config.contextBudget(),
-                config.model()));
     }
 
     public Set<dev.openallay.context.ContextCapability> requiredContext() {

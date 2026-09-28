@@ -22,7 +22,8 @@ final class GuideDisplayRuntimeTest {
         GuideDisplayRuntime runtime = new GuideDisplayRuntime(path);
 
         ToolResult<GuideDisplayConfig> saved = runtime.save(new GuideDisplayConfig(
-                GuideDisplayConfig.SCHEMA_VERSION, true, false));
+                GuideDisplayConfig.SCHEMA_VERSION, true, false,
+                        GuideDisplayConfig.DEFAULT_ASSISTANT_NAME));
 
         assertTrue(saved instanceof ToolResult.Success<GuideDisplayConfig>);
         assertTrue(runtime.config().debugMode());
@@ -46,7 +47,8 @@ final class GuideDisplayRuntimeTest {
         Path path = temporary.resolve("display.json");
         GuideDisplayRuntime runtime = new GuideDisplayRuntime(path);
         runtime.save(new GuideDisplayConfig(
-                GuideDisplayConfig.SCHEMA_VERSION, true, false));
+                GuideDisplayConfig.SCHEMA_VERSION, true, false,
+                        GuideDisplayConfig.DEFAULT_ASSISTANT_NAME));
         Files.writeString(path,
                 "{\"schemaVersion\":1,\"debugMode\":false}");
 
@@ -75,7 +77,8 @@ final class GuideDisplayRuntimeTest {
 
         ToolResult<GuideDisplayConfig> result =
                 runtime.save(new GuideDisplayConfig(
-                        GuideDisplayConfig.SCHEMA_VERSION, true, false));
+                        GuideDisplayConfig.SCHEMA_VERSION, true, false,
+                        GuideDisplayConfig.DEFAULT_ASSISTANT_NAME));
 
         ToolResult.Failure<GuideDisplayConfig> failure =
                 (ToolResult.Failure<GuideDisplayConfig>) result;

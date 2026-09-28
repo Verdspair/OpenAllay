@@ -139,10 +139,14 @@ by this Fabric-only compatibility boundary.
 
 ## Client model configuration
 
-The main mode is pure client-side. The current player-managed format is
+The main mode is pure client-side. The only supported player-managed format is
 `config/openallay/models.json` schema 2. It contains no secret: each profile
-retains only a qualified `credentialRef`. `model.json` remains an import path
-only when the new file is absent.
+retains only a qualified `credentialRef`. Schema 1 and the old single-profile
+`model.json` format are not imported. If `models.json` is missing, OpenAllay
+starts unconfigured even when `model.json` exists. Invalid or old files remain
+untouched and produce a redacted settings notice; explicitly save a valid schema
+2 profile to configure the client. This client-only rule does not change the
+separate server-owned `server-model.json` format.
 
 Ordinary players enter an API key through the native masked password field.
 OpenAllay stores it under an immutable `local:<uuid>` reference in
@@ -178,11 +182,9 @@ environment reference. This form is not requested by the normal player UI:
 ```
 
 `anthropic_messages` is the other protocol. Remote endpoints require HTTPS;
-HTTP is accepted only for loopback development. Inline `apiKey` and legacy
-player-facing `apiKeyEnv` are invalid in schema 2. `contextWindowTokens` is
-required unless trusted
-provider metadata or its local cache resolves it; an explicit value always
-wins. The `256000` value above is an example, not a fallback.
+HTTP is accepted only for loopback development. Inline `apiKey` and `apiKeyEnv`
+are not valid in schema 2. `contextWindowTokens` is required unless trusted provider metadata or its local
+cache resolves it; an explicit value always wins. The `256000` value above is an example, not a fallback.
 
 `connectTimeoutSeconds` covers establishment of the provider connection.
 `requestTimeoutSeconds` is the total budget for one dispatched model attempt,
@@ -307,11 +309,11 @@ metadata refresh/listing is a separate configuration operation and never counts
 as a successful inference test. Closing settings cancels only an active probe;
 an already-confirmed atomic save continues to its terminal result.
 
-If neither model file exists, OpenAllay presents one disabled in-memory draft and
-does not create a file until the player explicitly saves. Invalid startup files
-remain untouched and produce a redacted settings notice. The screen receives
-only credential presence and transient password-input state; it cannot read or
-render a stored value.
+If `models.json` does not exist, OpenAllay presents one disabled in-memory draft
+and does not create a file until the player explicitly saves. Old `model.json`
+files are not imported or modified. Invalid startup files remain untouched and
+produce a redacted settings notice. The screen receives only credential presence
+and transient password-input state; it cannot read or render a stored value.
 
 The 0.2 runtime has no Tool-family settings, per-Tool enablement files, or
 user-editable Tool source envelopes. JavaScript is the primary model-facing
@@ -910,9 +912,9 @@ export PROVIDER_KEY_NAMED_BY_THE_FILE='...'
 ```
 
 The script never accepts a credential on argv. It rejects inline `apiKey`,
-legacy `apiKeyEnv`, URL credentials/query/fragment, and non-HTTPS remote
-endpoints through the strict production loader. This environment-reference path
-is for external/headless operation and is not a player settings workflow.
+`apiKeyEnv`, URL credentials/query/fragment, schema-1 profiles, and non-HTTPS
+remote endpoints through the strict production loader. This environment-reference
+path is for external/headless operation and is not a player settings workflow.
 Retained output contains only the terminal code and, on success, profile ID,
 protocol, redacted authority, and latency; it never prints assistant output or
 raw provider bodies.

@@ -25,14 +25,6 @@ public record GuideDisplayConfig(
         }
     }
 
-    /** Source-compatible constructor for call sites that accept the product default name. */
-    public GuideDisplayConfig(
-            int schemaVersion,
-            boolean debugMode,
-            boolean animationsEnabled) {
-        this(schemaVersion, debugMode, animationsEnabled, DEFAULT_ASSISTANT_NAME);
-    }
-
     public static GuideDisplayConfig defaults() {
         return new GuideDisplayConfig(
                 SCHEMA_VERSION, false, true, DEFAULT_ASSISTANT_NAME);

@@ -59,7 +59,6 @@ public record ClientSettingsRuntime(
     public static ToolResult<ClientSettingsRuntime> create(
             OpenAllayRuntime product,
             Path profilesPath,
-            Path legacyPath,
             Path metadataCachePath,
             Map<String, String> environment,
             ClientEventDispatcher dispatcher,
@@ -75,7 +74,6 @@ public record ClientSettingsRuntime(
         return create(
                 product,
                 profilesPath,
-                legacyPath,
                 metadataCachePath,
                 configDirectory.resolve("capabilities.json"),
                 recipesPath,
@@ -90,7 +88,6 @@ public record ClientSettingsRuntime(
     public static ToolResult<ClientSettingsRuntime> create(
             OpenAllayRuntime product,
             Path profilesPath,
-            Path legacyPath,
             Path metadataCachePath,
             Path capabilitiesPath,
             Path recipesPath,
@@ -103,7 +100,6 @@ public record ClientSettingsRuntime(
         return createInternal(
                 product,
                 profilesPath,
-                legacyPath,
                 metadataCachePath,
                 capabilitiesPath,
                 recipesPath,
@@ -121,7 +117,6 @@ public record ClientSettingsRuntime(
     public static ToolResult<ClientSettingsRuntime> create(
             OpenAllayRuntime product,
             Path profilesPath,
-            Path legacyPath,
             Path metadataCachePath,
             Path capabilitiesPath,
             Path recipesPath,
@@ -149,7 +144,6 @@ public record ClientSettingsRuntime(
         return createInternal(
                 product,
                 profilesPath,
-                legacyPath,
                 metadataCachePath,
                 capabilitiesPath,
                 recipesPath,
@@ -167,7 +161,6 @@ public record ClientSettingsRuntime(
     private static ToolResult<ClientSettingsRuntime> createInternal(
             OpenAllayRuntime product,
             Path profilesPath,
-            Path legacyPath,
             Path metadataCachePath,
             Path capabilitiesPath,
             Path recipesPath,
@@ -200,9 +193,7 @@ public record ClientSettingsRuntime(
         ToolResult<ModelProfilesConfigLoader.Load> loaded = new ModelProfilesConfigLoader()
                 .load(
                         profilesPath,
-                        legacyPath,
                         credentials,
-                        environmentSnapshot,
                         Map.of());
         ModelProfilesConfigLoader.Load initial;
         SettingsNotice startupNotice = null;
@@ -301,7 +292,6 @@ public record ClientSettingsRuntime(
                     System::nanoTime);
             ModelSettingsBackend backend = new ModelSettingsBackend(
                     profilesPath,
-                    legacyPath,
                     () -> environmentSnapshot,
                     registry,
                     probe,
@@ -312,7 +302,6 @@ public record ClientSettingsRuntime(
             ModelMetadataBootstrap metadata = new ModelMetadataBootstrap(
                     new ModelMetadataCache(metadataCachePath),
                     profilesPath,
-                    legacyPath,
                     environmentSnapshot,
                     credentials,
                     update -> {
@@ -446,7 +435,7 @@ public record ClientSettingsRuntime(
                 null,
                 new GuideFailure("model_disabled", "This model profile is disabled"));
         return new ModelProfilesConfigLoader.Load(
-                config, List.of(resolved), false);
+                config, List.of(resolved));
     }
 
     private static Path managedModsRoot(Path configDirectory) {

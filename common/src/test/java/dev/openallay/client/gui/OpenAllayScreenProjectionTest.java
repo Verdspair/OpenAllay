@@ -257,7 +257,8 @@ final class OpenAllayScreenProjectionTest {
 
         GuideUiRow.Tool normal = (GuideUiRow.Tool) OpenAllayScreen
                 .project(snapshot, display::get).rows().get(1);
-        display.set(new GuideDisplayConfig(GuideDisplayConfig.SCHEMA_VERSION, true, true));
+        display.set(new GuideDisplayConfig(GuideDisplayConfig.SCHEMA_VERSION, true, true,
+                        GuideDisplayConfig.DEFAULT_ASSISTANT_NAME));
         GuideUiRow.Tool debug = (GuideUiRow.Tool) OpenAllayScreen
                 .project(snapshot, display::get).rows().get(1);
 

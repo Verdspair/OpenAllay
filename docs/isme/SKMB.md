@@ -38,6 +38,7 @@ accepted and contains explicit approval evidence.
 | SKMB-2026-07-25-028 | accepted | capability/schema catalog, typed Rhino results, Extensions settings, and experimental complete command bridge | B, C, E, F, G | decisions/2026-07-25-028-capability-catalog-rich-results-and-experimental-commands.md | pending |
 | SKMB-2026-07-25-029 | accepted | 0.2.x core prompt, Skill/Extension communities, server models, world observation, and benchmark | B, C, D, E, F, G | decisions/2026-07-25-029-openallay-0.2-platform-iteration.md | e4b6164; implemented and released through 6db6b82 |
 | SKMB-2026-07-25-030 | accepted | loader-specific Extension catalog artifacts and package selection | B, D, F | decisions/2026-07-25-030-loader-specific-extension-artifacts.md | 5a1520f; implemented through 897bced |
+| SKMB-2026-07-25-031 | accepted | strict schema-2 client profiles and removal of unused compatibility APIs | B, E, F | decisions/2026-07-25-031-remove-unused-client-compatibility.md | pending |
 
 SKMB-2026-07-18-006 is implemented by `a0eaeff`, `19ab90f`, and `c6ca6bc`.
 Its deterministic clean-build and packaged-driver evidence is recorded in the
@@ -247,6 +248,7 @@ graphical evidence review all passed. Phase 4 is closed.
 | T83 | extension_catalog_v2_ready | player installs/updates an Extension compatible with the current loader | extension_artifact_selected | Resolve the current loader before HTTP and bind checksum/mod-ID authority to that artifact only | SKMB-2026-07-25-030 |
 | T84 | extension_artifact_selected | selected JAR checksum, embedded identity, compatibility, mod IDs, and loader metadata validate | extension_restart_required | Atomically stage the selected loader JAR under its stable managed name | SKMB-2026-07-25-030 |
 | T85 | skill_published with unknown or older package version | player installs the compatible catalog package | package_staging then skill_published with catalog version | Validate and atomically publish the complete versioned Markdown package; retain the prior package/version on failure | SKMB-2026-07-25-029 |
+| T86 | client model settings load | schema-2 `models.json` is absent, schema 1 is present, or a legacy `model.json` is present | guide_unconfigured or unchanged valid runtime | Do not import, rewrite, or delete older configuration; publish an actionable redacted notice and await explicit schema-2 save | SKMB-2026-07-25-031 |
 
 ## Invariants
 
@@ -355,6 +357,7 @@ graphical evidence review all passed. Phase 4 is closed.
 | I102 | Extension download and staging select the current loader before transport; Fabric and NeoForge never consume each other's artifact URL, checksum, or mod-ID authority | SKMB-2026-07-25-030 |
 | I103 | Local Extension import remains catalog-independent and is governed by its embedded package manifest and actual loader metadata | SKMB-2026-07-25-030 |
 | I104 | Community Skill update state compares catalog version with durable `metadata.openallay/version`; missing metadata is unknown and offers a tracked update rather than proving the package current | SKMB-2026-07-25-029 |
+| I105 | Client model configuration supports only `models.json` schema 2; old or invalid files are preserved and never auto-imported, while server `server-model.json` remains independent | SKMB-2026-07-25-031 |
 
 ## Fail Semantics
 
@@ -423,6 +426,7 @@ graphical evidence review all passed. Phase 4 is closed.
 | F61 | A bundled JavaScript module is unknown, cyclic, or fails evaluation | Fail `javascript_module_unavailable` or `javascript_module_error`, publish no partial result, and retain the request for a corrected call | SKMB-2026-07-24-027 |
 | F62 | A terminal real-client request has no complete local trace or trace persistence fails | Fail E2E acceptance and publish no unredacted or partial trace artifact | SKMB-2026-07-24-027 |
 | F63 | An Extension catalog uses schema 1/unknown fields/duplicate loader artifacts, or an entry lacks the current-loader artifact | Reject the candidate generation as `catalog_refresh_failed` while retaining the last valid schema-2 cache, or fail install as `incompatible_loader` before HTTP and stage nothing | SKMB-2026-07-25-030 |
+| F64 | Client model profiles use schema 1 or legacy `model.json`, or current `models.json` is malformed | Return `invalid_model_config` or `model_not_configured`, preserve the file, and do not import, delete, or rewrite it | SKMB-2026-07-25-031 |
 
 ## Reviewed Statistical Defaults
 

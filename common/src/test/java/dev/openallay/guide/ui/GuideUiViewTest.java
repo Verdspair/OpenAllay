@@ -232,7 +232,8 @@ final class GuideUiViewTest {
 
         GuideUiRow.Tool debug = (GuideUiRow.Tool) GuideUiView.from(
                 snapshot(request), new GuideDisplayConfig(
-                        GuideDisplayConfig.SCHEMA_VERSION, true, true)).rows().get(1);
+                        GuideDisplayConfig.SCHEMA_VERSION, true, true,
+                GuideDisplayConfig.DEFAULT_ASSISTANT_NAME)).rows().get(1);
         assertEquals("call-private", debug.detail().debug().orElseThrow().invocationId());
     }
 

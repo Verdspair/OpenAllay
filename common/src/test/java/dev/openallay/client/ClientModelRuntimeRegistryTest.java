@@ -243,8 +243,7 @@ final class ClientModelRuntimeRegistryTest {
         return new ModelProfilesConfigLoader.Load(
                 new ModelProfilesConfig(
                         ModelProfilesConfig.SCHEMA_VERSION, defaultId, definitions),
-                resolved,
-                false);
+                resolved);
     }
 
     private static OpenAllayRuntime runtime() {

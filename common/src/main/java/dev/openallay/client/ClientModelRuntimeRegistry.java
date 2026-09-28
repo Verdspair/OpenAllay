@@ -71,12 +71,11 @@ public final class ClientModelRuntimeRegistry implements GuideLocalEndpoint {
     public static ToolResult<ClientModelRuntimeRegistry> create(
             OpenAllayRuntime runtime,
             Path profilesPath,
-            Path legacyPath,
             Map<String, String> environment,
             ClientEventDispatcher dispatcher,
             AgentToolExecutor extension) {
         ToolResult<ModelProfilesConfigLoader.Load> loaded = new ModelProfilesConfigLoader()
-                .load(profilesPath, legacyPath, environment);
+                .load(profilesPath, environment);
         if (loaded instanceof ToolResult.Failure<ModelProfilesConfigLoader.Load> failure) {
             return new ToolResult.Failure<>(failure.code(), failure.message());
         }

@@ -90,7 +90,7 @@ else
 import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
 path.write_text(json.dumps({
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "defaultProfileId": "e2e-fixture",
     "profiles": [{
         "id": "e2e-fixture",
@@ -99,7 +99,7 @@ path.write_text(json.dumps({
         "protocol": "openai_chat",
         "baseUrl": f"http://127.0.0.1:{sys.argv[2]}/v1/",
         "model": "openallay-e2e-fixture",
-        "apiKeyEnv": "OPENALLAY_E2E_FIXTURE_KEY",
+        "credentialRef": "env:OPENALLAY_E2E_FIXTURE_KEY",
         "contextWindowTokens": 256000,
         "maxOutputTokens": 8192,
         "connectTimeoutSeconds": 10,

@@ -36,15 +36,16 @@ import org.junit.jupiter.api.io.TempDir;
 final class ClientSettingsRuntimeTest {
     @Test
     void missingFilesUseDisabledMemoryDefaultWithoutMaterializingConfiguration(
-            @TempDir Path directory) {
+            @TempDir Path directory) throws Exception {
         Path profiles = directory.resolve("models.json");
         Path legacy = directory.resolve("model.json");
+        String legacyContents = "{\"apiKey\":\"old-secret\"}";
+        Files.writeString(legacy, legacyContents);
         Path metadata = directory.resolve("model-metadata.json");
 
         ToolResult<ClientSettingsRuntime> created = ClientSettingsRuntime.create(
                 runtime(),
                 profiles,
-                legacy,
                 metadata,
                 Map.of(),
                 Runnable::run,
@@ -61,7 +62,8 @@ final class ClientSettingsRuntimeTest {
         assertFalse(settings.settings().snapshot().models().profiles().getFirst().available());
         assertEquals("model_not_configured", settings.settings().snapshot().notice().code());
         assertFalse(Files.exists(profiles));
-        assertFalse(Files.exists(legacy));
+        assertTrue(Files.exists(legacy));
+        assertEquals(legacyContents, Files.readString(legacy));
         settings.closeAsync().join();
     }
 
@@ -74,7 +76,6 @@ final class ClientSettingsRuntimeTest {
         ToolResult<ClientSettingsRuntime> created = ClientSettingsRuntime.create(
                 runtime(),
                 directory.resolve("models.json"),
-                directory.resolve("model.json"),
                 directory.resolve("model-metadata.json"),
                 directory.resolve("capabilities.json"),
                 directory.resolve("recipes.json"),
@@ -93,7 +94,8 @@ final class ClientSettingsRuntimeTest {
 
         assertInstanceOf(ToolResult.Success.class, settings.settings()
                 .saveDisplay(new GuideDisplayConfig(
-                        GuideDisplayConfig.SCHEMA_VERSION, true, true)).join());
+                        GuideDisplayConfig.SCHEMA_VERSION, true, true,
+                GuideDisplayConfig.DEFAULT_ASSISTANT_NAME)).join());
 
         assertTrue(display.config().debugMode());
         assertTrue(settings.settings().snapshot().display().debugMode());
@@ -110,7 +112,6 @@ final class ClientSettingsRuntimeTest {
         ClientSettingsRuntime first = success(ClientSettingsRuntime.create(
                 runtime(),
                 profiles,
-                directory.resolve("model.json"),
                 directory.resolve("model-metadata.json"),
                 Map.of(),
                 Runnable::run,
@@ -160,7 +161,6 @@ final class ClientSettingsRuntimeTest {
         ClientSettingsRuntime restarted = success(ClientSettingsRuntime.create(
                 runtime(),
                 profiles,
-                directory.resolve("model.json"),
                 directory.resolve("model-metadata.json"),
                 Map.of(),
                 Runnable::run,
@@ -192,7 +192,6 @@ final class ClientSettingsRuntimeTest {
         ClientSettingsRuntime settings = success(ClientSettingsRuntime.create(
                 runtime(),
                 directory.resolve("models.json"),
-                directory.resolve("model.json"),
                 directory.resolve("model-metadata.json"),
                 Map.of(),
                 Runnable::run,

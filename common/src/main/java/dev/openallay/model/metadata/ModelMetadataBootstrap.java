@@ -24,7 +24,6 @@ import java.util.function.Function;
 public final class ModelMetadataBootstrap {
     private final ModelMetadataCache cache;
     private final Path profilesPath;
-    private final Path legacyPath;
     private final Map<String, String> environment;
     private final CredentialResolver credentials;
     private final Consumer<ModelMetadataUpdate> updates;
@@ -38,14 +37,12 @@ public final class ModelMetadataBootstrap {
     public ModelMetadataBootstrap(
             ModelMetadataCache cache,
             Path profilesPath,
-            Path legacyPath,
             Map<String, String> environment,
             Consumer<ModelMetadataUpdate> updates,
             Clock clock) {
         this(
                 cache,
                 profilesPath,
-                legacyPath,
                 environment,
                 CredentialResolver.environment(environment),
                 updates,
@@ -58,7 +55,6 @@ public final class ModelMetadataBootstrap {
     public ModelMetadataBootstrap(
             ModelMetadataCache cache,
             Path profilesPath,
-            Path legacyPath,
             Map<String, String> environment,
             CredentialResolver credentials,
             Consumer<ModelMetadataUpdate> updates,
@@ -66,7 +62,6 @@ public final class ModelMetadataBootstrap {
         this(
                 cache,
                 profilesPath,
-                legacyPath,
                 environment,
                 credentials,
                 updates,
@@ -79,14 +74,12 @@ public final class ModelMetadataBootstrap {
     ModelMetadataBootstrap(
             ModelMetadataCache cache,
             Path profilesPath,
-            Path legacyPath,
             Map<String, String> environment,
             Consumer<ModelMetadataUpdate> updates,
             Function<ModelProfileDefinition, ModelMetadataResolver> resolverFactory) {
         this(
                 cache,
                 profilesPath,
-                legacyPath,
                 environment,
                 CredentialResolver.environment(environment),
                 updates,
@@ -96,14 +89,12 @@ public final class ModelMetadataBootstrap {
     private ModelMetadataBootstrap(
             ModelMetadataCache cache,
             Path profilesPath,
-            Path legacyPath,
             Map<String, String> environment,
             CredentialResolver credentials,
             Consumer<ModelMetadataUpdate> updates,
             Function<ModelProfileDefinition, ModelMetadataResolver> resolverFactory) {
         this.cache = Objects.requireNonNull(cache, "cache");
         this.profilesPath = Objects.requireNonNull(profilesPath, "profilesPath");
-        this.legacyPath = Objects.requireNonNull(legacyPath, "legacyPath");
         this.environment = Map.copyOf(environment);
         this.credentials = Objects.requireNonNull(credentials, "credentials");
         this.updates = Objects.requireNonNull(updates, "updates");
@@ -213,7 +204,7 @@ public final class ModelMetadataBootstrap {
     private ModelProfilesConfigLoader.Load load(
             Map<ModelMetadata.Key, ModelMetadata> metadata) {
         ToolResult<ModelProfilesConfigLoader.Load> result = loader.load(
-                profilesPath, legacyPath, credentials, environment, metadata);
+                profilesPath, credentials, metadata);
         if (result instanceof ToolResult.Failure<ModelProfilesConfigLoader.Load> invalid) {
             failure.set(new GuideFailure(invalid.code(), invalid.message()));
             return null;

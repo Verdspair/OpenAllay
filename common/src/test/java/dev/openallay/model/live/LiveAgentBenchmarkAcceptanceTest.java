@@ -676,10 +676,7 @@ final class LiveAgentBenchmarkAcceptanceTest {
         if (!profileFile.isEmpty()) {
             Path profiles = Path.of(profileFile);
             ToolResult<ModelProfilesConfigLoader.Load> loaded =
-                    new ModelProfilesConfigLoader().load(
-                            profiles,
-                            profiles.resolveSibling(".openallay-benchmark-no-legacy.json"),
-                            environment);
+                    new ModelProfilesConfigLoader().load(profiles, environment);
             if (loaded instanceof ToolResult.Failure<ModelProfilesConfigLoader.Load> failure) {
                 throw new IllegalArgumentException(
                         "Benchmark profile load failed: " + failure.code() + ": "
